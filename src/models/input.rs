@@ -15,7 +15,7 @@ fn spawn_ctx(mut cmds: Commands) {
     cmds.spawn(ModalCtx);
 }
 
-#[derive(InputAction, Component)]
+#[derive(InputAction)]
 #[action_output(Vec2)]
 pub struct Navigate;
 
@@ -49,7 +49,7 @@ pub struct Sprint;
 #[action_output(bool)]
 pub struct Dash;
 
-#[derive(InputAction, Component)]
+#[derive(InputAction)]
 #[action_output(bool)]
 pub struct Crouch;
 
@@ -146,7 +146,7 @@ pub fn add_player_ctx(
         ),
     ]));
 
-    // #[cfg(feature = "top_down")]
+    #[cfg(feature = "top_down")]
     e.insert(actions!(ModalCtx[
         (
             Action::<ScrollZoom>::new(),
@@ -166,7 +166,6 @@ pub fn add_player_ctx(
 fn rm_player_ctx(on: Trigger<OnRemove, PlayerCtx>, mut commands: Commands) {
     commands
         .entity(on.target())
-        .remove_with_requires::<PlayerCtx>()
         .despawn_related::<Actions<PlayerCtx>>();
 }
 
@@ -181,7 +180,6 @@ fn add_modal_ctx(on: Trigger<OnAdd, ModalCtx>, mut commands: Commands) {
                     ..Default::default()
                 },
                 Bindings::spawn((
-                    Cardinal::wasd_keys(),
                     Spawn((Binding::mouse_motion(),Scale::splat(0.1), Negate::all())),
                     Axial::right_stick().with((Scale::splat(2.0), Negate::x())) ,
                 )),
@@ -213,6 +211,5 @@ fn add_modal_ctx(on: Trigger<OnAdd, ModalCtx>, mut commands: Commands) {
 fn rm_modal_ctx(on: Trigger<OnRemove, ModalCtx>, mut commands: Commands) {
     commands
         .entity(on.target())
-        .remove_with_requires::<ModalCtx>()
         .despawn_related::<Actions<ModalCtx>>();
 }

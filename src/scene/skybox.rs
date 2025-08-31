@@ -29,21 +29,21 @@ pub fn add_skybox_to_camera(
     .build();
 
     commands.spawn((
-        StateScoped(Screen::Gameplay),
         Sun,
+        StateScoped(Screen::Gameplay),
         DirectionalLight {
             color: SUN,
             shadows_enabled: true,
             illuminance: lux::FULL_DAYLIGHT,
             ..Default::default()
         },
-        Transform::from_translation(Vec3::new(0.0, 0.0, 200.0)),
+        // Transform::from_translation(Vec3::new(0.0, 0.0, 200.0)),
         cascade_shadow_config.clone(),
     ));
 
     commands.spawn((
-        StateScoped(Screen::Gameplay),
         Moon,
+        StateScoped(Screen::Gameplay),
         DirectionalLight {
             color: MOON,
             shadows_enabled: true,

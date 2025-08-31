@@ -30,7 +30,7 @@ fn movement(
     mut player_query: Query<(&mut Player, &mut TnuaController, &mut StepTimer)>,
 ) -> Result {
     let (navigate, crouch) = (*navigate.into_inner(), *crouch.into_inner());
-    info!("{}, {}", *navigate, *crouch);
+
     for (player, mut controller, mut step_timer) in player_query.iter_mut() {
         let cam_transform = camera.single()?;
         let direction = cam_transform.movement_direction(*navigate);
@@ -89,10 +89,10 @@ fn handle_sprint_in(
     mut player_query: Query<&mut Player, With<PlayerCtx>>,
 ) -> Result {
     let entity = on.target();
-    if let Ok(mut player) = player_query.get_mut(entity) {
-        if player.speed <= cfg.player.movement.speed {
-            player.speed *= cfg.player.movement.sprint_factor;
-        }
+    if let Ok(mut player) = player_query.get_mut(entity)
+        && player.speed <= cfg.player.movement.speed
+    {
+        player.speed *= cfg.player.movement.sprint_factor;
         info!("Sprint started for entity: {entity}");
     }
 
@@ -105,11 +105,10 @@ fn handle_sprint_out(
     mut player_query: Query<&mut Player, With<PlayerCtx>>,
 ) {
     let entity = on.target();
-    match player_query.get_mut(entity) {
-        Ok(mut player) if player.speed > cfg.player.movement.speed => {
-            player.speed = cfg.player.movement.speed;
-        }
-        _ => {}
+    if let Ok(mut player) = player_query.get_mut(entity)
+        && player.speed > cfg.player.movement.speed
+    {
+        player.speed = cfg.player.movement.speed;
     }
 }
 
@@ -192,7 +191,6 @@ pub fn crouch_in(
     Ok(())
 }
 
-#[allow(clippy::type_complexity)]
 pub fn crouch_out(
     on: Trigger<Completed<Crouch>>,
     cfg: Res<Config>,

@@ -1,3 +1,10 @@
+use bevy::{
+    core_pipeline::{
+        experimental::taa::TemporalAntiAliasing, fxaa::Fxaa, prepass::DeferredPrepass,
+    },
+    pbr::DefaultOpaqueRendererMethod,
+};
+
 use super::*;
 
 #[cfg(feature = "third_person")]
@@ -6,7 +13,8 @@ mod third_person;
 mod top_down;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, spawn_camera)
+    app.insert_resource(DefaultOpaqueRendererMethod::deferred())
+        .add_systems(Startup, spawn_camera)
         .add_systems(OnEnter(Screen::Title), add_skybox_to_camera);
 
     #[cfg(feature = "third_person")]
@@ -25,7 +33,9 @@ pub fn spawn_camera(mut commands: Commands) {
             hdr: true,
             ..Default::default()
         },
-        Msaa::Sample4,
+        DeferredPrepass,
         Transform::from_xyz(100., 50., 100.).looking_at(Vec3::ZERO, Vec3::Y),
+        TemporalAntiAliasing::default(),
+        Fxaa::default(),
     ));
 }
