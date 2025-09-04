@@ -89,11 +89,11 @@ fn handle_sprint_in(
     mut player_query: Query<&mut Player, With<PlayerCtx>>,
 ) -> Result {
     let entity = on.target();
-    if let Ok(mut player) = player_query.get_mut(entity)
-        && player.speed <= cfg.player.movement.speed
-    {
-        player.speed *= cfg.player.movement.sprint_factor;
-        info!("Sprint started for entity: {entity}");
+    if let Ok(mut player) = player_query.get_mut(entity) {
+        if player.speed <= cfg.player.movement.speed {
+            player.speed *= cfg.player.movement.sprint_factor;
+            info!("Sprint started for entity: {entity}");
+        }
     }
 
     Ok(())
@@ -105,10 +105,10 @@ fn handle_sprint_out(
     mut player_query: Query<&mut Player, With<PlayerCtx>>,
 ) {
     let entity = on.target();
-    if let Ok(mut player) = player_query.get_mut(entity)
-        && player.speed > cfg.player.movement.speed
-    {
-        player.speed = cfg.player.movement.speed;
+    if let Ok(mut player) = player_query.get_mut(entity) {
+        if player.speed > cfg.player.movement.speed {
+            player.speed = cfg.player.movement.speed;
+        }
     }
 }
 

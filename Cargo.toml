@@ -116,6 +116,7 @@ tracing = { version = "0.1", features = ["max_level_debug", "release_max_level_w
 # request more than 7 arguments, which would undesirably trigger this lint.
 too_many_arguments = "allow"
 type_complexity = "allow"           # Queries may access many components, which would undesirably trigger this lint.
+collapsible_if = "allow"           # Queries may access many components, which would undesirably trigger this lint.
 nonstandard_macro_braces = "warn"   # Make sure macros use their standard braces, such as `[]` for `bevy_ecs::children!`.
 
 [package.metadata.bevy_cli.release] # Disable dev features for release builds.

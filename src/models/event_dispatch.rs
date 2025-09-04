@@ -59,7 +59,7 @@ pub struct SettingsChanged;
 
 // ================== trigger events on input ========================
 fn back(
-    _: Trigger<Started<Escape>>,
+    on: Trigger<Started<Escape>>,
     screen: Res<State<Screen>>,
     states: Res<GameState>,
     mut commands: Commands,
@@ -68,13 +68,13 @@ fn back(
         Screen::Splash | Screen::Title | Screen::Loading => {}
         _ => {
             let last = states.last_screen.clone();
-            commands.trigger(Back(last));
+            commands.entity(on.target()).trigger(Back(last));
         }
     }
 }
-fn pause(_: Trigger<Started<Pause>>, mut commands: Commands) {
-    commands.trigger(TogglePause);
+fn pause(on: Trigger<Started<Pause>>, mut commands: Commands) {
+    commands.entity(on.target()).trigger(TogglePause);
 }
-fn mute(_: Trigger<Started<Mute>>, mut commands: Commands) {
-    commands.trigger(ToggleMute);
+fn mute(on: Trigger<Started<Mute>>, mut commands: Commands) {
+    commands.entity(on.target()).trigger(ToggleMute);
 }

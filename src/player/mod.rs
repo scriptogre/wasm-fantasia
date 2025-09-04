@@ -68,7 +68,6 @@ pub fn spawn_player(
     let pos = Vec3::from(cfg.player.spawn_pos);
     let pos = Transform::from_translation(pos).with_rotation(player_rot);
     let player = Player {
-        id: Entity::PLACEHOLDER,
         speed: cfg.player.movement.speed,
         animation_state: AnimationState::StandIdle,
         ..default()
@@ -88,7 +87,7 @@ pub fn spawn_player(
                 TopDownCameraTarget,
             ),
             PlayerCtx,
-            // tnua stuff
+            // tnua character control bundles
             (
                 TnuaController::default(),
                 // Tnua can fix the rotation, but the character will still get rotated before it can do so.

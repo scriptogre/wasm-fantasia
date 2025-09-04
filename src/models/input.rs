@@ -11,8 +11,8 @@ pub fn plugin(app: &mut App) {
         .add_observer(add_player_ctx);
 }
 
-fn spawn_ctx(mut cmds: Commands) {
-    cmds.spawn(ModalCtx);
+fn spawn_ctx(mut commands: Commands) {
+    commands.spawn(ModalCtx);
 }
 
 #[derive(InputAction)]
@@ -23,12 +23,12 @@ pub struct Navigate;
 #[action_output(Vec2)]
 pub struct Pan;
 
-// #[cfg(feature = "top_down")]
+#[cfg(feature = "top_down")]
 #[derive(InputAction)]
 #[action_output(Vec2)]
 pub struct ScrollZoom;
 
-// #[cfg(feature = "top_down")]
+#[cfg(feature = "top_down")]
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct RotateToggle;

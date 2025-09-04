@@ -54,7 +54,7 @@ fn main() {
     };
     // DEBUG
     // let filter = "info,symphonia=off,naga=off,wgpu=warn,bevy_enhanced_input=debug".to_string();
-    let filter = "info,calloop=off,symphonia=off,naga=off,wgpu=warn".to_string();
+    let filter = "debug,calloop=off,symphonia=off,naga=off,wgpu=warn".to_string();
     let log_level = log::LogPlugin {
         level: log::Level::TRACE,
         filter,

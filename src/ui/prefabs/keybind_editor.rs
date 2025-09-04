@@ -81,7 +81,7 @@ macro_rules! field_name {
     }};
 }
 
-/// Stores name of the [`KeyboardSettings`] field and its array index for which the binding is associated.
+/// Stores name of the [`InputSettings`] field and its array index for which the binding is associated.
 ///
 /// Used to utilize reflection when applying settings.
 #[derive(Component, Clone, Copy)]

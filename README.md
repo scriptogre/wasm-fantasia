@@ -58,26 +58,25 @@ If you want to use serving with hotpatching, you can use dioxus-cli:
 - [x] experimental sound with [bevy_seedling] based on Firewheel audio engine (which will probably replace bevy_audio), with **highly** experimental audio stutter fix for web
 - [x] consistent Esc back navigation in gameplay and menu via stacked modals (kudos for the idea to skyemakesgames)
 - [x] serialize and save settings
-- [x] audio, video and keys rebind tabs in settings (currently not really working)
+- [x] audio, video and keys rebind tabs in settings (currently broken)
 - [x] easy drop in scene integration using awesome [skein] with a simple scene
 
 ### TODOs
-- [ ] add basic mood change per zone
-- [ ] implement different music states(exploration, combat)
+- [ ] implement different music states(exploration, combat) on mood change event
 - [ ] custom font replace example using pre-loaded font
 - [ ] Movement sfx sounds: jump, dash, sprint
 - [ ] sky background instead of just void lol
 - [ ] spatial audio demo: boombox emitting background music
 - [ ] Jump with timer(tricky with tnua jump in air counter)
 - [ ] small door/portal demo
-- [ ] split screen for coop
+- [ ] split screen for local coop
 - [ ] vault on objects if they are reachable
 - [ ] climbing
-- [ ] do not rotate player on aim(silly bug, if you release aim looking to the floor - player model left rotated parallel to the floor)
 - [ ] basic fighting: punch, kick, take weapon
 - [ ] weapon select wheel
-- [ ] bow
 - [ ] rifle
+- [ ] bow
+- [ ] do not rotate player on aim(silly bug, if you release aim looking to the floor - player model left rotated parallel to the floor)
 
 ## Write your game
 

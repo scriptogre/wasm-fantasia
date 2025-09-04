@@ -66,15 +66,15 @@ pub fn on_go_to(trig: Trigger<GoTo>, mut next_screen: ResMut<NextState<Screen>>)
 pub mod to {
     use super::*;
 
-    pub fn title(_: Trigger<OnPress>, mut cmds: Commands, mut state: ResMut<GameState>) {
+    pub fn title(on: Trigger<OnPress>, mut commands: Commands, mut state: ResMut<GameState>) {
         state.reset();
-        cmds.trigger(GoTo(Screen::Title));
+        commands.entity(on.target()).trigger(GoTo(Screen::Title));
     }
-    pub fn settings(_: Trigger<OnPress>, mut cmds: Commands) {
-        cmds.trigger(GoTo(Screen::Settings));
+    pub fn settings(on: Trigger<OnPress>, mut commands: Commands) {
+        commands.entity(on.target()).trigger(GoTo(Screen::Settings));
     }
-    pub fn credits(_: Trigger<OnPress>, mut cmds: Commands) {
-        cmds.trigger(GoTo(Screen::Credits));
+    pub fn credits(on: Trigger<OnPress>, mut commands: Commands) {
+        commands.entity(on.target()).trigger(GoTo(Screen::Credits));
     }
     pub fn gameplay_or_loading(
         _: Trigger<OnPress>,

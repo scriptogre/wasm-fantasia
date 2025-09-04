@@ -1,5 +1,8 @@
 use super::*;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Component, Reflect, Clone)]
 #[reflect(Component)]
@@ -13,7 +16,9 @@ pub struct Player {
 impl Default for Player {
     fn default() -> Self {
         Self {
-            id: Entity::PLACEHOLDER,
+            // u32::MAX is Entity::PLACEHOLDER and using placeholder leeds to issues and using option
+            // here while idiomatic will unnecessary complicate handling it in systems
+            id: Entity::from_raw(u32::MAX - 1),
             speed: 1.0,
             animation_state: AnimationState::StandIdle,
             animations: HashMap::new(),

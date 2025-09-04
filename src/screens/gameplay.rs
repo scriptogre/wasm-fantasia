@@ -90,21 +90,25 @@ fn click_to_menu(
     mut commands: Commands,
     mut state: ResMut<GameState>,
 ) {
-    info!("click NewModal target entity: {}", on.target());
-    commands.entity(on.target()).insert(ModalCtx);
-    commands.trigger(GoTo(Screen::Title));
+    let target = on.target();
+    commands
+        .entity(target)
+        .insert(ModalCtx)
+        .trigger(GoTo(Screen::Title));
     state.reset();
 }
-fn click_pop_modal(_: Trigger<Pointer<Click>>, mut cmds: Commands) {
-    cmds.trigger(PopModal);
+fn click_pop_modal(on: Trigger<Pointer<Click>>, mut commands: Commands) {
+    commands.entity(on.target()).trigger(PopModal);
 }
-fn click_spawn_settings(_: Trigger<Pointer<Click>>, mut cmds: Commands) {
-    cmds.trigger(NewModal(Modal::Settings));
+fn click_spawn_settings(on: Trigger<Pointer<Click>>, mut commands: Commands) {
+    commands
+        .entity(on.target())
+        .trigger(NewModal(Modal::Settings));
 }
 
 fn trigger_menu_toggle_on_esc(
-    _: Trigger<Back>,
-    mut cmds: Commands,
+    on: Trigger<Back>,
+    mut commands: Commands,
     screen: Res<State<Screen>>,
     state: ResMut<GameState>,
 ) {
@@ -113,9 +117,9 @@ fn trigger_menu_toggle_on_esc(
     }
 
     if state.modals.is_empty() {
-        cmds.trigger(NewModal(Modal::Main));
+        commands.entity(on.target()).trigger(NewModal(Modal::Main));
     } else {
-        cmds.trigger(PopModal);
+        commands.entity(on.target()).trigger(PopModal);
     }
 }
 
@@ -129,20 +133,19 @@ fn add_new_modal(
         return;
     }
 
-    info!("new modal:{:?}, settings.paused:{}", on.0, state.paused);
+    let mut modal = commands.entity(on.target());
     if state.modals.is_empty() {
-        info!("NewModal target entity: {}", on.target());
-        commands.entity(on.target()).insert(ModalCtx);
+        modal.insert(ModalCtx);
         if Modal::Main == on.0 {
             if !state.paused {
-                commands.trigger(TogglePause);
+                modal.trigger(TogglePause);
             }
-            commands.trigger(CamCursorToggle);
+            modal.trigger(CamCursorToggle);
         }
     }
 
     // despawn all previous modal entities to avoid clattering
-    commands.trigger(ClearModals);
+    modal.trigger(ClearModals);
     let NewModal(modal) = on.event();
     match modal {
         Modal::Main => commands.spawn(menu_modal()),
@@ -192,9 +195,11 @@ fn pop_modal(
 
     if state.modals.is_empty() {
         info!("PopModal target entity: {}", on.target());
-        commands.entity(on.target()).insert(ModalCtx);
-        commands.trigger(TogglePause);
-        commands.trigger(CamCursorToggle);
+        commands
+            .entity(on.target())
+            .insert(ModalCtx)
+            .trigger(TogglePause)
+            .trigger(CamCursorToggle);
     }
 }
 
@@ -203,18 +208,18 @@ fn clear_modals(
     state: ResMut<GameState>,
     menu_marker: Query<Entity, With<MenuModal>>,
     settings_marker: Query<Entity, With<SettingsModal>>,
-    mut cmds: Commands,
+    mut commands: Commands,
 ) {
     for m in &state.modals {
         match m {
             Modal::Main => {
                 if let Ok(modal) = menu_marker.single() {
-                    cmds.entity(modal).despawn();
+                    commands.entity(modal).despawn();
                 }
             }
             Modal::Settings => {
                 if let Ok(modal) = settings_marker.single() {
-                    cmds.entity(modal).despawn();
+                    commands.entity(modal).despawn();
                 }
             }
         }
