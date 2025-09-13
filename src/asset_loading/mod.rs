@@ -66,10 +66,6 @@ pub struct Models {
     pub player: Handle<Gltf>,
     #[dependency]
     pub scene: Handle<Gltf>,
-    // #[dependency]
-    // pub rock: Handle<Gltf>,
-    // #[dependency]
-    // pub comb_sphere: Handle<Gltf>,
 }
 
 impl FromWorld for Models {
@@ -78,8 +74,6 @@ impl FromWorld for Models {
         Self {
             player: assets.load("models/player.glb"),
             scene: assets.load("models/scene.glb"),
-            // rock: assets.load("models/rock.glb"),
-            // comb_sphere: assets.load("models/comb_sphere.glb"),
         }
     }
 }
@@ -97,6 +91,8 @@ pub struct AudioSources {
 
     // music
     #[dependency]
+    pub menu: Vec<Handle<Sample>>,
+    #[dependency]
     pub explore: Vec<Handle<Sample>>,
     #[dependency]
     pub combat: Vec<Handle<Sample>>,
@@ -113,7 +109,8 @@ impl AudioSources {
         "audio/sfx/step3.ogg",
         "audio/sfx/step4.ogg",
     ];
-    pub const EXPLORE: &[&'static str] = &["audio/music/smnbl-time-for-fun.ogg"];
+    pub const MENU: &[&'static str] = &["audio/music/smnbl-green-embrace.ogg"];
+    pub const EXPLORE: &[&'static str] = &["audio/music/smnbl-rush-through-the-field.ogg"];
     pub const COMBAT: &[&'static str] = &["audio/music/smnbl-trouble.ogg"];
 }
 
@@ -123,7 +120,9 @@ impl FromWorld for AudioSources {
         let steps = Self::STEPS.iter().map(|p| assets.load(*p)).collect();
         let explore = Self::EXPLORE.iter().map(|p| assets.load(*p)).collect();
         let combat = Self::COMBAT.iter().map(|p| assets.load(*p)).collect();
+        let menu = Self::MENU.iter().map(|p| assets.load(*p)).collect();
         Self {
+            menu,
             steps,
             combat,
             explore,

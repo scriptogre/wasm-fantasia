@@ -66,21 +66,22 @@ If you want to use serving with hotpatching, you can use dioxus-cli:
 - [ ] custom font replace example using pre-loaded font
 - [ ] Movement sfx sounds: jump, dash, sprint
 - [ ] sky background instead of just void lol
+- [ ] 3d and 2d particles demo: shooting magic balls, fireplace, step dust
 - [ ] spatial audio demo: boombox emitting background music
-- [ ] Jump with timer(tricky with tnua jump in air counter)
 - [ ] small door/portal demo
 - [ ] split screen for local coop
+- [ ] flying around suit/mode
 - [ ] vault on objects if they are reachable
 - [ ] climbing
 - [ ] basic fighting: punch, kick, take weapon
-- [ ] weapon select wheel
+- [ ] modern weapon select wheel
 - [ ] rifle
 - [ ] bow
+- [ ] Jump with timer(tricky with tnua jump in air counter)
 - [ ] do not rotate player on aim(silly bug, if you release aim looking to the floor - player model left rotated parallel to the floor)
 
 ## Write your game
 
-The best way to get started is to play around with the code you find in [`src/game/`](./src/game).
 This template comes with a basic project structure that you may find useful:
 
 ### Project structure

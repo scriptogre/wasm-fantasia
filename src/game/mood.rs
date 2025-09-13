@@ -51,27 +51,30 @@ fn stop_soundtrack(
     }
 }
 
-// fn check_sensor_collision(mut collision_query: Query<(&CollidingEntities, &Sensor), With<Player>>) {
-//     for (colliding_entities, sensor) in collision_query.iter() {
-//         if !colliding_entities.is_empty() {
-//             println!("hello");
-//         }
-//     }
-// }
 fn trigger_mood_change(
-    mut commands: Commands,
-    mut zones: Query<Entity, With<Zone>>,
-    mut player: Query<Entity, With<Player>>,
     collisions: Collisions,
+    zones: Query<(Entity, Option<&Combat>, Option<&Exploration>), With<Zone>>,
+    mut commands: Commands,
+    mut state: ResMut<GameState>,
+    mut player: Query<Entity, With<Player>>,
 ) {
     let Ok(player) = player.single_mut() else {
         return;
     };
-    for zone in zones.iter() {
-        if collisions.contains(player, zone) {
-            let ids: Vec<ComponentId> = zone.components().collect();
-            info!("components:{ids:?}");
-            info!("sensors: player:{player}, zone:{zone}");
+    for (e, combat, exploration) in zones.iter() {
+        if collisions.contains(player, e) {
+            if combat.is_some() && state.current_mood != MoodType::Combat {
+                commands
+                    .entity(player)
+                    .trigger(ChangeMood(MoodType::Combat));
+            }
+            if exploration.is_some() && state.current_mood != MoodType::Exploration {
+                commands
+                    .entity(player)
+                    .trigger(ChangeMood(MoodType::Exploration));
+                state.current_mood = MoodType::Exploration;
+            }
+            // info!("sensors: player:{player}, zone:{zone}");
         }
     }
 }
@@ -82,7 +85,6 @@ fn change_mood(
     settings: Res<Settings>,
     sources: Res<AudioSources>,
     mut state: ResMut<GameState>,
-    mut collisions: Query<(&Zone, &Sensor), With<Player>>,
     music: Query<Entity, With<SamplerPool<Music>>>,
     mut commands: Commands,
 ) {
@@ -91,8 +93,11 @@ fn change_mood(
 
     // Fade out all currently running tracks
     for track in music.iter() {
-        commands.entity(track).insert(FadeOut);
+        commands.entity(track).despawn();
+        // commands.entity(track).insert(FadeOut);
     }
+
+    info!("change mood:{mood:?}");
 
     // Spawn a new music with the appropriate soundtrack based on new mood
     // Volume is set to start at zero and is then increased by the fade_in system.
@@ -104,7 +109,7 @@ fn change_mood(
                 SamplePlayer::new(handle.clone())
                     .with_volume(settings.music())
                     .looping(),
-                FadeIn,
+                // FadeIn,
             ));
         }
         MoodType::Combat => {
@@ -114,7 +119,7 @@ fn change_mood(
                 SamplePlayer::new(handle.clone())
                     .with_volume(settings.music())
                     .looping(),
-                FadeIn,
+                // FadeIn,
             ));
         }
     }

@@ -3,7 +3,7 @@ use super::*;
 /// This plugin is responsible for the game menu
 /// The menu is only drawn during the State [`Screen::Title`] and is removed when that state is exited
 pub fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Title), setup_menu);
+    app.add_systems(OnEnter(Screen::Title), (setup_menu, start_main_menu_music));
 }
 
 fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
@@ -43,6 +43,27 @@ fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
     ));
 
     state.reset();
+}
+
+fn start_main_menu_music(
+    mut commands: Commands,
+    settings: Res<Settings>,
+    sources: ResMut<AudioSources>,
+    mut music: Query<&mut PlaybackSettings, With<Music>>,
+) {
+    for mut s in music.iter_mut() {
+        s.pause();
+    }
+
+    let handle = sources.menu[0].clone();
+    commands.spawn((
+        StateScoped(Screen::Title),
+        Name::new("Title Music"),
+        Music,
+        SamplePlayer::new(handle)
+            .with_volume(settings.music())
+            .looping(),
+    ));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
