@@ -49,7 +49,7 @@ fn start_main_menu_music(
     mut commands: Commands,
     settings: Res<Settings>,
     sources: ResMut<AudioSources>,
-    mut music: Query<&mut PlaybackSettings, With<Music>>,
+    mut music: Query<&mut PlaybackSettings, With<MusicPool>>,
 ) {
     for mut s in music.iter_mut() {
         s.pause();
@@ -59,7 +59,7 @@ fn start_main_menu_music(
     commands.spawn((
         StateScoped(Screen::Title),
         Name::new("Title Music"),
-        Music,
+        MusicPool,
         SamplePlayer::new(handle)
             .with_volume(settings.music())
             .looping(),

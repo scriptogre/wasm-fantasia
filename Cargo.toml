@@ -85,7 +85,7 @@ bevy_skein = "0.2.1"                    # blender integration
 iyes_perf_ui = "0.5"                    # diagnostics overlay
 
 avian3d = { version = "0.3", features = ["3d", "parallel", "collider-from-mesh"] } # physics
-bevy_seedling = "0.4"                   # audio engine
+bevy_seedling = "0.5"                   # audio engine
 bevy_third_person_camera = { version = "0.3", optional = true }     # 3rd person camera
 bevy_top_down_camera = { version = "0.1", optional = true }         # top down camera
 bevy-tnua = "0.24"                      # floating character control

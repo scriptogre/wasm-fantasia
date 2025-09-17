@@ -1,5 +1,4 @@
 use super::*;
-use audio::*;
 use bevy_seedling::prelude::*;
 use rand::prelude::*;
 
@@ -43,7 +42,7 @@ fn movement_sound(
         } else {
             sources.steps[i].clone()
         };
-        cmds.spawn((Sfx, SamplePlayer::new(handle).with_volume(settings.sfx())));
+        cmds.spawn(SamplePlayer::new(handle).with_volume(settings.sfx()));
     }
 
     Ok(())
@@ -66,7 +65,7 @@ fn jump_sound(
     let mut rng = thread_rng();
     let i = rng.gen_range(0..sources.steps.len());
     let handle = sources.steps[i].clone();
-    cmds.spawn((Sfx, SamplePlayer::new(handle).with_volume(settings.sfx())));
+    cmds.spawn(SamplePlayer::new(handle).with_volume(settings.sfx()));
     // }
 
     Ok(())
@@ -89,7 +88,7 @@ fn dash_sound(
     let mut rng = thread_rng();
     let i = rng.gen_range(0..sources.steps.len());
     let handle = sources.steps[i].clone();
-    cmds.spawn((Sfx, SamplePlayer::new(handle).with_volume(settings.sfx())));
+    cmds.spawn(SamplePlayer::new(handle).with_volume(settings.sfx()));
     // }
 
     Ok(())

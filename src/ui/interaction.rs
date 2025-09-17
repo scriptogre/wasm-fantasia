@@ -97,9 +97,6 @@ fn btn_sounds(
             Interaction::Pressed => audio_sources.btn_press.clone(),
             _ => continue,
         };
-        commands.spawn((
-            Sfx,
-            SamplePlayer::new(source.clone()).with_volume(settings.sfx()),
-        ));
+        commands.spawn(SamplePlayer::new(source.clone()).with_volume(settings.sfx()));
     }
 }

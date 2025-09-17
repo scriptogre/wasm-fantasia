@@ -1,6 +1,6 @@
 //! An abstraction for changing mood of the game depending on some triggers
 use super::*;
-use bevy::ecs::{component::ComponentId, observer::TriggerTargets};
+// use bevy::ecs::{component::ComponentId, observer::TriggerTargets};
 use rand::prelude::*;
 
 const FADE_TIME: f32 = 2.0;
@@ -10,7 +10,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Gameplay), start_soundtrack)
         .add_systems(
             Update,
-            trigger_mood_change.run_if(in_state(Screen::Gameplay)), // (fade_in, fade_out)
+            (fade_in_music, fade_out_music, trigger_mood_change).run_if(in_state(Screen::Gameplay)),
         )
         // .add_observer(trigger_mood_change)
         .add_observer(change_mood);
@@ -34,7 +34,7 @@ fn start_soundtrack(
     //     .insert(music(handle.clone(), settings.music());
     // Or just play music
     cmds.spawn((
-        Music,
+        MusicPool,
         SamplePlayer::new(handle.clone())
             .with_volume(settings.music())
             .looping(),
@@ -43,7 +43,7 @@ fn start_soundtrack(
 
 fn stop_soundtrack(
     // boombox: Query<Entity, With<Boombox>>,
-    mut bg_music: Query<&mut PlaybackSettings, With<Music>>,
+    mut bg_music: Query<&mut PlaybackSettings, With<MusicPool>>,
 ) {
     for mut s in bg_music.iter_mut() {
         info!("pause track:{s:?}");
@@ -84,20 +84,23 @@ fn change_mood(
     on: Trigger<ChangeMood>,
     settings: Res<Settings>,
     sources: Res<AudioSources>,
-    mut state: ResMut<GameState>,
-    music: Query<Entity, With<SamplerPool<Music>>>,
+    music: Query<Entity, (With<MusicPool>, With<SamplePlayer>)>,
     mut commands: Commands,
+    mut state: ResMut<GameState>,
 ) {
     let mood = &on.0;
     let mut rng = thread_rng();
 
     // Fade out all currently running tracks
     for track in music.iter() {
-        commands.entity(track).despawn();
-        // commands.entity(track).insert(FadeOut);
+        // commands.entity(track).despawn();
+        commands.entity(track).insert(FadeOut);
     }
 
-    info!("change mood:{mood:?}");
+    info!(
+        "current mood: {:?}, change mood:{mood:?}",
+        state.current_mood
+    );
 
     // Spawn a new music with the appropriate soundtrack based on new mood
     // Volume is set to start at zero and is then increased by the fade_in system.
@@ -105,60 +108,66 @@ fn change_mood(
         MoodType::Exploration => {
             let handle = sources.explore.choose(&mut rng).unwrap();
             commands.spawn((
-                Music,
+                MusicPool,
                 SamplePlayer::new(handle.clone())
                     .with_volume(settings.music())
                     .looping(),
-                // FadeIn,
+                FadeIn,
             ));
         }
         MoodType::Combat => {
             let handle = sources.combat.choose(&mut rng).unwrap();
             commands.spawn((
-                Music,
+                MusicPool,
                 SamplePlayer::new(handle.clone())
                     .with_volume(settings.music())
                     .looping(),
-                // FadeIn,
+                FadeIn,
             ));
         }
     }
     state.current_mood = mood.clone();
 }
 
-// Fades in the audio of entities that has the FadeIn component. Removes the FadeIn component once
-// full volume is reached.
-// fn fade_in(
-//     time: Res<Time>,
-//     mut commands: Commands,
-//     mut music: Query<(&mut VolumeNode, Entity), With<FadeIn>>,
-// ) {
-//     for (mut audio, entity) in music.iter_mut() {
-//         let current_volume = audio.volume;
-//         audio.set_volume(
-//             current_volume.fade_towards(Volume::Linear(1.0), time.delta_secs() / FADE_TIME),
-//         );
-//         if audio.volume().to_linear() >= 1.0 {
-//             audio.set_volume(Volume::Linear(1.0));
-//             commands.entity(entity).remove::<FadeIn>();
-//         }
-//     }
-// }
+/// Fades in the audio of entities that has the FadeIn component.
+/// Removes the FadeIn component once full volume is reached.
+fn fade_in_music(
+    time: Res<Time>,
+    mut sample_players: Query<(Entity, &SampleEffects), With<FadeIn>>,
+    mut commands: Commands,
+    mut music: Query<&mut VolumeNode, With<FadeIn>>,
+) -> Result {
+    for (entity, effects) in sample_players.iter_mut() {
+        let mut effect = music.get_effect_mut(effects)?;
+        info!("fade in volume: {}", effect.volume.linear());
+        effect.volume += Volume::Linear(time.delta_secs() / FADE_TIME);
 
-// Fades out the audio of entities that has the FadeOut component. Despawns the entities once audio
-// volume reaches zero.
-// fn fade_out(
-//     time: Res<Time>,
-//     mut commands: Commands,
-//     mut music: Query<(&mut VolumeNode, Entity), With<FadeOut>>,
-// ) {
-//     for (mut audio, entity) in music.iter_mut() {
-//         let current_volume = audio.volume;
-//         audio.set_volume(
-//             current_volume.fade_towards(Volume::Linear(0.0), time.delta_secs() / FADE_TIME),
-//         );
-//         if audio.volume().to_linear() <= 0.0 {
-//             commands.entity(entity).despawn();
-//         }
-//     }
-// }
+        if effect.volume.linear() >= 1.0 {
+            effect.volume = Volume::Linear(1.0);
+            commands.entity(entity).remove::<FadeIn>();
+        }
+    }
+
+    Ok(())
+}
+
+/// Fades out the audio of entities that has the FadeOut component.
+/// Despawns the entities once audio volume reaches zero.
+fn fade_out_music(
+    time: Res<Time>,
+    mut sample_players: Query<(Entity, &SampleEffects), With<FadeIn>>,
+    mut commands: Commands,
+    mut music: Query<&mut VolumeNode, With<FadeIn>>,
+) -> Result {
+    for (entity, effects) in sample_players.iter_mut() {
+        let mut effect = music.get_effect_mut(effects)?;
+        info!("fade out volume: {}", effect.volume.linear());
+        effect.volume -= Volume::Linear(time.delta_secs() / FADE_TIME);
+
+        if effect.volume.linear() <= 0.0 {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    Ok(())
+}

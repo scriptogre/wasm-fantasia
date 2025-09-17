@@ -161,7 +161,7 @@ fn lower_music(
     _: Trigger<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
-    mut music: Single<&mut VolumeNode, With<SamplerPool<Music>>>,
+    mut music: Single<&mut VolumeNode, With<SamplerPool<MusicPool>>>,
 ) {
     let new_volume = (settings.sound.music - cfg.settings.step).max(cfg.settings.min_volume);
     settings.sound.music = new_volume;
@@ -172,7 +172,7 @@ fn raise_music(
     _: Trigger<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
-    mut music: Single<&mut VolumeNode, With<SamplerPool<Music>>>,
+    mut music: Single<&mut VolumeNode, With<SamplerPool<MusicPool>>>,
 ) {
     let new_volume = (settings.sound.music + cfg.settings.step).min(cfg.settings.max_volume);
     settings.sound.music = new_volume;
@@ -181,7 +181,7 @@ fn raise_music(
 
 fn update_music_volume_label(
     settings: Res<Settings>,
-    mut label: Single<&mut Text, With<MusicVolumeLabel>>,
+    mut label: Single<&mut Text, (With<MusicVolumeLabel>, Changed<VolumeNode>)>,
 ) {
     let percent = (settings.sound.music * 100.0).round();
     let text = format!("{percent: <3}%"); // pad the percent to 3 chars
@@ -193,7 +193,7 @@ fn lower_sfx(
     _: Trigger<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
-    mut sfx: Single<&mut VolumeNode, With<SamplerPool<Sfx>>>,
+    mut sfx: Single<&mut VolumeNode, With<SfxBus>>,
 ) {
     let new_volume = (settings.sound.sfx - cfg.settings.step).max(cfg.settings.min_volume);
     settings.sound.sfx = new_volume;
@@ -204,7 +204,7 @@ fn raise_sfx(
     _: Trigger<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
-    mut sfx: Single<&mut VolumeNode, With<SamplerPool<Sfx>>>,
+    mut sfx: Single<&mut VolumeNode, With<SfxBus>>,
 ) {
     let new_volume = (settings.sound.sfx + cfg.settings.step).min(cfg.settings.max_volume);
     settings.sound.sfx = new_volume;
@@ -212,7 +212,7 @@ fn raise_sfx(
 }
 
 fn update_sfx_volume_label(
-    mut label: Single<&mut Text, With<SfxVolumeLabel>>,
+    mut label: Single<&mut Text, (With<SfxVolumeLabel>, Changed<VolumeNode>)>,
     settings: Res<Settings>,
 ) {
     let percent = (settings.sound.sfx * 100.0).round();

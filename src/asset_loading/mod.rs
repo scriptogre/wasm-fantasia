@@ -1,6 +1,6 @@
 use crate::*;
 use bevy::asset::Asset;
-use bevy_seedling::sample::Sample;
+use bevy_seedling::sample::AudioSample;
 
 mod ron;
 mod tracking;
@@ -83,19 +83,19 @@ impl FromWorld for Models {
 pub struct AudioSources {
     // SFX
     #[dependency]
-    pub btn_hover: Handle<Sample>,
+    pub btn_hover: Handle<AudioSample>,
     #[dependency]
-    pub btn_press: Handle<Sample>,
+    pub btn_press: Handle<AudioSample>,
     #[dependency]
-    pub steps: Vec<Handle<Sample>>,
+    pub steps: Vec<Handle<AudioSample>>,
 
     // music
     #[dependency]
-    pub menu: Vec<Handle<Sample>>,
+    pub menu: Vec<Handle<AudioSample>>,
     #[dependency]
-    pub explore: Vec<Handle<Sample>>,
+    pub explore: Vec<Handle<AudioSample>>,
     #[dependency]
-    pub combat: Vec<Handle<Sample>>,
+    pub combat: Vec<Handle<AudioSample>>,
 }
 
 impl AudioSources {

@@ -65,8 +65,8 @@ fn toggle_mute(
     settings: ResMut<Settings>,
     mut state: ResMut<GameState>,
     mut label: Query<&mut Node, With<MuteIcon>>,
-    mut music: Single<&mut VolumeNode, (With<SamplerPool<Music>>, Without<SamplerPool<Sfx>>)>,
-    mut sfx: Single<&mut VolumeNode, (With<SamplerPool<Sfx>>, Without<SamplerPool<Music>>)>,
+    mut music: Single<&mut VolumeNode, (With<SamplerPool<MusicPool>>, Without<SfxBus>)>,
+    mut sfx: Single<&mut VolumeNode, (With<SfxBus>, Without<SamplerPool<MusicPool>>)>,
 ) {
     if let Ok(mut node) = label.single_mut() {
         if state.muted {

@@ -1,5 +1,4 @@
 //! A credits screen that can be accessed from the main menu
-
 use super::*;
 use bevy::ecs::spawn::SpawnIter;
 
@@ -73,7 +72,7 @@ fn start_credits_music(
     mut commands: Commands,
     settings: Res<Settings>,
     sources: ResMut<AudioSources>,
-    mut music: Query<&mut PlaybackSettings, With<Music>>,
+    mut music: Query<&mut PlaybackSettings, With<MusicPool>>,
 ) {
     for mut s in music.iter_mut() {
         s.pause();
@@ -83,7 +82,7 @@ fn start_credits_music(
     commands.spawn((
         StateScoped(Screen::Credits),
         Name::new("Credits Music"),
-        Music,
+        MusicPool,
         SamplePlayer::new(handle)
             .with_volume(settings.music())
             .looping(),
