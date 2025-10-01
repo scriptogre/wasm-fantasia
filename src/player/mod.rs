@@ -135,14 +135,10 @@ pub fn spawn_player(
     Ok(())
 }
 
-fn player_post_spawn(
-    on: Trigger<OnAdd, Player>,
-    mut players: Query<&mut Player>,
-    mut commands: Commands,
-) {
+fn player_post_spawn(on: Trigger<OnAdd, Player>, mut players: Query<&mut Player>) {
     let player = on.target();
     if let Ok(mut p) = players.get_mut(player) {
         p.id = player; // update player id with spawned entity
+        info!("player entity: Player.id: {}", p.id);
     }
-    info!("player entity:{player}");
 }

@@ -1,5 +1,4 @@
 use super::*;
-use avian3d::prelude::*;
 use bevy_third_person_camera::*;
 
 pub fn plugin(app: &mut App) {
@@ -36,8 +35,8 @@ fn add_tpv_cam(
             // bounds: vec![Bound::NO_FLIP, Bound::ABOVE_FLOOR],
             ..default()
         },
-        RigidBody::Kinematic,
-        Collider::sphere(1.0),
+        // RigidBody::Kinematic,
+        // Collider::sphere(1.0),
         Projection::from(PerspectiveProjection {
             fov: cfg.player.fov.to_radians(),
             ..Default::default()
