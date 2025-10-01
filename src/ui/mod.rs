@@ -1,6 +1,5 @@
 use crate::*;
 use bevy::ui::Val::*;
-use bevy_enhanced_input::prelude::*;
 use bevy_seedling::prelude::*;
 
 mod interaction;

@@ -105,7 +105,7 @@ pub fn add_player_ctx(
             Action::<Navigate>::new(),
             DeadZone::default(),
             Scale::splat(0.3),
-            Bindings::spawn(( Cardinal::wasd_keys(), Cardinal::arrow_keys(), Axial::left_stick() )),
+            Bindings::spawn(( Cardinal::wasd_keys(), Cardinal::arrows(), Axial::left_stick() )),
         ),
         (
             Action::<Crouch>::new(),

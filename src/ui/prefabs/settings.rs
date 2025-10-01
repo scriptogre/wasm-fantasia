@@ -181,7 +181,7 @@ fn raise_music(
 
 fn update_music_volume_label(
     settings: Res<Settings>,
-    mut label: Single<&mut Text, (With<MusicVolumeLabel>, Changed<VolumeNode>)>,
+    mut label: Single<&mut Text, With<MusicVolumeLabel>>,
 ) {
     let percent = (settings.sound.music * 100.0).round();
     let text = format!("{percent: <3}%"); // pad the percent to 3 chars
@@ -212,8 +212,8 @@ fn raise_sfx(
 }
 
 fn update_sfx_volume_label(
-    mut label: Single<&mut Text, (With<SfxVolumeLabel>, Changed<VolumeNode>)>,
     settings: Res<Settings>,
+    mut label: Single<&mut Text, With<SfxVolumeLabel>>,
 ) {
     let percent = (settings.sound.sfx * 100.0).round();
     let text = format!("{percent: <3}%"); // pad the percent to 3 chars

@@ -5,6 +5,7 @@ use bevy_seedling::sample::AudioSample;
 mod ron;
 mod tracking;
 
+use bevy_shuffle_bag::ShuffleBag;
 pub use ron::*;
 pub use tracking::*;
 
@@ -87,15 +88,15 @@ pub struct AudioSources {
     #[dependency]
     pub btn_press: Handle<AudioSample>,
     #[dependency]
-    pub steps: Vec<Handle<AudioSample>>,
+    pub steps: ShuffleBag<Handle<AudioSample>>,
 
     // music
     #[dependency]
-    pub menu: Vec<Handle<AudioSample>>,
+    pub menu: ShuffleBag<Handle<AudioSample>>,
     #[dependency]
-    pub explore: Vec<Handle<AudioSample>>,
+    pub explore: ShuffleBag<Handle<AudioSample>>,
     #[dependency]
-    pub combat: Vec<Handle<AudioSample>>,
+    pub combat: ShuffleBag<Handle<AudioSample>>,
 }
 
 impl AudioSources {
@@ -116,18 +117,21 @@ impl AudioSources {
 
 impl FromWorld for AudioSources {
     fn from_world(world: &mut World) -> Self {
-        let assets = world.resource::<AssetServer>();
-        let steps = Self::STEPS.iter().map(|p| assets.load(*p)).collect();
-        let explore = Self::EXPLORE.iter().map(|p| assets.load(*p)).collect();
-        let combat = Self::COMBAT.iter().map(|p| assets.load(*p)).collect();
-        let menu = Self::MENU.iter().map(|p| assets.load(*p)).collect();
+        let mut rng = rand::thread_rng();
+        let a = world.resource::<AssetServer>();
+
+        let steps = Self::STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+        let explore = Self::EXPLORE.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+        let combat = Self::COMBAT.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+        let menu = Self::MENU.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+
         Self {
-            menu,
-            steps,
-            combat,
-            explore,
-            btn_hover: assets.load(Self::BTN_HOVER),
-            btn_press: assets.load(Self::BTN_PRESS),
+            menu: ShuffleBag::try_new(menu, &mut rng).unwrap(),
+            steps: ShuffleBag::try_new(steps, &mut rng).unwrap(),
+            combat: ShuffleBag::try_new(combat, &mut rng).unwrap(),
+            explore: ShuffleBag::try_new(explore, &mut rng).unwrap(),
+            btn_hover: a.load(Self::BTN_HOVER),
+            btn_press: a.load(Self::BTN_PRESS),
         }
     }
 }

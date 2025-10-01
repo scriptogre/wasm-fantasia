@@ -3,10 +3,6 @@ use serde::{Deserialize, Serialize};
 
 /// Number of input columns.
 pub const BINDINGS_COUNT: usize = 3;
-const SETTINGS_PATH: &str = "target/settings.ron";
-const GAP: Val = Val::Px(10.0);
-const PADDING: UiRect = UiRect::all(Val::Px(15.0));
-const PANEL_BACKGROUND: BackgroundColor = BackgroundColor(Color::srgb(0.8, 0.8, 0.8));
 
 /// Keyboard and mouse settings.
 ///

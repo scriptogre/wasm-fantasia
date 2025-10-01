@@ -69,21 +69,21 @@ fn grid(content: Vec<[String; 2]>) -> impl Bundle {
 }
 
 fn start_credits_music(
-    mut commands: Commands,
     settings: Res<Settings>,
-    sources: ResMut<AudioSources>,
+    mut commands: Commands,
+    mut sources: ResMut<AudioSources>,
     mut music: Query<&mut PlaybackSettings, With<MusicPool>>,
 ) {
     for mut s in music.iter_mut() {
         s.pause();
     }
 
-    let handle = sources.explore[0].clone();
+    let handle = sources.explore.pick(&mut rand::thread_rng());
     commands.spawn((
         StateScoped(Screen::Credits),
         Name::new("Credits Music"),
         MusicPool,
-        SamplePlayer::new(handle)
+        SamplePlayer::new(handle.clone())
             .with_volume(settings.music())
             .looping(),
     ));
