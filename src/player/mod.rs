@@ -63,10 +63,9 @@ pub fn spawn_player(
         return Ok(());
     };
 
-    let player_rot = Quat::from_rotation_y(PI);
     let mesh = SceneRoot(gltf.scenes[0].clone());
     let pos = Vec3::from(cfg.player.spawn_pos);
-    let pos = Transform::from_translation(pos).with_rotation(player_rot);
+    let pos = Transform::from_translation(pos);
     let player = Player {
         speed: cfg.player.movement.speed,
         animation_state: AnimationState::StandIdle,
