@@ -21,10 +21,8 @@ use bevy::gltf::GltfMesh;
 ///         obj,
 ///         &meshes,
 ///         &gltf_meshes,
-///         (
-///             StateScoped(Screen::Gameplay),
-///             Transform::from_scale(Vec3::splat(3.0)),
-///         ));
+///         Transform::from_scale(Vec3::splat(3.0)),
+///         );
 ///     }
 /// ```
 #[allow(dead_code)]

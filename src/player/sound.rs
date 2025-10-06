@@ -1,6 +1,5 @@
 use super::*;
 use bevy_seedling::prelude::*;
-use rand::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(movement_sound)
@@ -10,7 +9,7 @@ pub fn plugin(app: &mut App) {
 
 #[allow(clippy::too_many_arguments)]
 fn movement_sound(
-    on: Trigger<Fired<Navigate>>,
+    on: On<Fire<Navigate>>,
     time: Res<Time>,
     state: Res<GameState>,
     settings: Res<Settings>,
@@ -24,8 +23,8 @@ fn movement_sound(
         return Ok(());
     }
 
-    let controller = tnua.get(on.target())?;
-    let mut step_timer = step_timer.get_mut(on.target())?;
+    let controller = tnua.get(on.context)?;
+    let mut step_timer = step_timer.get_mut(on.context)?;
 
     let Some((_, basis)) = controller.concrete_basis::<TnuaBuiltinWalk>() else {
         return Ok(());
@@ -33,7 +32,7 @@ fn movement_sound(
 
     // WALK SOUND
     if step_timer.tick(time.delta()).just_finished() && basis.standing_on_entity().is_some() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let crouch = ***crouch;
         let handle = if crouch {
             // TODO: select crouch steps
@@ -48,7 +47,7 @@ fn movement_sound(
 }
 
 fn jump_sound(
-    _: Trigger<Started<Jump>>,
+    _: On<Start<Jump>>,
     state: Res<GameState>,
     settings: Res<Settings>,
     // jump_timer: Query<&JumpTimer, With<Player>>,
@@ -61,7 +60,7 @@ fn jump_sound(
 
     // let jump_timer = jump_timer.get(on.target())?;
     // if jump_timer.just_finished() {
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     let handle = sources.steps.pick(&mut rng);
     cmds.spawn(SamplePlayer::new(handle.clone()).with_volume(settings.sfx()));
     // }
@@ -70,7 +69,7 @@ fn jump_sound(
 }
 
 fn dash_sound(
-    _: Trigger<Started<Dash>>,
+    _: On<Start<Dash>>,
     state: Res<GameState>,
     settings: Res<Settings>,
     // jump_timer: Query<&JumpTimer, With<Player>>,
@@ -83,7 +82,7 @@ fn dash_sound(
 
     // let jump_timer = jump_timer.get(on.target())?;
     // if jump_timer.just_finished() {
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
     let handle = sources.steps.pick(&mut rng);
     cmds.spawn(SamplePlayer::new(handle.clone()).with_volume(settings.sfx()));
     // }

@@ -14,9 +14,9 @@ pub(super) fn plugin(app: &mut App) {
 
 fn spawn_gameplay_ui(mut cmds: Commands, textures: Res<Textures>, _settings: Res<Settings>) {
     // info!("settings on gameplay enter:{settings:?}");
-    let opts = Opts::default().hidden().width(Vw(5.0)).height(Vw(5.0));
+    let opts = Props::default().hidden().width(Vw(5.0)).height(Vw(5.0));
     cmds.spawn((
-        StateScoped(Screen::Gameplay),
+        DespawnOnExit(Screen::Gameplay),
         GameplayUi,
         ui_root("Gameplay Ui"),
         children![
@@ -41,7 +41,7 @@ fn spawn_gameplay_ui(mut cmds: Commands, textures: Res<Textures>, _settings: Res
 }
 
 fn toggle_pause(
-    _: Trigger<TogglePause>,
+    _: On<TogglePause>,
     mut time: ResMut<Time<Virtual>>,
     mut state: ResMut<GameState>,
     mut pause_label: Query<&mut Node, With<PauseIcon>>,
@@ -61,12 +61,12 @@ fn toggle_pause(
 }
 
 fn toggle_mute(
-    _: Trigger<ToggleMute>,
+    _: On<ToggleMute>,
     settings: ResMut<Settings>,
     mut state: ResMut<GameState>,
     mut label: Query<&mut Node, With<MuteIcon>>,
-    mut music: Single<&mut VolumeNode, (With<SamplerPool<MusicPool>>, Without<SfxBus>)>,
-    mut sfx: Single<&mut VolumeNode, (With<SfxBus>, Without<SamplerPool<MusicPool>>)>,
+    mut music: Single<&mut VolumeNode, (With<MusicPool>, Without<SfxBus>)>,
+    mut sfx: Single<&mut VolumeNode, (With<SfxBus>, Without<MusicPool>)>,
 ) {
     if let Ok(mut node) = label.single_mut() {
         if state.muted {
@@ -85,29 +85,23 @@ fn toggle_mute(
 
 // ============================ UI ============================
 
-fn click_to_menu(
-    on: Trigger<Pointer<Click>>,
-    mut commands: Commands,
-    mut state: ResMut<GameState>,
-) {
-    let target = on.target();
-    commands
-        .entity(target)
-        .insert(ModalCtx)
-        .trigger(GoTo(Screen::Title));
+fn click_to_menu(on: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<GameState>) {
+    commands.entity(on.entity).insert(ModalCtx);
+    commands.trigger(GoTo(Screen::Title));
     state.reset();
 }
-fn click_pop_modal(on: Trigger<Pointer<Click>>, mut commands: Commands) {
-    commands.entity(on.target()).trigger(PopModal);
+fn click_pop_modal(on: On<Pointer<Click>>, mut commands: Commands) {
+    commands.entity(on.entity).trigger(PopModal);
 }
-fn click_spawn_settings(on: Trigger<Pointer<Click>>, mut commands: Commands) {
-    commands
-        .entity(on.target())
-        .trigger(NewModal(Modal::Settings));
+fn click_spawn_settings(on: On<Pointer<Click>>, mut commands: Commands) {
+    commands.trigger(NewModal {
+        entity: on.entity,
+        modal: Modal::Settings,
+    });
 }
 
 fn trigger_menu_toggle_on_esc(
-    on: Trigger<Back>,
+    on: On<Back>,
     mut commands: Commands,
     screen: Res<State<Screen>>,
     state: ResMut<GameState>,
@@ -117,14 +111,17 @@ fn trigger_menu_toggle_on_esc(
     }
 
     if state.modals.is_empty() {
-        commands.entity(on.target()).trigger(NewModal(Modal::Main));
+        commands.trigger(NewModal {
+            entity: on.entity,
+            modal: Modal::Main,
+        });
     } else {
-        commands.entity(on.target()).trigger(PopModal);
+        commands.entity(on.entity).trigger(PopModal);
     }
 }
 
 fn add_new_modal(
-    on: Trigger<NewModal>,
+    on: On<NewModal>,
     screen: Res<State<Screen>>,
     mut commands: Commands,
     mut state: ResMut<GameState>,
@@ -133,30 +130,29 @@ fn add_new_modal(
         return;
     }
 
-    let mut modal = commands.entity(on.target());
+    let mut modal = commands.entity(on.entity);
     if state.modals.is_empty() {
         modal.insert(ModalCtx);
-        if Modal::Main == on.0 {
+        if Modal::Main == on.modal {
             if !state.paused {
-                modal.trigger(TogglePause);
+                commands.trigger(TogglePause);
             }
-            modal.trigger(CamCursorToggle);
+            commands.entity(on.entity).trigger(CamCursorToggle);
         }
     }
 
     // despawn all previous modal entities to avoid clattering
-    modal.trigger(ClearModals);
-    let NewModal(modal) = on.event();
-    match modal {
+    commands.entity(on.entity).trigger(ClearModals);
+    match on.event().modal {
         Modal::Main => commands.spawn(menu_modal()),
         Modal::Settings => commands.spawn(settings_modal()),
     };
 
-    state.modals.push(modal.clone());
+    state.modals.push(on.event().modal.clone());
 }
 
 fn pop_modal(
-    on: Trigger<PopModal>,
+    pop: On<PopModal>,
     screen: Res<State<Screen>>,
     menu_marker: Query<Entity, With<MenuModal>>,
     settings_marker: Query<Entity, With<SettingsModal>>,
@@ -194,17 +190,17 @@ fn pop_modal(
     }
 
     if state.modals.is_empty() {
-        info!("PopModal target entity: {}", on.target());
+        info!("PopModal target entity: {}", pop.event_target());
+        commands.trigger(TogglePause);
         commands
-            .entity(on.target())
+            .entity(pop.event_target())
             .insert(ModalCtx)
-            .trigger(TogglePause)
             .trigger(CamCursorToggle);
     }
 }
 
 fn clear_modals(
-    _: Trigger<ClearModals>,
+    _: On<ClearModals>,
     state: ResMut<GameState>,
     menu_marker: Query<Entity, With<MenuModal>>,
     settings_marker: Query<Entity, With<SettingsModal>>,
@@ -229,19 +225,23 @@ fn clear_modals(
 // MODALS
 
 fn settings_modal() -> impl Bundle {
-    (StateScoped(Screen::Gameplay), SettingsModal, settings_ui())
+    (
+        DespawnOnExit(Screen::Gameplay),
+        SettingsModal,
+        settings_ui(),
+    )
 }
 
 fn menu_modal() -> impl Bundle {
-    let opts = Opts::new("Settings")
+    let opts = Props::new("Settings")
         .width(Vw(15.0))
         .padding(UiRect::axes(Vw(2.0), Vw(0.5)));
     (
-        StateScoped(Screen::Gameplay),
+        DespawnOnExit(Screen::Gameplay),
         MenuModal,
         ui_root("In game menu"),
         children![(
-            BorderColor(WHITEISH),
+            BorderColor::all(WHITEISH),
             BackgroundColor(TRANSLUCENT),
             Node {
                 border: UiRect::all(Px(2.0)),
@@ -259,7 +259,7 @@ fn menu_modal() -> impl Bundle {
                         ..Default::default()
                     },
                     children![btn_small(
-                        Opts::new("back").width(Vw(5.0)).border(UiRect::DEFAULT),
+                        Props::new("back").width(Vw(5.0)).border(UiRect::DEFAULT),
                         click_pop_modal
                     )]
                 ),

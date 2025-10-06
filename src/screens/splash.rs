@@ -22,7 +22,6 @@ pub(super) fn plugin(app: &mut App) {
     );
 
     // Add splash timer.
-    app.register_type::<SplashTimer>();
     app.add_systems(OnEnter(Screen::Splash), insert_splash_timer);
     app.add_systems(OnExit(Screen::Splash), remove_splash_timer);
     app.add_systems(
@@ -70,7 +69,7 @@ fn spawn_splash_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
             ),
             label("Made with BEVY and love")
         ],
-        StateScoped(Screen::Splash),
+        DespawnOnExit(Screen::Splash),
     ));
 }
 

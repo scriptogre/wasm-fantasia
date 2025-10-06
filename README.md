@@ -39,8 +39,7 @@ bevy new -t=olekspickle/bevy_new_3d_rpg my-rpg
 ```
 
 ### Hotpatching
-If you want to use serving with hotpatching, you can use dioxus-cli:
-
+To set this up, follow the instructions in the [release announcement](https://bevy.org/news/bevy-0-17/#hot-patching-systems-in-a-running-app)
 - Linux: `make hot` or `bash BEVY_ASSET_ROOT="." dx serve --hot-patch`
 - Windows PS:`$env:BEVY_ASSET_ROOT="." ; dx serve --hot-patch`
 
@@ -63,6 +62,8 @@ If you want to use serving with hotpatching, you can use dioxus-cli:
 
 ### TODOs
 - [ ] implement different music states(exploration, combat) on mood change event
+- [ ] enhance ui widgets with feathers
+- [ ] pool with light textures
 - [ ] custom font replace example using pre-loaded font
 - [ ] Movement sfx sounds: jump, dash, sprint
 - [ ] sky background instead of just void lol

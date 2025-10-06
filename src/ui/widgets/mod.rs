@@ -1,11 +1,64 @@
-//! Helper functions for creating common widgets.
-
+//! Most of this module is copied from feathers crate as is, as encouraged
 use super::*;
-use bevy::ecs::{spawn::SpawnWith, system::IntoObserverSystem};
+use bevy::{
+    app::{PluginGroup, PluginGroupBuilder},
+    asset::embedded_asset,
+    ecs::{spawn::SpawnWith, system::IntoObserverSystem},
+    input_focus::{InputDispatchPlugin, tab_navigation::TabNavigationPlugin},
+    ui_widgets::UiWidgetsPlugins,
+    window::Window,
+};
 use std::borrow::Cow;
 
-pub const BORDER_RADIUS: f32 = 15.0;
-pub const FONT_SIZE: f32 = 24.0;
+pub mod alpha_pattern;
+pub mod constants;
+pub mod controls;
+pub mod cursor;
+pub mod font_styles;
+pub mod handle_or_path;
+pub mod palette;
+pub mod props;
+pub mod rounded_corners;
+pub mod theme;
+pub mod tokens;
+
+use crate::ui::widgets::{
+    alpha_pattern::{AlphaPattern, AlphaPatternMaterial, AlphaPatternResource},
+    constants::{fonts, size},
+    cursor::{DefaultCursor, EntityCursor},
+    font_styles::InheritableFont,
+    handle_or_path::HandleOrPath,
+    rounded_corners::RoundedCorners,
+    theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeFontColor, ThemedText, UiTheme},
+};
+pub use {palette::*, props::*};
+
+pub struct UiWidgets;
+
+impl PluginGroup for UiWidgets {
+    fn build(self) -> PluginGroupBuilder {
+        PluginGroupBuilder::start::<Self>()
+            .add_group(UiWidgetsPlugins)
+            .add(InputDispatchPlugin)
+            .add(TabNavigationPlugin)
+            .add(plugin)
+    }
+}
+
+pub fn plugin(app: &mut App) {
+    app.init_resource::<UiTheme>();
+
+    // Embedded font
+    embedded_asset!(app, "../../../assets/fonts/FiraCode-Bold.ttf");
+    embedded_asset!(app, "../../../assets/fonts/FiraCode-Medium.ttf");
+    embedded_asset!(app, "../../../assets/fonts/FiraCode-Regular.ttf");
+    embedded_asset!(app, "../../../assets/fonts/JetBrainsMono-Italic.ttf");
+
+    // Embedded shader
+    embedded_asset!(app, "../../../assets/shaders/alpha_pattern.wgsl");
+
+    app.add_plugins(controls::plugin);
+}
 
 /// A root UI node that fills the window and centers its content.
 pub fn ui_root(name: impl Into<Cow<'static, str>>) -> impl Bundle {
@@ -26,7 +79,7 @@ pub fn ui_root(name: impl Into<Cow<'static, str>>) -> impl Bundle {
     )
 }
 
-pub fn icon(opts: impl Into<Opts>) -> impl Bundle {
+pub fn icon(opts: impl Into<Props>) -> impl Bundle {
     let opts = opts.into();
     (
         Label,
@@ -37,7 +90,7 @@ pub fn icon(opts: impl Into<Opts>) -> impl Bundle {
         Pickable::IGNORE,
     )
 }
-pub fn label(opts: impl Into<Opts>) -> impl Bundle {
+pub fn label(opts: impl Into<Props>) -> impl Bundle {
     let opts = opts.into();
     (
         Label,
@@ -50,19 +103,19 @@ pub fn label(opts: impl Into<Opts>) -> impl Bundle {
 }
 
 /// A simple header label. Bigger than [`label`].
-pub fn header(opts: impl Into<Opts>) -> impl Bundle {
+pub fn header(opts: impl Into<Props>) -> impl Bundle {
     let opts = opts.into();
     (Label, Name::new("Header"), opts.into_text_bundle())
 }
 
 // A regular wide button with text and an action defined as an [`Observer`].
-pub fn btn_big<E, B, M, I>(opts: impl Into<Opts>, action: I) -> impl Bundle
+pub fn btn_big<E, B, M, I>(opts: impl Into<Props>, action: I) -> impl Bundle
 where
-    E: Event,
+    E: EntityEvent,
     B: Bundle,
     I: IntoObserverSystem<E, B, M>,
 {
-    let opts: Opts = opts.into();
+    let opts: Props = opts.into();
     let new_node = Node {
         min_width: Vw(30.0),
         padding: UiRect::axes(Vw(8.0), Vh(2.0)),
@@ -76,13 +129,13 @@ where
 }
 
 // A small square button with text and an action defined as an [`Observer`].
-pub fn btn_small<E, B, M, I>(opts: impl Into<Opts>, action: I) -> impl Bundle
+pub fn btn_small<E, B, M, I>(opts: impl Into<Props>, action: I) -> impl Bundle
 where
-    E: Event,
+    E: EntityEvent,
     B: Bundle,
     I: IntoObserverSystem<E, B, M>,
 {
-    let opts: Opts = opts.into();
+    let opts: Props = opts.into();
     let new_node = Node {
         margin: UiRect::ZERO,
         padding: UiRect::ZERO,
@@ -98,13 +151,13 @@ where
 
 /// A simple button with text and an action defined as an [`Observer`]. The button's layout is provided by `button_bundle`.
 /// Background color is set by [`UiInteraction`]
-pub fn btn<E, B, M, I>(opts: impl Into<Opts>, action: I) -> impl Bundle
+pub fn btn<E, B, M, I>(opts: impl Into<Props>, action: I) -> impl Bundle
 where
-    E: Event,
+    E: EntityEvent,
     B: Bundle,
     I: IntoObserverSystem<E, B, M>,
 {
-    let opts: Opts = opts.into();
+    let opts: Props = opts.into();
     let action = IntoObserverSystem::into_system(action);
 
     (
@@ -120,7 +173,7 @@ where
                     Button,
                     opts.border_radius,
                     opts.border_color,
-                    opts.ui_palette,
+                    // opts.ui_palette,
                 ))
                 .insert(opts.node)
                 .add_children(&[content])

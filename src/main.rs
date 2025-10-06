@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bevy::{
-    app::App, asset::AssetMetaCheck, log, prelude::*, window::PrimaryWindow, winit::WinitWindows,
+    app::App, asset::AssetMetaCheck, log, prelude::*, window::PrimaryWindow, winit::WINIT_WINDOWS,
 };
 use bevy_fix_cursor_unlock_web::prelude::*;
 use std::io::Cursor;
@@ -78,22 +78,30 @@ fn main() {
 
 /// Sets the icon on windows and X11
 /// TODO: fix when bevy gets a normal way of setting window image
+/// FIXME: use query again after !Send resources are removed
+/// <https://github.com/bevyengine/bevy/issues/17667>
 fn set_window_icon(
-    windows: NonSend<WinitWindows>,
+    // windows: NonSend<WinitWindows>,
     primary_window: Query<Entity, With<PrimaryWindow>>,
 ) -> Result {
+    // let Some(primary) = windows.get_window(primary_entity) else {
+    //     return Ok(());
+    // };
     let primary_entity = primary_window.single()?;
-    let Some(primary) = windows.get_window(primary_entity) else {
-        return Ok(());
-    };
-    let icon_buf = Cursor::new(include_bytes!("../assets/textures/icon.png"));
-    if let Ok(image) = image::load(icon_buf, image::ImageFormat::Png) {
-        let image = image.into_rgba8();
-        let (width, height) = image.dimensions();
-        let rgba = image.into_raw();
-        let icon = Icon::from_rgba(rgba, width, height).unwrap();
-        primary.set_window_icon(Some(icon));
-    };
+
+    WINIT_WINDOWS.with_borrow_mut(|windows| {
+        let Some(primary) = windows.get_window(primary_entity) else {
+            return;
+        };
+        let icon_buf = Cursor::new(include_bytes!("../assets/textures/icon.png"));
+        if let Ok(image) = image::load(icon_buf, image::ImageFormat::Png) {
+            let image = image.into_rgba8();
+            let (width, height) = image.dimensions();
+            let rgba = image.into_raw();
+            let icon = Icon::from_rgba(rgba, width, height).unwrap();
+            primary.set_window_icon(Some(icon));
+        };
+    });
 
     Ok(())
 }

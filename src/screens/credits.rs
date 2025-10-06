@@ -11,7 +11,7 @@ pub(super) fn plugin(app: &mut App) {
 
 fn spawn_credits_screen(mut commands: Commands, credits: Res<Credits>) {
     commands.spawn((
-        StateScoped(Screen::Credits),
+        DespawnOnExit(Screen::Credits),
         Name::new("Credits Screen"),
         Node {
             width: Percent(100.0),
@@ -78,9 +78,9 @@ fn start_credits_music(
         s.pause();
     }
 
-    let handle = sources.explore.pick(&mut rand::thread_rng());
+    let handle = sources.explore.pick(&mut rand::rng());
     commands.spawn((
-        StateScoped(Screen::Credits),
+        DespawnOnExit(Screen::Credits),
         Name::new("Credits Music"),
         MusicPool,
         SamplePlayer::new(handle.clone())

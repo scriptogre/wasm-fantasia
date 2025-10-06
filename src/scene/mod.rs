@@ -12,7 +12,6 @@ pub fn plugin(app: &mut App) {
     app.add_plugins((
         PhysicsPlugins::default(),
         SkeinPlugin::default(),
-        bevy_fix_gltf_coordinate_system::FixGltfCoordinateSystemPlugin,
         skybox::plugin,
     ))
     .add_systems(OnEnter(Screen::Title), setup);

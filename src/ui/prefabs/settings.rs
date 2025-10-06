@@ -19,12 +19,13 @@ pub(super) fn plugin(app: &mut App) {
 // ============================ CONTROL KNOBS OBSERVERS ============================
 
 pub fn save_settings(
-    _: Trigger<OnPress>,
+    _: On<Pointer<Click>>,
     settings: Res<Settings>,
-    root: Query<&Children, With<SaveSettingsLabel>>,
     children_q: Query<&Children>,
+    root: Query<&Children, With<SaveSettingsLabel>>,
     mut text_q: Query<&mut Text>,
 ) {
+    // TODO: this is an insane nesting, improve it
     match settings.save() {
         Ok(()) => {
             info!("writing settings to '{SETTINGS_PATH}'");
@@ -91,7 +92,7 @@ fn update_tab_content(
 // ============================ +/- BUTTON HOOKS ============================
 
 fn lower_fov(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: Res<Config>,
     mut settings: ResMut<Settings>,
     mut world_model_projection: Single<&mut Projection>,
@@ -105,7 +106,7 @@ fn lower_fov(
 }
 
 fn raise_fov(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: Res<Config>,
     mut settings: ResMut<Settings>,
     mut world_model_projection: Single<&mut Projection>,
@@ -126,7 +127,7 @@ fn update_fov_label(settings: Res<Settings>, mut label: Single<&mut Text, With<F
 
 // GENERAL
 fn lower_general(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
     mut general: Single<&mut VolumeNode, With<MainBus>>,
@@ -137,7 +138,7 @@ fn lower_general(
 }
 
 fn raise_general(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
     mut general: Single<&mut VolumeNode, With<MainBus>>,
@@ -158,7 +159,7 @@ fn update_general_volume_label(
 
 // MUSIC
 fn lower_music(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
     mut music: Single<&mut VolumeNode, With<SamplerPool<MusicPool>>>,
@@ -169,7 +170,7 @@ fn lower_music(
 }
 
 fn raise_music(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
     mut music: Single<&mut VolumeNode, With<SamplerPool<MusicPool>>>,
@@ -190,7 +191,7 @@ fn update_music_volume_label(
 
 // SFX
 fn lower_sfx(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
     mut sfx: Single<&mut VolumeNode, With<SfxBus>>,
@@ -201,7 +202,7 @@ fn lower_sfx(
 }
 
 fn raise_sfx(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
     mut sfx: Single<&mut VolumeNode, With<SfxBus>>,
@@ -222,14 +223,14 @@ fn update_sfx_volume_label(
 
 // ============================ OTHER BUTTON HOOKS ============================
 
-fn switch_to_tab(tab: UiTab) -> impl Fn(Trigger<Pointer<Click>>, ResMut<ActiveTab>) + Clone {
-    move |_: Trigger<Pointer<Click>>, mut active_tab: ResMut<ActiveTab>| {
+fn switch_to_tab(tab: UiTab) -> impl Fn(On<Pointer<Click>>, ResMut<ActiveTab>) + Clone {
+    move |_: On<Pointer<Click>>, mut active_tab: ResMut<ActiveTab>| {
         active_tab.0 = tab;
     }
 }
 
 fn click_toggle_vsync(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) -> Result {
     for mut window in windows.iter_mut() {
@@ -246,7 +247,7 @@ fn click_toggle_vsync(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn click_toggle_diagnostics(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     mut commands: Commands,
     mut state: ResMut<GameState>,
     mut perf_ui: Query<&mut Node, With<PerfUi>>,
@@ -275,7 +276,7 @@ fn click_toggle_diagnostics(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn clock_toggle_debug_ui(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     mut commands: Commands,
     mut state: ResMut<GameState>,
     mut label: Query<&mut Text, With<DiagnosticsLabel>>,
@@ -294,7 +295,7 @@ fn clock_toggle_debug_ui(
 }
 
 fn click_toggle_sun_cycle(
-    _: Trigger<Pointer<Click>>,
+    _: On<Pointer<Click>>,
     labels: Query<&Children, With<SunCycleLabel>>,
     mut texts: Query<&mut Text>,
     mut settings: ResMut<Settings>,
@@ -319,15 +320,15 @@ fn click_toggle_sun_cycle(
 }
 
 fn click_toggle_settings(
-    _: Trigger<OnPress>,
-    mut cmds: Commands,
+    click: On<Pointer<Click>>,
+    mut commands: Commands,
     screen: Res<State<Screen>>,
     mut next_screen: ResMut<NextState<Screen>>,
 ) {
     if *screen.get() == Screen::Settings {
         next_screen.set(Screen::Title);
     } else {
-        cmds.trigger(PopModal);
+        commands.entity(click.event_target()).trigger(PopModal);
     }
 }
 
@@ -356,7 +357,7 @@ pub fn settings_ui() -> impl Bundle {
 }
 
 fn tab_bar() -> impl Bundle {
-    let opts = Opts::default().border_radius(Px(0.0));
+    let opts = Props::default().border_radius(Px(0.0));
     (
         Node {
             flex_direction: FlexDirection::Column,

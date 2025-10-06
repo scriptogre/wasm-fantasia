@@ -1,11 +1,9 @@
 use super::*;
 use bevy::{
-    core_pipeline::{
-        bloom::Bloom,
-        tonemapping::{DebandDither, Tonemapping},
-    },
-    pbr::{Atmosphere, AtmosphereSettings, CascadeShadowConfigBuilder, light_consts::lux},
-    render::camera::Exposure,
+    camera::Exposure,
+    core_pipeline::tonemapping::Tonemapping,
+    light::{CascadeShadowConfigBuilder, light_consts::lux},
+    pbr::{Atmosphere, AtmosphereSettings, DistanceFog, FogFalloff},
 };
 
 pub fn plugin(app: &mut App) {
@@ -30,11 +28,11 @@ pub fn add_skybox_to_camera(
 
     commands.spawn((
         Sun,
-        StateScoped(Screen::Gameplay),
+        DespawnOnExit(Screen::Gameplay),
         DirectionalLight {
             color: SUN,
             shadows_enabled: true,
-            illuminance: lux::FULL_DAYLIGHT,
+            illuminance: light_consts::lux::FULL_DAYLIGHT,
             ..Default::default()
         },
         // Transform::from_translation(Vec3::new(0.0, 0.0, 200.0)),
@@ -43,7 +41,7 @@ pub fn add_skybox_to_camera(
 
     commands.spawn((
         Moon,
-        StateScoped(Screen::Gameplay),
+        DespawnOnExit(Screen::Gameplay),
         DirectionalLight {
             color: MOON,
             shadows_enabled: true,
@@ -79,10 +77,10 @@ pub fn add_skybox_to_camera(
             aerial_view_lut_samples: 15,   // More samples for aerial view depth
             ..Default::default()
         },
-        Tonemapping::BlenderFilmic,
         Exposure::OVERCAST,
-        Bloom::NATURAL,
-        DebandDither::Enabled, // Bloom causes gradients which cause banding
+        Tonemapping::BlenderFilmic,
+        // BloomSettings::NATURAL,
+        // DebandDither::Enabled, // Bloom causes gradients which cause banding
     ));
 
     if cfg.physics.distance_fog {

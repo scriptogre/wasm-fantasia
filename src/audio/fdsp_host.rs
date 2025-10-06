@@ -1,28 +1,27 @@
 use super::*;
 use bevy_seedling::{
     firewheel::{
+        StreamInfo,
         channel_config::ChannelConfig,
         event::ProcEvents,
         node::{
-            AudioNode, AudioNodeInfo, AudioNodeProcessor, ProcBuffers, ProcExtra, ProcInfo,
-            ProcessStatus,
+            AudioNode, AudioNodeInfo, AudioNodeProcessor, ConstructProcessorContext, ProcBuffers,
+            ProcExtra, ProcInfo, ProcessStatus,
         },
     },
     node::RegisterNode,
 };
 use fundsp::prelude::*;
 
-pub struct FundspPlugin;
-
-impl Plugin for FundspPlugin {
-    fn build(&self, app: &mut App) {
-        app.register_simple_node::<FundspNode>()
-            .add_observer(observe_config_add);
-    }
+pub fn plugin(app: &mut App) {
+    app.register_simple_node::<FundspNode>()
+        .add_observer(observe_config_add);
 }
 
-fn observe_config_add(trigger: Trigger<OnAdd, FundspConfig>, mut commands: Commands) {
-    commands.entity(trigger.target()).insert_if_new(FundspNode);
+fn observe_config_add(trigger: On<Add, FundspConfig>, mut commands: Commands) {
+    commands
+        .entity(trigger.event_target())
+        .insert_if_new(FundspNode);
 }
 
 #[derive(Debug, Clone, Component)]
@@ -102,7 +101,7 @@ impl AudioNode for FundspNode {
     fn construct_processor(
         &self,
         configuration: &Self::Configuration,
-        cx: firewheel::node::ConstructProcessorContext,
+        cx: ConstructProcessorContext,
     ) -> impl AudioNodeProcessor {
         let mut unit = configuration.clone();
         unit.unit
@@ -159,7 +158,7 @@ impl AudioNodeProcessor for FundspProcessor {
         ProcessStatus::outputs_not_silent()
     }
 
-    fn new_stream(&mut self, stream_info: &firewheel::StreamInfo) {
+    fn new_stream(&mut self, stream_info: &StreamInfo) {
         if stream_info.sample_rate != stream_info.prev_sample_rate {
             self.unit
                 .unit

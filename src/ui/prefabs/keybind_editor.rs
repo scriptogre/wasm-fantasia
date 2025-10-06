@@ -154,7 +154,7 @@ pub fn keybind_editor(_keybind: &InputSettings) -> impl Bundle {
 // }
 //
 // fn delete_binding(
-//     trigger: Trigger<Pointer<Click>>,
+//     trigger: On<Pointer<Click>>,
 //     mut binding_buttons: Query<(&Name, &mut BindingButton)>,
 //     delete_buttons: Query<&DeleteButton>,
 // ) {
@@ -167,7 +167,7 @@ pub fn keybind_editor(_keybind: &InputSettings) -> impl Bundle {
 // }
 //
 // fn show_binding_dialog(
-//     trigger: Trigger<Pointer<Click>>,
+//     trigger: On<Pointer<Click>>,
 //     mut commands: Commands,
 //     root_entity: Single<Entity, (With<Node>, Without<ChildOf>)>,
 //     names: Query<&Name>,
@@ -189,7 +189,7 @@ pub fn keybind_editor(_keybind: &InputSettings) -> impl Bundle {
 //             PANEL_BACKGROUND,
 //             children![(
 //                 TextLayout {
-//                     justify: JustifyText::Center,
+//                     justify: Justify::Center,
 //                     ..Default::default()
 //                 },
 //                 DARK_TEXT,
@@ -283,7 +283,7 @@ pub fn keybind_editor(_keybind: &InputSettings) -> impl Bundle {
 // }
 //
 // fn replace_binding(
-//     _on: Trigger<Pointer<Click>>,
+//     _on: On<Pointer<Click>>,
 //     mut commands: Commands,
 //     dialog: Single<(Entity, &ConflictDialog)>,
 //     mut buttons: Query<(&Name, &mut BindingButton)>,
@@ -305,7 +305,7 @@ pub fn keybind_editor(_keybind: &InputSettings) -> impl Bundle {
 // }
 //
 // fn cancel_replace_binding(
-//     _on: Trigger<Pointer<Click>>,
+//     _on: On<Pointer<Click>>,
 //     mut commands: Commands,
 //     dialog: Single<Entity, With<ConflictDialog>>,
 // ) {
@@ -314,7 +314,7 @@ pub fn keybind_editor(_keybind: &InputSettings) -> impl Bundle {
 // }
 //
 // fn apply(
-//     _on: Trigger<Pointer<Click>>,
+//     _on: On<Pointer<Click>>,
 //     mut commands: Commands,
 //     mut settings: ResMut<Settings>,
 //     buttons: Query<(&BindingButton, &BindingInfo)>,
@@ -361,7 +361,7 @@ pub fn keybind_editor(_keybind: &InputSettings) -> impl Bundle {
 // }
 //
 // fn reload_bindings(
-//     _on: Trigger<SettingsChanged>,
+//     _on: On<SettingsChanged>,
 //     // settings: Res<Settings>,
 //     mut commands: Commands,
 //     mut player: Query<Entity, With<Player>>,

@@ -5,5 +5,5 @@ pub(super) fn plugin(app: &mut App) {
 }
 
 fn spawn_settings_screen(mut commands: Commands) {
-    commands.spawn((StateScoped(Screen::Settings), settings_ui()));
+    commands.spawn((DespawnOnExit(Screen::Settings), settings_ui()));
 }

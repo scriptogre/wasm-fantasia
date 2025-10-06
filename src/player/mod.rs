@@ -32,12 +32,12 @@ pub fn plugin(app: &mut App) {
     #[cfg(feature = "third_person")]
     app.add_plugins(ThirdPersonCameraPlugin).configure_sets(
         PostUpdate,
-        bevy_third_person_camera::CameraSyncSet.after(PhysicsSet::Sync),
+        bevy_third_person_camera::CameraSyncSet.before(TransformSystems::Propagate),
     );
     #[cfg(feature = "top_down")]
     app.add_plugins(TopDownCameraPlugin).configure_sets(
         PostUpdate,
-        bevy_top_down_camera::CameraSyncSet.after(PhysicsSet::Sync),
+        bevy_top_down_camera::CameraSyncSet.before(TransformSystems::Propagate),
     );
 
     app.add_systems(OnEnter(Screen::Gameplay), spawn_player)
@@ -76,7 +76,7 @@ pub fn spawn_player(
 
     commands
         .spawn((
-            StateScoped(Screen::Gameplay),
+            DespawnOnExit(Screen::Gameplay),
             pos,
             player,
             // camera target component
@@ -135,10 +135,9 @@ pub fn spawn_player(
     Ok(())
 }
 
-fn player_post_spawn(on: Trigger<OnAdd, Player>, mut players: Query<&mut Player>) {
-    let player = on.target();
-    if let Ok(mut p) = players.get_mut(player) {
-        p.id = player; // update player id with spawned entity
+fn player_post_spawn(on: On<Add, Player>, mut players: Query<&mut Player>) {
+    if let Ok(mut p) = players.get_mut(on.entity) {
+        p.id = on.entity; // update player id with spawned entity
         info!("player entity: Player.id: {}", p.id);
     }
 }

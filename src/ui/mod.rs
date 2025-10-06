@@ -1,18 +1,17 @@
 use crate::*;
-use bevy::ui::Val::*;
+use bevy::{prelude::*, ui::Val::*};
 use bevy_seedling::prelude::*;
 
-mod interaction;
-mod opts;
 mod perf;
 mod prefabs;
-mod widget;
+mod widgets;
 
-pub use interaction::*;
-pub use opts::*;
 pub use prefabs::*;
-pub use widget::*;
+pub use widgets::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((perf::plugin, interaction::plugin, prefabs::plugin));
+    app.add_plugins((UiWidgets, prefabs::plugin));
+
+    #[cfg(feature = "dev")]
+    app.add_plugins(perf::plugin);
 }

@@ -120,6 +120,9 @@
 # [profile.dev]
 # debug = 1
 
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+atomics,+bulk-memory,+mutable-globals"]
+
 # For this you'll need a nightly version of the compiler
-# [unstable]
-# build-std = ["std", "core", "alloc", "panic_abort"]
+[unstable]
+build-std = ["std", "core", "alloc", "panic_abort"]

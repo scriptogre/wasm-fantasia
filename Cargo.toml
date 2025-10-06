@@ -1,7 +1,7 @@
 [package]
 name = "bevy_new_3d_rpg"
 edition = "2024"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Oleks Pickle <22867443+olekspickle@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0 OR CC0"
 exclude = ["assets"]
@@ -11,6 +11,8 @@ keywords = ["bevy", "game", "template", "devkit", "third person", "topdown", "ga
 
 [features]
 default = [ "dev_native", "third_person" ]
+web = []
+custom_cursor  = []
 top_down = ["bevy_top_down_camera"]
 third_person = ["bevy_third_person_camera"]
 dev = [
@@ -22,6 +24,7 @@ dev = [
 dev_native = [
     "dev",
     "enhanced",
+    "custom_cursor",
     "bevy-inspector-egui",
     "bevy/embedded_watcher",        # Enable embedded asset hot reloading for native dev builds.
     "bevy/file_watcher",            # Enable asset hot reloading for native dev builds.
@@ -31,36 +34,37 @@ enhanced = [
     "bevy/bevy_pbr",                # PBR
     "bevy/pbr_specular_textures",   # PBR specular maps
 ]
-web = []
 
 [dependencies.bevy]
-# version = "0.17.0-dev"
-# branch = "main"
-# git = "https://github.com/bevyengine/bevy"
-version = "^0.16"
+version = "^0.17"
 default-features = false
 # opinionated list without bevy_audio
 features = [
     "std",
-    # "zstd_rust",
+    "zstd_rust",
     "sysinfo_plugin",
     "multi_threaded",
-    "hdr",
     "smaa_luts",
-    "tonemapping_luts",
+    "bevy_core_pipeline",
+    "bevy_anti_alias",
     "bevy_render",
+    "bevy_color",
+    "reflect_auto_register",
+    "tonemapping_luts",
+    "bevy_post_process",
     "bevy_winit",
     "bevy_state",
-    "bevy_color",
+    "hotpatching",
     "bevy_asset",
-    "bevy_core_pipeline",
     "bevy_gltf",
     "bevy_scene",
     "bevy_picking",
     "bevy_mesh_picking_backend",
     "bevy_text",
     "bevy_ui",
+    "bevy_ui_render",
     "bevy_ui_picking_backend",
+    "experimental_bevy_ui_widgets",
     "bevy_input_focus",
     "custom_cursor",
     "default_font",
@@ -68,56 +72,71 @@ features = [
     "bevy_log",
     "bevy_gilrs",
     "bevy_gizmos",
+    "hdr",
+    "ktx2",
     "png",
     "jpeg",
     "webgl2",
     "x11",
-    "wayland"
+    "wayland",
+    "serialize",
+    # TODO: play with these features
+    # "pbr_light_textures"
 ]
 
 [dependencies]
 # plugins
-# stupid gltf 180 rotation fix that will be upstreamed in 0.17
-bevy_fix_gltf_coordinate_system = "0.1"
-bevy_fix_cursor_unlock_web = "0.1"
-bevy-inspector-egui = { version = "0.31.0", optional = true }
-bevy_skein = "0.2.1"                                                                # blender integration
-iyes_perf_ui = "0.5"                                                                # diagnostics overlay
+bevy_fix_cursor_unlock_web = "^0.2.0-rc"
+bevy-inspector-egui = { version = "^0.34.0", optional = true }
+bevy_skein = "^0.3.0-rc.1"                                                                  # blender integration
+# iyes_perf_ui = "0.5"                                                                      # diagnostics overlay
 
-avian3d = { version = "0.3", features = ["3d", "parallel", "collider-from-mesh"] }  # physics
-bevy_seedling = { version = "0.5", features = ["hrtf", "ogg"] }                     # audio plugin using firewheel
-bevy_shuffle_bag = "0.2"                                                            # random container for audio
-fundsp = "0.20.0"
-firewheel = "0.7"
+avian3d = { version = "^0.4.0-dev", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics
+bevy_seedling = { version = "^0.6.0-rc", features = ["hrtf", "ogg"] }                       # audio plugin using firewheel
+bevy_shuffle_bag = "^0.3"                                                                   # random container for audio
+firewheel = "^0.7"
+fundsp = "^0.20"
 
-bevy_third_person_camera = { version = "0.3", optional = true }                     # 3rd person camera
-bevy_top_down_camera = { version = "0.1", optional = true }                         # top down camera
-# bevy_third_person_camera = { path = "../../Documents/rust/bevy_third_person_camera", optional = true }     # 3rd person camera
-# bevy_top_down_camera = { version = "0.1", git = "https://github.com/olekspickle/bevy_top_down_camera", optional = true }     # top down camera
 
-bevy-tnua = "0.24"                                                                  # floating character control
-bevy-tnua-avian3d = "0.5"                                                           # tnua-avian interaction
-bevy_enhanced_input = "0.18"                                                        # keyboard/gamepad input
+bevy_third_person_camera = { version = "^0.3", optional = true }                            # 3rd person camera
+bevy_top_down_camera = { version = "^0.2", optional = true }                                # top down camera
+
+# characrter control
+bevy-tnua = "^0.25.0-rc"                                                                    # floating character control
+bevy-tnua-avian3d = "^0.6.0-rc"                                                             # tnua-avian interaction
+bevy_enhanced_input = { version = "^0.19.0-rc", features = ["serialize"] }                  # keyboard/gamepad input
+
+# dialogue
+bevy_yarnspinner = "^0.6.0-rc"
+bevy_yarnspinner_example_dialogue_view = "^0.6.0-rc"
 
 # misc
 # itertools = "0.14.0"
-image = "0.25.6"
-ron = "0.10"
-rand = "0.8"
+image = "^0.25.6"
+ron = "^0.10"
+rand = "^0.9"
 serde = "1"
-thiserror = "2.0.12"
-# Leave only high-severity logs in native build
-log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
+thiserror = "2"
+smol_str = { version = "0.3", default-features = false }
 # keep the following in sync with Bevy's dependencies
-winit = { version = "0.30", default-features = false }
+winit = { version = "^0.30", default-features = false }
+# Compile low-severity logs out of builds for performance.
+# Remove these features if you want to profile your game with tracy.
+# (see <https://github.com/bevyengine/bevy/blob/main/docs/profiling.md#tracy-profiler>)
+tracing = { version = "^0.1", features = ["max_level_debug", "release_max_level_warn"] }
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-firewheel-web-audio = { git = "https://github.com/CorvusPrudens/firewheel-web-audio" }
-# Leave only high-severity logs in web build
-tracing = { version = "0.1", features = ["max_level_debug", "release_max_level_warn"] }
+[target.wasm32-unknown-unknown.dependencies]
+firewheel-web-audio = { git = "https://github.com/CorvusPrudens/firewheel-web-audio", rev = "65888f3" }
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [patch.crates-io]
-# bevy_seedling = { git = "https://github.com/CorvusPrudens/bevy_seedling", rev = "78dde3b" }
+bevy-inspector-egui = { git = "https://github.com/dsgallups/bevy-inspector-egui", branch = "dsgallups/0.17" }
+avian3d = { git = "https://github.com/Jondolf/avian", branch = "main" }
+bevy-tnua = { git = "https://github.com/janhohenheim/bevy-tnua", branch = "bevy-0.17.0-dev" }
+bevy-tnua-avian3d = { git = "https://github.com/janhohenheim/bevy-tnua", branch = "bevy-0.17.0-dev" }
+# Fix [crash on Chromium](https://github.com/CorvusPrudens/bevy_seedling/issues/60)
+firewheel-web-audio = { git = "https://github.com/CorvusPrudens/firewheel-web-audio", rev = "65888f3" }
+bevy_third_person_camera = { git = "https://github.com/olekspickle/bevy_third_person_camera", branch = "0.17.0" }
 
 # LINT
 [lints.clippy]

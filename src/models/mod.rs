@@ -7,7 +7,6 @@ mod event_dispatch;
 mod ext_traits;
 mod input;
 mod keybinding;
-mod palette;
 mod player;
 mod pre_load;
 mod primitives;
@@ -18,7 +17,6 @@ pub use event_dispatch::*;
 pub use ext_traits::*;
 pub use input::*;
 pub use keybinding::*;
-pub use palette::*;
 pub use player::*;
 pub use pre_load::*;
 pub use primitives::*;
@@ -26,9 +24,7 @@ pub use settings::*;
 pub use states::*;
 
 pub fn plugin(app: &mut App) {
-    // register for skein
     app.add_plugins((
-        primitives::plugin,
         settings::plugin,
         states::plugin,
         input::plugin,

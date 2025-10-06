@@ -1,12 +1,5 @@
 use super::*;
 
-pub fn plugin(app: &mut App) {
-    // register for skein
-    app.register_type::<Zone>()
-        .register_type::<Combat>()
-        .register_type::<Exploration>();
-}
-
 /// Macro to hide the derive trait boilerplate
 macro_rules! markers {
   ( $( $name:ident ),* ) => {

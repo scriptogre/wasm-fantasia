@@ -1,0 +1,220 @@
+use super::*;
+use bevy::ui_widgets::{Slider, SliderPrecision, SliderRange, SliderValue, TrackClick};
+
+pub fn plugin(app: &mut App) {
+    app.add_systems(
+        PreUpdate,
+        (
+            update_slider_styles,
+            update_slider_styles_remove,
+            update_slider_pos,
+        )
+            .in_set(PickingSystems::Last),
+    );
+}
+
+/// Slider template properties, passed to [`slider`] function.
+pub struct SliderProps {
+    /// Slider current value
+    pub value: f32,
+    /// Slider minimum value
+    pub min: f32,
+    /// Slider maximum value
+    pub max: f32,
+}
+
+impl Default for SliderProps {
+    fn default() -> Self {
+        Self {
+            value: 0.0,
+            min: 0.0,
+            max: 1.0,
+        }
+    }
+}
+
+#[derive(Component, Default, Clone)]
+#[require(Slider)]
+#[derive(Reflect)]
+#[reflect(Component, Clone, Default)]
+struct SliderStyle;
+
+/// Marker for the text
+#[derive(Component, Default, Clone, Reflect)]
+#[reflect(Component, Clone, Default)]
+struct SliderValueText;
+
+/// Spawn a new slider widget.
+///
+/// # Arguments
+///
+/// * `props` - construction properties for the slider.
+/// * `overrides` - a bundle of components that are merged in with the normal slider components.
+pub fn slider<B: Bundle>(props: SliderProps, overrides: B) -> impl Bundle {
+    (
+        Node {
+            height: size::ROW_HEIGHT,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            padding: UiRect::axes(Val::Px(8.0), Val::Px(0.)),
+            flex_grow: 1.0,
+            ..Default::default()
+        },
+        Slider {
+            track_click: TrackClick::Drag,
+        },
+        SliderStyle,
+        SliderValue(props.value),
+        SliderRange::new(props.min, props.max),
+        EntityCursor::System(SystemCursorIcon::EwResize),
+        TabIndex(0),
+        RoundedCorners::All.to_border_radius(px(6.0)),
+        // Use a gradient to draw the moving bar
+        BackgroundGradient(vec![Gradient::Linear(LinearGradient {
+            angle: PI * 0.5,
+            stops: vec![
+                ColorStop::new(Color::NONE, Val::Percent(0.)),
+                ColorStop::new(Color::NONE, Val::Percent(50.)),
+                ColorStop::new(Color::NONE, Val::Percent(50.)),
+                ColorStop::new(Color::NONE, Val::Percent(100.)),
+            ],
+            color_space: InterpolationColorSpace::Srgba,
+        })]),
+        overrides,
+        children![(
+            // Text container
+            Node {
+                display: Display::Flex,
+                position_type: PositionType::Absolute,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..Default::default()
+            },
+            ThemeFontColor(tokens::SLIDER_TEXT),
+            InheritableFont {
+                font: HandleOrPath::Path(fonts::MONO.to_owned()),
+                font_size: 12.0,
+            },
+            children![(Text::new("10.0"), ThemedText, SliderValueText,)],
+        )],
+    )
+}
+
+fn update_slider_styles(
+    mut q_sliders: Query<
+        (Entity, Has<InteractionDisabled>, &mut BackgroundGradient),
+        (With<SliderStyle>, Or<(Spawned, Added<InteractionDisabled>)>),
+    >,
+    theme: Res<UiTheme>,
+    mut commands: Commands,
+) {
+    for (slider_ent, disabled, mut gradient) in q_sliders.iter_mut() {
+        set_slider_styles(
+            slider_ent,
+            &theme,
+            disabled,
+            gradient.as_mut(),
+            &mut commands,
+        );
+    }
+}
+
+fn update_slider_styles_remove(
+    mut q_sliders: Query<(Entity, Has<InteractionDisabled>, &mut BackgroundGradient)>,
+    mut removed_disabled: RemovedComponents<InteractionDisabled>,
+    theme: Res<UiTheme>,
+    mut commands: Commands,
+) {
+    removed_disabled.read().for_each(|ent| {
+        if let Ok((slider_ent, disabled, mut gradient)) = q_sliders.get_mut(ent) {
+            set_slider_styles(
+                slider_ent,
+                &theme,
+                disabled,
+                gradient.as_mut(),
+                &mut commands,
+            );
+        }
+    });
+}
+
+fn set_slider_styles(
+    slider_ent: Entity,
+    theme: &Res<'_, UiTheme>,
+    disabled: bool,
+    gradient: &mut BackgroundGradient,
+    commands: &mut Commands,
+) {
+    let bar_color = theme.color(&match disabled {
+        true => tokens::SLIDER_BAR_DISABLED,
+        false => tokens::SLIDER_BAR,
+    });
+
+    let bg_color = theme.color(&tokens::SLIDER_BG);
+
+    let cursor_shape = match disabled {
+        true => SystemCursorIcon::NotAllowed,
+        false => SystemCursorIcon::EwResize,
+    };
+
+    if let [Gradient::Linear(linear_gradient)] = &mut gradient.0[..] {
+        linear_gradient.stops[0].color = bar_color;
+        linear_gradient.stops[1].color = bar_color;
+        linear_gradient.stops[2].color = bg_color;
+        linear_gradient.stops[3].color = bg_color;
+    }
+
+    // Change cursor shape
+    commands
+        .entity(slider_ent)
+        .insert(EntityCursor::System(cursor_shape));
+}
+
+fn update_slider_pos(
+    mut q_sliders: Query<
+        (
+            Entity,
+            &SliderValue,
+            &SliderRange,
+            &SliderPrecision,
+            &mut BackgroundGradient,
+        ),
+        (
+            With<SliderStyle>,
+            Or<(
+                Changed<SliderValue>,
+                Changed<SliderRange>,
+                Changed<Children>,
+            )>,
+        ),
+    >,
+    q_children: Query<&Children>,
+    mut q_slider_text: Query<&mut Text, With<SliderValueText>>,
+) {
+    for (slider_ent, value, range, precision, mut gradient) in q_sliders.iter_mut() {
+        if let [Gradient::Linear(linear_gradient)] = &mut gradient.0[..] {
+            let percent_value = (range.thumb_position(value.0) * 100.0).clamp(0.0, 100.0);
+            linear_gradient.stops[1].point = Val::Percent(percent_value);
+            linear_gradient.stops[2].point = Val::Percent(percent_value);
+        }
+
+        // Find slider text child entity and update its text with the formatted value
+        q_children.iter_descendants(slider_ent).for_each(|child| {
+            if let Ok(mut text) = q_slider_text.get_mut(child) {
+                let label = format!("{}", value.0);
+                let decimals_len = label
+                    .split_once('.')
+                    .map(|(_, decimals)| decimals.len() as i32)
+                    .unwrap_or(precision.0);
+
+                // Don't format with precision if the value has more decimals than the precision
+                text.0 = if precision.0 >= 0 && decimals_len <= precision.0 {
+                    format!("{:.precision$}", value.0, precision = precision.0 as usize)
+                } else {
+                    label
+                };
+            }
+        });
+    }
+}

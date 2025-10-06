@@ -1,7 +1,7 @@
 //! A high-level way to load collections of asset handles as resources.
 
 use super::*;
-use std::{collections::VecDeque, path::Path};
+use std::collections::VecDeque;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<ResourceHandles>();
@@ -19,7 +19,7 @@ pub trait LoadResource {
     /// ensures that the resource only exists when the assets are ready.
     fn load_resource_from_path<T: Resource + Asset + Clone>(
         &mut self,
-        path: impl AsRef<Path>,
+        path: impl Into<String>,
     ) -> &mut Self;
 }
 
@@ -37,13 +37,13 @@ impl LoadResource for App {
 
     fn load_resource_from_path<T: Resource + Asset + Clone>(
         &mut self,
-        path: impl AsRef<Path>,
+        path: impl Into<String>,
     ) -> &mut Self {
         self.init_asset::<T>();
         let _handle = {
             let world = self.world_mut();
             let assets = world.resource::<AssetServer>();
-            let handle: Handle<T> = assets.load::<T>(path.as_ref());
+            let handle: Handle<T> = assets.load::<T>(path.into());
             let src_handle = handle.clone();
             let mut handles = world.resource_mut::<ResourceHandles>();
             handles.push_handle(handle);
@@ -56,7 +56,7 @@ impl LoadResource for App {
         self.add_systems(
             Update,
             move |mut commands: Commands,
-                  mut events: EventReader<AssetEvent<T>>,
+                  mut events: MessageReader<AssetEvent<T>>,
                   assets: Res<Assets<T>>| {
                 for event in events.read() {
                     match event {

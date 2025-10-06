@@ -8,7 +8,7 @@ pub fn plugin(app: &mut App) {
 
 fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
     commands.spawn((
-        StateScoped(Screen::Title),
+        DespawnOnExit(Screen::Title),
         ui_root("Title UI"),
         BackgroundColor(TRANSLUCENT),
         children![(
@@ -55,9 +55,9 @@ fn start_main_menu_music(
         s.pause();
     }
 
-    let handle = sources.menu.pick(&mut rand::thread_rng());
+    let handle = sources.menu.pick(&mut rand::rng());
     commands.spawn((
-        StateScoped(Screen::Title),
+        DespawnOnExit(Screen::Title),
         Name::new("Title Music"),
         MusicPool,
         SamplePlayer::new(handle.clone())
@@ -67,6 +67,6 @@ fn start_main_menu_music(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn exit_app(_: Trigger<Pointer<Click>>, mut app_exit: EventWriter<AppExit>) {
+fn exit_app(_: On<Pointer<Click>>, mut app_exit: MessageWriter<AppExit>) {
     app_exit.write(AppExit::Success);
 }

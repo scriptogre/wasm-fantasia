@@ -1,8 +1,8 @@
 use bevy::{
-    core_pipeline::{
-        experimental::taa::TemporalAntiAliasing, fxaa::Fxaa, prepass::DeferredPrepass,
-    },
+    anti_alias::{fxaa::Fxaa, taa::TemporalAntiAliasing},
+    core_pipeline::prepass::DeferredPrepass,
     pbr::DefaultOpaqueRendererMethod,
+    render::view::Hdr,
 };
 
 use super::*;
@@ -29,12 +29,10 @@ pub fn spawn_camera(mut commands: Commands) {
         SceneCamera,
         IsDefaultUiCamera,
         Camera3d::default(),
-        Camera {
-            hdr: true,
-            ..Default::default()
-        },
-        DeferredPrepass,
+        Camera::default(),
         Transform::from_xyz(100., 50., 100.).looking_at(Vec3::ZERO, Vec3::Y),
+        Hdr,
+        DeferredPrepass,
         TemporalAntiAliasing::default(),
         Fxaa::default(),
     ));

@@ -13,7 +13,6 @@ mod title;
 
 pub fn plugin(app: &mut App) {
     app.init_state::<Screen>();
-    app.enable_state_scoped_entities::<Screen>();
 
     app.add_plugins((
         splash::plugin,
@@ -29,9 +28,9 @@ pub fn plugin(app: &mut App) {
 }
 
 // TODO: figure out how to make it a cool observer
-// mut transitions: Trigger<StateTransitionEvent<Screen>>,
+// mut transitions: On<StateTransitionEvent<Screen>>,
 fn track_last_screen(
-    mut transitions: EventReader<StateTransitionEvent<Screen>>,
+    mut transitions: MessageReader<StateTransitionEvent<Screen>>,
     mut state: ResMut<GameState>,
 ) {
     let Some(transition) = transitions.read().last() else {
@@ -41,7 +40,7 @@ fn track_last_screen(
 }
 
 fn on_back(
-    trigger: Trigger<Back>,
+    trigger: On<Back>,
     mut next_screen: ResMut<NextState<Screen>>,
     screen: Res<State<Screen>>,
 ) {
@@ -51,33 +50,32 @@ fn on_back(
     }
 
     let back = trigger.event();
-    next_screen.set(back.0.clone());
+    next_screen.set(back.screen.clone());
 }
 
-pub fn on_go_to(trig: Trigger<GoTo>, mut next_screen: ResMut<NextState<Screen>>) {
-    let go_to = trig.event();
-    next_screen.set(go_to.0.clone());
+pub fn on_go_to(goto: On<GoTo>, mut next_screen: ResMut<NextState<Screen>>) {
+    next_screen.set(goto.event().0.clone());
 }
 
 // TODO: figure out nice click_go_to(Screen::Title) HOF
 // fn click_go_to<E, B, M>(s: Screen) -> impl IntoObserverSystem<OnPress, B, M> {
-//     |_: Trigger<OnPress>, mut cmds: Commands| cmds.trigger(OnGoTo(s.clone()))
+//     |_: On<OnPress>, mut cmds: Commands| cmds.trigger(OnGoTo(s.clone()))
 // }
 pub mod to {
     use super::*;
 
-    pub fn title(on: Trigger<OnPress>, mut commands: Commands, mut state: ResMut<GameState>) {
+    pub fn title(_: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<GameState>) {
         state.reset();
-        commands.entity(on.target()).trigger(GoTo(Screen::Title));
+        commands.trigger(GoTo(Screen::Title));
     }
-    pub fn settings(on: Trigger<OnPress>, mut commands: Commands) {
-        commands.entity(on.target()).trigger(GoTo(Screen::Settings));
+    pub fn settings(_: On<Pointer<Click>>, mut commands: Commands) {
+        commands.trigger(GoTo(Screen::Settings));
     }
-    pub fn credits(on: Trigger<OnPress>, mut commands: Commands) {
-        commands.entity(on.target()).trigger(GoTo(Screen::Credits));
+    pub fn credits(_: On<Pointer<Click>>, mut commands: Commands) {
+        commands.trigger(GoTo(Screen::Credits));
     }
     pub fn gameplay_or_loading(
-        _: Trigger<OnPress>,
+        _: On<Pointer<Click>>,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
     ) {

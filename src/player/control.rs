@@ -84,11 +84,11 @@ fn movement(
 }
 
 fn handle_sprint_in(
-    on: Trigger<Started<Sprint>>,
+    on: On<Start<Sprint>>,
     cfg: Res<Config>,
     mut player_query: Query<&mut Player, With<PlayerCtx>>,
 ) -> Result {
-    let entity = on.target();
+    let entity = on.context;
     if let Ok(mut player) = player_query.get_mut(entity) {
         if player.speed <= cfg.player.movement.speed {
             player.speed *= cfg.player.movement.sprint_factor;
@@ -100,12 +100,11 @@ fn handle_sprint_in(
 }
 
 fn handle_sprint_out(
-    on: Trigger<Completed<Navigate>>,
+    on: On<Complete<Navigate>>,
     cfg: Res<Config>,
     mut player_query: Query<&mut Player, With<PlayerCtx>>,
 ) {
-    let entity = on.target();
-    if let Ok(mut player) = player_query.get_mut(entity) {
+    if let Ok(mut player) = player_query.get_mut(on.context) {
         if player.speed > cfg.player.movement.speed {
             player.speed = cfg.player.movement.speed;
         }
@@ -113,7 +112,7 @@ fn handle_sprint_out(
 }
 
 fn handle_jump(
-    on: Trigger<Fired<Jump>>,
+    on: On<Fire<Jump>>,
     // cfg: Res<Config>,
     // time: Res<Time>,
     mut player_query: Query<
@@ -125,7 +124,7 @@ fn handle_jump(
         With<Player>,
     >,
 ) -> Result {
-    let (mut controller, mut air_counter, mut _jump_timer) = player_query.get_mut(on.target())?;
+    let (mut controller, mut air_counter, mut _jump_timer) = player_query.get_mut(on.context)?;
 
     // if jump_timer.tick(time.delta()).just_finished() {
     air_counter.update(controller.as_mut()); // Update air counter
@@ -147,13 +146,13 @@ fn handle_jump(
 }
 
 fn handle_dash(
-    on: Trigger<Started<Dash>>,
+    on: On<Start<Dash>>,
     cfg: Res<Config>,
     navigate: Single<&Action<Navigate>>,
     camera: Query<&Transform, With<SceneCamera>>,
     mut player_query: Query<(&mut TnuaController, &TnuaSimpleAirActionsCounter)>,
 ) -> Result {
-    let (mut controller, air_counter) = player_query.get_mut(on.target())?;
+    let (mut controller, air_counter) = player_query.get_mut(on.context)?;
     let cam_transform = camera.single()?;
     let navigate = **navigate.into_inner();
     let direction = cam_transform.movement_direction(navigate);
@@ -170,19 +169,19 @@ fn handle_dash(
     Ok(())
 }
 
-// fn handle_attack(on: Trigger<Started<Attack>>, mut commands: Commands) {
+// fn handle_attack(on: On<Start<Attack>>, mut commands: Commands) {
 //     let entity = on.target();
 //     // TODO: Hit
 // }
 
 pub fn crouch_in(
-    on: Trigger<Started<Crouch>>,
+    on: On<Start<Crouch>>,
     cfg: Res<Config>,
     mut player: Query<&mut Player, With<PlayerCtx>>,
     mut tnua: Query<(&mut TnuaAvian3dSensorShape, &mut Collider), With<Player>>,
 ) -> Result {
     let (mut avian_sensor, mut collider) = tnua.single_mut()?;
-    let mut player = player.get_mut(on.target())?;
+    let mut player = player.get_mut(on.context)?;
 
     collider.set_scale(Vec3::new(1.0, 0.5, 1.0), 4);
     avian_sensor.0.set_scale(Vec3::new(1.0, 0.5, 1.0), 4);
@@ -192,7 +191,7 @@ pub fn crouch_in(
 }
 
 pub fn crouch_out(
-    on: Trigger<Completed<Crouch>>,
+    on: On<Complete<Crouch>>,
     cfg: Res<Config>,
     mut player: Query<&mut Player, With<PlayerCtx>>,
     mut tnua: Query<
@@ -200,8 +199,8 @@ pub fn crouch_out(
         (With<Player>, Without<SceneCamera>),
     >,
 ) -> Result {
-    let (mut avian_sensor, mut collider) = tnua.get_mut(on.target())?;
-    let mut player = player.get_mut(on.target())?;
+    let (mut avian_sensor, mut collider) = tnua.get_mut(on.context)?;
+    let mut player = player.get_mut(on.context)?;
 
     collider.set_scale(Vec3::ONE, 4);
     avian_sensor.0.set_scale(Vec3::ONE, 4);

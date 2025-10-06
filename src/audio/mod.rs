@@ -33,7 +33,7 @@
 //! }
 //!
 //! fn play_music(
-//!     _: Trigger<Pointer<Click>>,
+//!     _: On<Pointer<Click>>,
 //!     playing: Query<(), (With<MusicPool>, With<SamplePlayer>)>,
 //!     mut commands: Commands,
 //!     server: Res<AssetServer>,
@@ -50,7 +50,7 @@
 //!     ));
 //! }
 //!
-//! fn play_sfx(_: Trigger<Pointer<Click>>, mut commands: Commands, server: Res<AssetServer>) {
+//! fn play_sfx(_: On<Pointer<Click>>, mut commands: Commands, server: Res<AssetServer>) {
 //!     let source = server.load("caw.ogg");
 //!     // The default pool is routed to the `SfxBus`, so we don't
 //!     // need to include any special markers for sound effects.
@@ -61,6 +61,7 @@
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
 
+pub mod fade;
 pub mod fdsp_host;
 pub mod radio;
 
@@ -84,18 +85,17 @@ pub mod radio;
 pub const CONVERTER: PerceptualVolume = PerceptualVolume::new();
 
 pub fn plugin(app: &mut App) {
-    // #[cfg(target_arch = "wasm32")]
-    // app.add_plugins(
-    //     bevy_seedling::SeedlingPlugin::<firewheel_web_audio::WebAudioBackend> {
-    //         config: Default::default(),
-    //         stream_config: Default::default(),
-    //         spawn_default_pool: true,
-    //         pool_size: 4..=32,
-    //     },
-    // );
-    //
-    // #[cfg(not(target_arch = "wasm32"))]
-    app.add_plugins(bevy_seedling::SeedlingPlugin::default());
+    #[cfg(target_arch = "wasm32")]
+    app.add_plugins(
+        bevy_seedling::SeedlingPlugin::<firewheel_web_audio::WebAudioBackend> {
+            config: Default::default(),
+            graph_config: Default::default(),
+            stream_config: Default::default(),
+        },
+    );
+
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_plugins((SeedlingPlugin::default(), fdsp_host::plugin, fade::plugin));
 
     app.add_systems(Startup, setup);
 }

@@ -1,19 +1,21 @@
 use super::*;
 use std::borrow::Cow;
 
+pub const BORDER_RADIUS: f32 = 15.0;
+pub const FONT_SIZE: f32 = 24.0;
+
 #[derive(Debug, Clone, Bundle)]
-pub struct Opts {
+pub struct Props {
     pub inner: WidgetContent,
     // layout
     pub border_radius: BorderRadius,
     pub border_color: BorderColor,
     pub bg_color: BackgroundColor,
     pub node: Node,
-    pub ui_palette: UiInteraction,
 }
 
 #[allow(dead_code)]
-impl Opts {
+impl Props {
     pub fn new(c: impl Into<WidgetContent>) -> Self {
         Self {
             inner: c.into(),
@@ -26,10 +28,9 @@ impl Opts {
                 padding: UiRect::horizontal(Vw(3.0)),
                 ..Default::default()
             },
-            ui_palette: UiInteraction::DEFAULT,
             bg_color: BackgroundColor(TRANSPARENT),
-            border_color: BorderColor(WHITEISH),
-            border_radius: BorderRadius::all(Px(BORDER_RADIUS)),
+            border_color: BorderColor::all(WHITEISH),
+            border_radius: RoundedCorners::All.to_border_radius(Px(BORDER_RADIUS)),
         }
     }
 
@@ -69,11 +70,11 @@ impl Opts {
         self
     }
     pub fn border_color(mut self, color: Color) -> Self {
-        self.border_color = BorderColor(color);
+        self.border_color = BorderColor::all(color);
         self
     }
     pub fn border_radius(mut self, r: Val) -> Self {
-        self.border_radius = BorderRadius::all(r);
+        self.border_radius = RoundedCorners::All.to_border_radius(r);
         self
     }
     pub fn node(mut self, new: Node) -> Self {
@@ -108,16 +109,12 @@ impl Opts {
         self.node.padding = p;
         self
     }
-    pub fn ui_palette(mut self, p: UiInteraction) -> Self {
-        self.ui_palette = p;
-        self
-    }
     // TODO: do a mesh2d ui bundle
     pub fn into_image_bundle(self) -> impl Bundle {
         match &self.inner {
-            WidgetContent::Image(c) => ImageWidgetBundle {
-                image: c.clone(),
-                node: Node {
+            WidgetContent::Image(c) => (
+                c.clone(),
+                Node {
                     position_type: PositionType::Absolute,
                     width: Percent(100.0),
                     height: Percent(100.0),
@@ -125,7 +122,7 @@ impl Opts {
                     justify_content: JustifyContent::Center,
                     ..Default::default()
                 },
-            },
+            ),
             _ => unreachable!("Spawning image bundle on non image content"),
         }
     }
@@ -137,16 +134,16 @@ impl Opts {
     }
 }
 
-impl Default for Opts {
+impl Default for Props {
     fn default() -> Self {
-        Opts::new("")
+        Props::new("")
     }
 }
 
-#[derive(Bundle)]
-pub struct ImageWidgetBundle {
-    node: Node,
-    image: ImageNode,
+#[derive(Debug, Clone, Component)]
+pub enum WidgetContent {
+    Image(ImageNode),
+    Text(TextContent),
 }
 
 #[derive(Debug, Clone, Bundle)]
@@ -170,22 +167,16 @@ impl Default for TextContent {
         Self {
             text: "".into(),
             color: WHITEISH.into(),
-            layout: TextLayout::new_with_justify(JustifyText::Center),
+            layout: TextLayout::new_with_justify(Justify::Center),
             font: TextFont::from_font_size(FONT_SIZE),
         }
     }
 }
 
-#[derive(Debug, Clone, Component)]
-pub enum WidgetContent {
-    Image(ImageNode),
-    Text(TextContent),
-}
-
 // To be able to provide just "my-label" or Sprite{..} as an argument for UI widgets
-impl<T: Into<WidgetContent>> From<T> for Opts {
+impl<T: Into<WidgetContent>> From<T> for Props {
     fn from(value: T) -> Self {
-        Opts::new(value.into())
+        Props::new(value.into())
     }
 }
 

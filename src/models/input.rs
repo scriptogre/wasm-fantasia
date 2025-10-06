@@ -23,16 +23,6 @@ pub struct Navigate;
 #[action_output(Vec2)]
 pub struct Pan;
 
-#[cfg(feature = "top_down")]
-#[derive(InputAction)]
-#[action_output(Vec2)]
-pub struct ScrollZoom;
-
-#[cfg(feature = "top_down")]
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct RotateToggle;
-
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct Attack;
@@ -82,11 +72,11 @@ pub struct RightTab;
 pub struct LeftTab;
 
 pub fn add_player_ctx(
-    on: Trigger<OnAdd, PlayerCtx>,
+    add: On<Add, PlayerCtx>,
     mut commands: Commands,
     // mut settings: ResMut<Settings>,
 ) {
-    let mut e = commands.entity(on.target());
+    let mut e = commands.entity(add.entity);
 
     e.insert(actions!(PlayerCtx[
         (
@@ -145,32 +135,16 @@ pub fn add_player_ctx(
             bindings![KeyCode::Escape, GamepadButton::Select],
         ),
     ]));
-
-    #[cfg(feature = "top_down")]
-    e.insert(actions!(ModalCtx[
-        (
-            Action::<ScrollZoom>::new(),
-            ActionSettings {
-                require_reset: true,
-                ..Default::default()
-            },
-                Bindings::spawn( Spawn(Binding::mouse_motion())),
-        ),
-        (
-            Action::<RotateToggle>::new(),
-            bindings![MouseButton::Right],
-        ),
-    ]));
 }
 
-fn rm_player_ctx(on: Trigger<OnRemove, PlayerCtx>, mut commands: Commands) {
+fn rm_player_ctx(rm: On<Remove, PlayerCtx>, mut commands: Commands) {
     commands
-        .entity(on.target())
+        .entity(rm.entity)
         .despawn_related::<Actions<PlayerCtx>>();
 }
 
-fn add_modal_ctx(on: Trigger<OnAdd, ModalCtx>, mut commands: Commands) {
-    commands.entity(on.target()).insert((
+fn add_modal_ctx(add: On<Add, ModalCtx>, mut commands: Commands) {
+    commands.entity(add.entity).insert((
         ContextPriority::<ModalCtx>::new(1),
         actions!(ModalCtx[
             (
@@ -208,8 +182,8 @@ fn add_modal_ctx(on: Trigger<OnAdd, ModalCtx>, mut commands: Commands) {
     ));
 }
 
-fn rm_modal_ctx(on: Trigger<OnRemove, ModalCtx>, mut commands: Commands) {
+fn rm_modal_ctx(rm: On<Remove, ModalCtx>, mut commands: Commands) {
     commands
-        .entity(on.target())
+        .entity(rm.entity)
         .despawn_related::<Actions<ModalCtx>>();
 }

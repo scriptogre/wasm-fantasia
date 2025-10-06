@@ -117,7 +117,7 @@ impl AudioSources {
 
 impl FromWorld for AudioSources {
     fn from_world(world: &mut World) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let a = world.resource::<AssetServer>();
 
         let steps = Self::STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();

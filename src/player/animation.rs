@@ -4,7 +4,7 @@ use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective, builtins::*};
 const ANIMATION_FACTOR: f32 = 0.1;
 
 pub fn prepare_animations(
-    _: Trigger<SceneInstanceReady>,
+    _: On<SceneInstanceReady>,
     models: Res<Models>,
     gltf_assets: Res<Assets<Gltf>>,
     animation_player: Query<Entity, With<AnimationPlayer>>,

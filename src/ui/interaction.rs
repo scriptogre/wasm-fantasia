@@ -1,13 +1,11 @@
+use bevy::window::CursorOptions;
+
 use super::*;
 
 pub(super) fn plugin(app: &mut App) {
-    app.register_type::<UiInteraction>().add_systems(
-        Update,
-        (
-            apply_interaction_palette,
-            (trigger_on_press, btn_sounds).run_if(resource_exists::<AudioSources>),
-        ),
-    );
+    app.add_systems(Update, apply_interaction_palette)
+        .add_observer(play_on_hover_sound_effect)
+        .add_observer(play_on_click_sound_effect);
 }
 
 /// Palette for widget interactions. Add this to an entity that supports
@@ -72,31 +70,50 @@ fn apply_interaction_palette(
     }
 }
 
-fn trigger_on_press(
-    interaction_query: Query<(Entity, &Interaction), Changed<Interaction>>,
+fn play_on_hover_sound_effect(
+    click: On<Pointer<Hovered>>,
+    settings: Res<Settings>,
+    audio_sources: Option<Res<AudioSources>>,
+    cursor_opt: Query<&CursorOptions>,
+    interaction_query: Query<(), With<Interaction>>,
     mut commands: Commands,
 ) {
-    for (entity, interaction) in &interaction_query {
-        if matches!(interaction, Interaction::Pressed) {
-            commands.trigger_targets(OnPress, entity);
+    let Ok(cursor) = cursor_opt.single() else {
+        return;
+    };
+    if !cursor.visible {
+        return;
+    }
+
+    if let Some(audio_sources) = audio_sources {
+        if interaction_query.contains(click.entity) {
+            commands.spawn(
+                SamplePlayer::new(audio_sources.btn_hover.clone()).with_volume(settings.sfx()),
+            );
         }
     }
 }
 
-// TODO: not sure it's possible to do efficiently with observers in 3d, like in BevyFlock,
-// it's dropping FPS like crazy
-fn btn_sounds(
-    mut commands: Commands,
+fn play_on_click_sound_effect(
+    click: On<Pointer<Click>>,
     settings: Res<Settings>,
-    audio_sources: Res<AudioSources>,
-    interaction_query: Query<&Interaction, (Changed<Interaction>, Without<DisabledButton>)>,
+    audio_sources: Option<Res<AudioSources>>,
+    cursor_opt: Query<&CursorOptions>,
+    interaction_query: Query<(), With<Interaction>>,
+    mut commands: Commands,
 ) {
-    for interaction in &interaction_query {
-        let source = match interaction {
-            Interaction::Hovered => audio_sources.btn_hover.clone(),
-            Interaction::Pressed => audio_sources.btn_press.clone(),
-            _ => continue,
-        };
-        commands.spawn(SamplePlayer::new(source.clone()).with_volume(settings.sfx()));
+    let Ok(cursor) = cursor_opt.single() else {
+        return;
+    };
+    if !cursor.visible {
+        return;
+    }
+
+    if let Some(audio_sources) = audio_sources {
+        if interaction_query.contains(click.entity) {
+            commands.spawn(
+                SamplePlayer::new(audio_sources.btn_hover.clone()).with_volume(settings.sfx()),
+            );
+        }
     }
 }
