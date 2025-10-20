@@ -60,13 +60,16 @@ fn trigger_mood_change(
     };
     for (e, combat, exploration) in zones.iter() {
         if collisions.contains(player, e) {
+            info_once!("player is colliding with zone {:?}", e);
             if combat.is_some() && state.current_mood != MoodType::Combat {
+                info_once!("changing mood to combat");
                 commands.trigger(ChangeMood {
                     mood: MoodType::Combat,
                     entity: player,
                 });
             }
             if exploration.is_some() && state.current_mood != MoodType::Exploration {
+                info_once!("changing mood to exploration");
                 commands.trigger(ChangeMood {
                     mood: MoodType::Exploration,
                     entity: player,

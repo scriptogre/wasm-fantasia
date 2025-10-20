@@ -85,10 +85,9 @@ fn toggle_mute(
 
 // ============================ UI ============================
 
-fn click_to_menu(on: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<GameState>) {
-    commands.entity(on.entity).insert(ModalCtx);
-    commands.trigger(GoTo(Screen::Title));
+fn click_to_menu(_: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<GameState>) {
     state.reset();
+    commands.trigger(GoTo(Screen::Title));
 }
 fn click_pop_modal(on: On<Pointer<Click>>, mut commands: Commands) {
     commands.entity(on.entity).trigger(PopModal);
@@ -130,9 +129,9 @@ fn add_new_modal(
         return;
     }
 
-    let mut modal = commands.entity(on.entity);
+    let mut target = commands.entity(on.entity);
     if state.modals.is_empty() {
-        modal.insert(ModalCtx);
+        target.insert(ModalCtx);
         if Modal::Main == on.modal {
             if !state.paused {
                 commands.trigger(TogglePause);
@@ -241,8 +240,8 @@ fn menu_modal() -> impl Bundle {
         MenuModal,
         ui_root("In game menu"),
         children![(
-            BorderColor::all(WHITEISH),
-            BackgroundColor(TRANSLUCENT),
+            BorderColor::all(colors::WHITEISH),
+            BackgroundColor(colors::TRANSLUCENT),
             Node {
                 border: UiRect::all(Px(2.0)),
                 padding: UiRect::all(Vw(10.0)),

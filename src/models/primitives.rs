@@ -38,7 +38,6 @@ markers!(
     SettingsModal,
     TabBar,
     TabContent,
-    DisabledButton,
     // Slider,
     // SliderThumb,
     // Checkbox,

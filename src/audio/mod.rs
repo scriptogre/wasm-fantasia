@@ -58,6 +58,7 @@
 //! }
 //! ```
 //!
+use crate::models::Settings;
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
 
@@ -100,6 +101,6 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup);
 }
 
-fn setup(mut master: Single<&mut VolumeNode, With<MainBus>>) {
-    master.volume = CONVERTER.perceptual_to_volume(0.7);
+fn setup(mut master: Single<&mut VolumeNode, With<MainBus>>, settings: Res<Settings>) {
+    master.volume = CONVERTER.perceptual_to_volume(settings.general().linear());
 }

@@ -25,6 +25,9 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub fn general(&self) -> Volume {
+        Volume::Linear(self.sound.general)
+    }
     pub fn music(&self) -> Volume {
         Volume::Linear(self.sound.general * self.sound.music)
     }

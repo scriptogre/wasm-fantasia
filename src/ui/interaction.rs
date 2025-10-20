@@ -1,11 +1,17 @@
-use bevy::window::CursorOptions;
-
 use super::*;
+use bevy::{ecs::entity_disabling::Disabled, window::CursorOptions};
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(Update, apply_interaction_palette)
-        .add_observer(play_on_hover_sound_effect)
-        .add_observer(play_on_click_sound_effect);
+    app.add_systems(
+        Update,
+        (
+            trigger_on_press,
+            apply_interaction_palette,
+            play_interaction_sound
+                .run_if(resource_exists::<AudioSources>)
+                .in_set(PostPhysicsAppSystems::PlaySounds),
+        ),
+    );
 }
 
 /// Palette for widget interactions. Add this to an entity that supports
@@ -14,17 +20,22 @@ pub(super) fn plugin(app: &mut App) {
 ///
 /// Struct of pairs (bg_color, border_color)
 #[derive(Component, Clone, Debug, Reflect)]
-#[reflect(Component)]
 pub struct UiInteraction {
-    pub none: (Color, Color),
-    pub hovered: (Color, Color),
-    pub pressed: (Color, Color),
+    pub none: (Color, BorderColor),
+    pub hovered: (Color, BorderColor),
+    pub pressed: (Color, BorderColor),
 }
 impl UiInteraction {
     pub const DEFAULT: Self = Self {
-        none: (TRANSPARENT, WHITEISH),
-        hovered: (LIGHT_BLUE, WHITEISH),
-        pressed: (DIM_BLUE, WHITEISH),
+        none: (colors::TRANSPARENT, BorderColor::DEFAULT),
+        hovered: (
+            colors::BRIGHT_BLUE,
+            BorderColor {
+                bottom: colors::WHITEISH,
+                ..BorderColor::DEFAULT
+            },
+        ),
+        pressed: (colors::DIM_BLUE, BorderColor::DEFAULT),
     };
     // pub fn all(c: Color) -> Self {
     //     Self {
@@ -47,7 +58,24 @@ impl UiInteraction {
     // }
 }
 
-#[allow(clippy::type_complexity)]
+/// Event triggered on a UI entity when the [`Interaction`] component on the same entity changes to
+/// [`Interaction::Pressed`]. Observe this event to detect e.g. button presses.
+#[derive(EntityEvent)]
+pub(crate) struct OnPress {
+    pub(crate) entity: Entity,
+}
+
+fn trigger_on_press(
+    interaction_query: Query<(Entity, &Interaction), Changed<Interaction>>,
+    mut commands: Commands,
+) {
+    for (entity, interaction) in &interaction_query {
+        if matches!(interaction, Interaction::Pressed) {
+            commands.trigger(OnPress { entity });
+        }
+    }
+}
+
 fn apply_interaction_palette(
     mut palette_query: Query<
         (
@@ -56,7 +84,7 @@ fn apply_interaction_palette(
             &mut BorderColor,
             &mut BackgroundColor,
         ),
-        (Changed<Interaction>, Without<DisabledButton>),
+        (Changed<Interaction>, Without<Disabled>),
     >,
 ) {
     for (interaction, palette, mut border_color, mut background) in &mut palette_query {
@@ -66,54 +94,29 @@ fn apply_interaction_palette(
             Interaction::Pressed => palette.pressed,
         };
         *background = bg.into();
-        *border_color = border.into();
+        *border_color = border;
     }
 }
 
-fn play_on_hover_sound_effect(
-    click: On<Pointer<Hovered>>,
+fn play_interaction_sound(
     settings: Res<Settings>,
-    audio_sources: Option<Res<AudioSources>>,
+    sources: Res<AudioSources>,
     cursor_opt: Query<&CursorOptions>,
-    interaction_query: Query<(), With<Interaction>>,
+    interaction_query: Query<&Interaction, Changed<Interaction>>,
     mut commands: Commands,
 ) {
-    let Ok(cursor) = cursor_opt.single() else {
-        return;
-    };
-    if !cursor.visible {
-        return;
-    }
-
-    if let Some(audio_sources) = audio_sources {
-        if interaction_query.contains(click.entity) {
-            commands.spawn(
-                SamplePlayer::new(audio_sources.btn_hover.clone()).with_volume(settings.sfx()),
-            );
+    if let Ok(cursor) = cursor_opt.single() {
+        if !cursor.visible {
+            return;
         }
     }
-}
 
-fn play_on_click_sound_effect(
-    click: On<Pointer<Click>>,
-    settings: Res<Settings>,
-    audio_sources: Option<Res<AudioSources>>,
-    cursor_opt: Query<&CursorOptions>,
-    interaction_query: Query<(), With<Interaction>>,
-    mut commands: Commands,
-) {
-    let Ok(cursor) = cursor_opt.single() else {
-        return;
-    };
-    if !cursor.visible {
-        return;
-    }
-
-    if let Some(audio_sources) = audio_sources {
-        if interaction_query.contains(click.entity) {
-            commands.spawn(
-                SamplePlayer::new(audio_sources.btn_hover.clone()).with_volume(settings.sfx()),
-            );
-        }
+    for interaction in &interaction_query {
+        let source = match interaction {
+            Interaction::Hovered => sources.hover.clone(),
+            Interaction::Pressed => sources.press.clone(),
+            _ => continue,
+        };
+        commands.spawn(SamplePlayer::new(source).with_volume(settings.sfx()));
     }
 }

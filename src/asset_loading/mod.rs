@@ -1,5 +1,5 @@
 use crate::*;
-use bevy::asset::Asset;
+use bevy::{asset::Asset, gltf::GltfLoaderSettings};
 use bevy_seedling::sample::AudioSample;
 
 mod ron;
@@ -73,7 +73,12 @@ impl FromWorld for Models {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            player: assets.load("models/player.glb"),
+            player: assets.load_with_settings(
+                "models/player.glb",
+                |settings: &mut GltfLoaderSettings| {
+                    settings.use_model_forward_direction = Some(true);
+                },
+            ),
             scene: assets.load("models/scene.glb"),
         }
     }
@@ -84,9 +89,9 @@ impl FromWorld for Models {
 pub struct AudioSources {
     // SFX
     #[dependency]
-    pub btn_hover: Handle<AudioSample>,
+    pub hover: Handle<AudioSample>,
     #[dependency]
-    pub btn_press: Handle<AudioSample>,
+    pub press: Handle<AudioSample>,
     #[dependency]
     pub steps: ShuffleBag<Handle<AudioSample>>,
 
@@ -130,8 +135,8 @@ impl FromWorld for AudioSources {
             steps: ShuffleBag::try_new(steps, &mut rng).unwrap(),
             combat: ShuffleBag::try_new(combat, &mut rng).unwrap(),
             explore: ShuffleBag::try_new(explore, &mut rng).unwrap(),
-            btn_hover: a.load(Self::BTN_HOVER),
-            btn_press: a.load(Self::BTN_PRESS),
+            hover: a.load(Self::BTN_HOVER),
+            press: a.load(Self::BTN_PRESS),
         }
     }
 }

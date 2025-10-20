@@ -24,7 +24,7 @@ fn spawn_credits_screen(mut commands: Commands, credits: Res<Credits>) {
             row_gap: Vh(5.0),
             ..default()
         },
-        BackgroundColor(TRANSLUCENT),
+        BackgroundColor(colors::TRANSLUCENT),
         children![
             header("Breated by"),
             flatten(&credits.devs),

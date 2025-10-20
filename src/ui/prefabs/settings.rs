@@ -337,7 +337,7 @@ fn click_toggle_settings(
 pub fn settings_ui() -> impl Bundle {
     (
         ui_root("Settings Screen"),
-        BackgroundColor(TRANSLUCENT),
+        BackgroundColor(colors::TRANSLUCENT),
         children![(
             Node {
                 width: Percent(80.0),

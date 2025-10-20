@@ -13,10 +13,6 @@ pub trait LoadResource {
     /// have been loaded, it will be inserted as a resource. This ensures that the resource only
     /// exists when the assets are ready.
     fn load_resource<T: Resource + Asset + Clone + FromWorld>(&mut self) -> &mut Self;
-
-    /// This will load the [`Resource`] as an [`Asset`] from the specified path. When all of
-    /// its asset dependencies have been loaded, it will be inserted as a resource. This
-    /// ensures that the resource only exists when the assets are ready.
     fn load_resource_from_path<T: Resource + Asset + Clone>(
         &mut self,
         path: impl Into<String>,

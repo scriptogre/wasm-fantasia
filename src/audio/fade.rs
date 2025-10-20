@@ -5,31 +5,35 @@ const FADE_TIME: f64 = 2.0;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, check_fade_completion)
-        .add_observer(crossfade);
+        .add_observer(fade_in)
+        .add_observer(fade_out);
 }
 
-// fn crossfade_is_active(
-//     fade_in: Query<(), With<FadeIn>>,
-//     fade_out: Query<(), With<FadeOut>>,
-// ) -> bool {
-//     !fade_in.is_empty() || !fade_out.is_empty()
-// }
-
-fn crossfade(
-    on: On<Add, FadeIn>,
+fn fade_in(
+    on: On<Add, SampleEffects>,
     settings: Res<Settings>,
-    fade_in: Query<&SampleEffects>,
+    fade_in: Query<&SampleEffects, With<FadeIn>>,
+    mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents)>,
+) {
+    if let Ok(effects) = fade_in.get(on.entity) {
+        info!("fade_in: {}, effects: {effects:?}", on.entity);
+        if let Ok((node, mut events)) = volume_nodes.get_effect_mut(effects) {
+            info!("fade to music");
+            node.fade_to(settings.music(), DurationSeconds(FADE_TIME), &mut events);
+        }
+    }
+}
+
+fn fade_out(
+    on: On<Add, FadeOut>,
+    fade_out: Query<&SampleEffects>,
     mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents)>,
 ) -> Result {
-    let fade_duration = DurationSeconds(FADE_TIME);
-    info!("1");
-    let effects = fade_in.get(on.entity)?;
-    info!("2, sample effects on: {}", on.entity);
+    let effects = fade_out.get(on.entity)?;
+    info!("fade_out: {}", on.entity);
     if let Ok((node, mut events)) = volume_nodes.get_effect_mut(effects) {
-        info!("3");
-        node.fade_to(settings.music(), fade_duration, &mut events);
-    } else {
-        info!("no volume node on the entity: {}", on.entity);
+        info!("fade to silent");
+        node.fade_to(Volume::SILENT, DurationSeconds(FADE_TIME), &mut events);
     }
 
     Ok(())

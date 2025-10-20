@@ -24,6 +24,18 @@ pub use settings::*;
 pub use states::*;
 
 pub fn plugin(app: &mut App) {
+    app.configure_sets(
+        Update,
+        (
+            PostPhysicsAppSystems::TickTimers,
+            PostPhysicsAppSystems::ChangeUi,
+            PostPhysicsAppSystems::PlaySounds,
+            PostPhysicsAppSystems::PlayAnimations,
+            PostPhysicsAppSystems::Update,
+        )
+            .chain(),
+    );
+
     app.add_plugins((
         settings::plugin,
         states::plugin,
@@ -32,13 +44,20 @@ pub fn plugin(app: &mut App) {
     ));
 }
 
-/// High-level groupings of systems for the app in the `Update` schedule.
+/// High-level groupings of systems for the app in the [`Update`] schedule.
 /// When adding a new variant, make sure to order it in the `configure_sets`
 /// call above.
 #[derive(SystemSet, Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub enum AppSystems {
+pub enum PostPhysicsAppSystems {
+    /// Tick timers.
     TickTimers,
-    RecordInput,
+    /// Change UI.
+    ChangeUi,
+    /// Play sounds.
+    PlaySounds,
+    /// Play animations.
+    PlayAnimations,
+    /// Do everything else (consider splitting this into further variants).
     Update,
 }
 

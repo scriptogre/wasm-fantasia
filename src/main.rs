@@ -1,6 +1,7 @@
 // Disable console on Windows for non-dev builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use bevy::asset::load_internal_binary_asset;
 use bevy::{
     app::App, asset::AssetMetaCheck, log, prelude::*, window::PrimaryWindow, winit::WINIT_WINDOWS,
 };
@@ -24,16 +25,6 @@ use ui::*;
 
 fn main() {
     let mut app = App::new();
-
-    app.configure_sets(
-        Update,
-        (
-            AppSystems::TickTimers,
-            AppSystems::RecordInput,
-            AppSystems::Update,
-        )
-            .chain(),
-    );
 
     let window = WindowPlugin {
         primary_window: Some(Window {
@@ -73,6 +64,13 @@ fn main() {
     ))
     .add_systems(Startup, set_window_icon);
 
+    // override default font
+    load_internal_binary_asset!(
+        app,
+        TextFont::default().font,
+        "../assets/fonts/Not-Jam-Mono-Clean-16.ttf",
+        |bytes: &[u8], _path: String| { Font::try_from_bytes(bytes.to_vec()).unwrap() }
+    );
     app.run();
 }
 

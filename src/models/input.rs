@@ -5,8 +5,8 @@ pub fn plugin(app: &mut App) {
         .add_input_context::<PlayerCtx>()
         .add_input_context::<ModalCtx>()
         .add_systems(Startup, spawn_ctx)
-        .add_observer(rm_modal_ctx)
-        .add_observer(rm_player_ctx)
+        // .add_observer(rm_modal_ctx)
+        // .add_observer(rm_player_ctx)
         .add_observer(add_modal_ctx)
         .add_observer(add_player_ctx);
 }
@@ -137,11 +137,11 @@ pub fn add_player_ctx(
     ]));
 }
 
-fn rm_player_ctx(rm: On<Remove, PlayerCtx>, mut commands: Commands) {
-    commands
-        .entity(rm.entity)
-        .despawn_related::<Actions<PlayerCtx>>();
-}
+// fn rm_player_ctx(rm: On<Remove, PlayerCtx>, mut commands: Commands) {
+//     commands
+//         .entity(rm.entity)
+//         .despawn_related::<Actions<PlayerCtx>>();
+// }
 
 fn add_modal_ctx(add: On<Add, ModalCtx>, mut commands: Commands) {
     commands.entity(add.entity).insert((

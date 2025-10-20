@@ -10,7 +10,7 @@ fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
     commands.spawn((
         DespawnOnExit(Screen::Title),
         ui_root("Title UI"),
-        BackgroundColor(TRANSLUCENT),
+        BackgroundColor(colors::TRANSLUCENT),
         children![(
             Node {
                 width: Vw(40.0),
