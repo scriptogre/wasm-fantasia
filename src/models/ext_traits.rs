@@ -1,6 +1,7 @@
 use super::*;
 use avian3d::prelude::*;
 use bevy::gltf::GltfMesh;
+use easy_ext::ext;
 
 /// Helper trait to spawn mesh with minimum effort
 ///
@@ -25,19 +26,9 @@ use bevy::gltf::GltfMesh;
 ///         );
 ///     }
 /// ```
-#[allow(dead_code)]
-pub trait SpawnCollidingMesh {
-    fn spawn_colliding_mesh(
-        &mut self,
-        gltf: &Gltf,
-        meshes: &ResMut<Assets<Mesh>>,
-        gltf_meshes: &Res<Assets<GltfMesh>>,
-        bundle: impl Bundle + Clone,
-    );
-}
-
-impl SpawnCollidingMesh for Commands<'_, '_> {
-    fn spawn_colliding_mesh(
+#[ext(SpawnCollidingMesh)]
+impl Commands<'_, '_> {
+    pub fn spawn_colliding_mesh(
         &mut self,
         gltf: &Gltf,
         meshes: &ResMut<Assets<Mesh>>,
@@ -68,12 +59,9 @@ impl SpawnCollidingMesh for Commands<'_, '_> {
 }
 
 /// Helper trait to get direction of movement based on camera transform
-pub trait MovementDirection {
-    fn movement_direction(&self, input: Vec2) -> Vec3;
-}
-
-impl MovementDirection for Transform {
-    fn movement_direction(&self, input: Vec2) -> Vec3 {
+#[ext(MovementDirection)]
+impl Transform {
+    pub fn movement_direction(&self, input: Vec2) -> Vec3 {
         let forward = self.forward();
         let forward_flat = Vec3::new(forward.x, 0.0, forward.z);
         let right = forward_flat.cross(Vec3::Y).normalize();

@@ -124,6 +124,7 @@ winit = { version = "^0.30", default-features = false }
 # Remove these features if you want to profile your game with tracy.
 # (see <https://github.com/bevyengine/bevy/blob/main/docs/profiling.md#tracy-profiler>)
 tracing = { version = "^0.1", features = ["max_level_debug", "release_max_level_warn"] }
+easy-ext = "1.0.2"
 
 [target.wasm32-unknown-unknown.dependencies]
 firewheel-web-audio = { git = "https://github.com/CorvusPrudens/firewheel-web-audio", rev = "65888f3" }
