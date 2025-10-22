@@ -2,20 +2,12 @@
 # 3D RPG Bevy game template (WIP)
 <table border="0">
     <tr>
-        <td>
-            <video src="https://github.com/user-attachments/assets/6533b1d9-5971-41fd-acc4-5d2f567266be" controls="controls"> </video>
-        </td>
-        <td>
-            <video src="https://github.com/user-attachments/assets/3aadf8fc-7bb2-477d-82c6-44dc1d56ed08" controls="controls"> </video>
-        </td>
+        <td><video src="https://github.com/user-attachments/assets/6533b1d9-5971-41fd-acc4-5d2f567266be" controls="controls"></video></td>
+        <td><video src="https://github.com/user-attachments/assets/3aadf8fc-7bb2-477d-82c6-44dc1d56ed08" controls="controls"></video></td>
     </tr>
     <tr>
-        <td>
-            <video src="https://github.com/user-attachments/assets/7f470899-29b0-44c5-b418-6fdf240d130c" controls="controls"> </video>
-        </td>
-        <td>
-            <video src="https://github.com/user-attachments/assets/ea236931-6c59-456f-98de-447d3f6eb287" controls="controls"> </video>
-        </td>
+        <td><video src="https://github.com/user-attachments/assets/7f470899-29b0-44c5-b418-6fdf240d130c" controls="controls"></video></td>
+        <td><video src="https://github.com/user-attachments/assets/ea236931-6c59-456f-98de-447d3f6eb287" controls="controls"></video></td>
     </tr>
 </table>
 
