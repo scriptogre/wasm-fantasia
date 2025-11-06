@@ -30,7 +30,7 @@ pub fn add_skybox_to_camera(
         Sun,
         DespawnOnExit(Screen::Gameplay),
         DirectionalLight {
-            color: SUN,
+            color: colors::SUN,
             shadows_enabled: true,
             illuminance: light_consts::lux::FULL_DAYLIGHT,
             ..Default::default()
@@ -43,7 +43,7 @@ pub fn add_skybox_to_camera(
         Moon,
         DespawnOnExit(Screen::Gameplay),
         DirectionalLight {
-            color: MOON,
+            color: colors::MOON,
             shadows_enabled: true,
             illuminance: lux::FULL_MOON_NIGHT,
             ..Default::default()
