@@ -11,6 +11,7 @@ use bevy_seedling::{
     },
     node::RegisterNode,
 };
+use firewheel::node::ProcStreamCtx;
 use fundsp::prelude::*;
 
 pub fn plugin(app: &mut App) {
@@ -155,10 +156,10 @@ impl AudioNodeProcessor for FundspProcessor {
             }
         }
 
-        ProcessStatus::outputs_not_silent()
+        ProcessStatus::outputs_modified_with_silence_mask(info.out_silence_mask)
     }
 
-    fn new_stream(&mut self, stream_info: &StreamInfo) {
+    fn new_stream(&mut self, stream_info: &StreamInfo, _ctx: &mut ProcStreamCtx) {
         if stream_info.sample_rate != stream_info.prev_sample_rate {
             self.unit
                 .unit

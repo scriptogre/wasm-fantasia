@@ -4,7 +4,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone, Bundle)]
 pub struct Props {
     pub content: WidgetContent,
-    pub ui_palette: UiInteraction,
+    pub ui_palette: UiPalette,
     // layout
     pub border_radius: BorderRadius,
     pub border_color: BorderColor,
@@ -17,7 +17,7 @@ impl Props {
     pub fn new(c: impl Into<WidgetContent>) -> Self {
         Self {
             content: c.into(),
-            ui_palette: UiInteraction::DEFAULT,
+            ui_palette: UiPalette::DEFAULT,
             node: Node {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
@@ -100,7 +100,7 @@ impl Props {
         self.node.flex_direction = d;
         self
     }
-    pub fn ui_palette(mut self, p: UiInteraction) -> Self {
+    pub fn ui_palette(mut self, p: UiPalette) -> Self {
         self.ui_palette = p;
         self
     }

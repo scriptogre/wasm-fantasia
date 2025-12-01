@@ -20,12 +20,12 @@ pub(super) fn plugin(app: &mut App) {
 ///
 /// Struct of pairs (bg_color, border_color)
 #[derive(Component, Clone, Debug, Reflect)]
-pub struct UiInteraction {
+pub struct UiPalette {
     pub none: (Color, BorderColor),
     pub hovered: (Color, BorderColor),
     pub pressed: (Color, BorderColor),
 }
-impl UiInteraction {
+impl UiPalette {
     pub const DEFAULT: Self = Self {
         none: (colors::TRANSPARENT, BorderColor::DEFAULT),
         hovered: (
@@ -80,7 +80,7 @@ fn apply_interaction_palette(
     mut palette_query: Query<
         (
             &Interaction,
-            &UiInteraction,
+            &UiPalette,
             &mut BorderColor,
             &mut BackgroundColor,
         ),
