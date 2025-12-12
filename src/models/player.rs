@@ -15,6 +15,7 @@ impl Default for Player {
         Self {
             // u32::MAX is Entity::PLACEHOLDER and using placeholder leeds to issues and using option
             // here while idiomatic will unnecessary complicate handling it in systems
+            // We replace it with real id when the model is spawned anyway
             id: Entity::from_raw_u32(u32::MAX - 1).unwrap(),
             speed: 1.0,
             animation_state: AnimationState::StandIdle,

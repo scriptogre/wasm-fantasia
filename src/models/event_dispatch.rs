@@ -1,22 +1,6 @@
 use super::*;
 
 pub fn plugin(app: &mut App) {
-    // app.add_event::<Back>()
-    //     .add_event::<GoTo>()
-    //     .add_event::<Press>()
-    //     .add_event::<ChangeMood>()
-    //     .add_event::<SettingsChanged>()
-    //     .add_event::<SwitchTab>()
-    //     .add_event::<NewModal>()
-    //     .add_event::<PopModal>()
-    //     .add_event::<ClearModals>()
-    //     .add_event::<FovIncrement>()
-    //     .add_event::<CamCursorToggle>()
-    //     .add_event::<ToggleVsync>()
-    //     .add_event::<ToggleMute>()
-    //     .add_event::<TogglePause>()
-    //     .add_event::<ToggleDebugUi>()
-    //     .add_event::<ToggleDiagnostics>()
     app.add_observer(pause)
         .add_observer(mute)
         .add_observer(back);
@@ -35,18 +19,7 @@ pub struct SwitchTab {
     pub tab: UiTab,
 }
 #[derive(EntityEvent)]
-pub struct NewModal {
-    pub entity: Entity,
-    pub modal: Modal,
-}
-#[derive(EntityEvent)]
-pub struct PopModal(pub Entity);
-#[derive(EntityEvent)]
-pub struct ClearModals(pub Entity);
-#[derive(EntityEvent)]
 pub struct CamCursorToggle(pub Entity);
-#[derive(Event)]
-pub struct FovIncrement;
 #[derive(Event)]
 pub struct ToggleVsync;
 #[derive(Event)]

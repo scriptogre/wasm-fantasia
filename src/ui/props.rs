@@ -4,7 +4,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone, Bundle)]
 pub struct Props {
     pub content: WidgetContent,
-    pub ui_palette: UiPalette,
+    pub palette_set: PaletteSet,
     // layout
     pub border_radius: BorderRadius,
     pub border_color: BorderColor,
@@ -17,7 +17,7 @@ impl Props {
     pub fn new(c: impl Into<WidgetContent>) -> Self {
         Self {
             content: c.into(),
-            ui_palette: UiPalette::DEFAULT,
+            palette_set: PaletteSet::default(),
             node: Node {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
@@ -100,8 +100,8 @@ impl Props {
         self.node.flex_direction = d;
         self
     }
-    pub fn ui_palette(mut self, p: UiPalette) -> Self {
-        self.ui_palette = p;
+    pub fn palette_set(mut self, p: PaletteSet) -> Self {
+        self.palette_set = p;
         self
     }
 
@@ -112,35 +112,19 @@ impl Props {
         self
     }
     pub fn text(mut self, text: impl Into<Cow<'static, str>>) -> Self {
-        match self.content {
-            WidgetContent::Text(ref mut t) => {
-                t.text = Text(text.into().to_string());
-            }
-            _ => self.content = WidgetContent::Text(text.into().into()),
-        }
+        self.content = WidgetContent::Text(text.into().into());
         self
     }
-    // TODO: do a mesh2d ui bundle
+    // TODO: do a mesh2d ui bundle, similar to svg
     pub fn into_image_bundle(self) -> impl Bundle {
-        match &self.content {
-            WidgetContent::Image(c) => (
-                c.clone(),
-                self.bg_color,
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: Percent(100.0),
-                    height: Percent(100.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..Default::default()
-                },
-            ),
+        match self.content {
+            WidgetContent::Image(c) => c,
             _ => unreachable!("Spawning image bundle on non image content"),
         }
     }
     pub fn into_text_bundle(self) -> impl Bundle {
-        match &self.content {
-            WidgetContent::Text(c) => (c.clone(), self.bg_color),
+        match self.content {
+            WidgetContent::Text(c) => c,
             _ => unreachable!("Spawning text bundle on non text content"),
         }
     }
@@ -164,6 +148,7 @@ pub struct TextContent {
     pub color: TextColor,
     pub layout: TextLayout,
     pub font: TextFont,
+    pub border: BorderColor,
 }
 
 impl From<Cow<'static, str>> for TextContent {
@@ -181,6 +166,10 @@ impl Default for TextContent {
             color: colors::WHITEISH.into(),
             layout: TextLayout::new_with_justify(Justify::Center),
             font: TextFont::from_font_size(size::FONT_SIZE),
+            border: BorderColor {
+                bottom: colors::WHITEISH,
+                ..BorderColor::DEFAULT
+            },
         }
     }
 }

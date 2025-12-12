@@ -8,9 +8,6 @@ pub fn plugin(app: &mut App) {
 #[derive(Resource, Reflect, Debug, Clone)]
 #[reflect(Resource)]
 pub struct GameState {
-    /// Modal stack. kudo for the idea to @skyemakesgames
-    /// Only relevant in [`Screen::Gameplay`]
-    pub modals: Vec<Modal>,
     pub last_screen: Screen,
     pub current_mood: MoodType,
 
@@ -23,11 +20,10 @@ pub struct GameState {
 impl Default for GameState {
     fn default() -> Self {
         Self {
-            modals: vec![],
             last_screen: Screen::Title,
             current_mood: MoodType::Exploration,
             diagnostics: true,
-            debug_ui: false,
+            debug_ui: true,
             paused: false,
             muted: false,
         }
@@ -36,7 +32,6 @@ impl Default for GameState {
 
 impl GameState {
     pub fn reset(&mut self) {
-        self.modals.clear();
         self.paused = false;
         self.muted = false;
     }

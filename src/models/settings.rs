@@ -1,16 +1,17 @@
 use super::*;
+use crate::scene::SunCycle;
 use serde::Deserialize;
 use std::{error::Error, fs};
+
+pub const SETTINGS_PATH: &str = "assets/settings.ron";
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Settings>().init_resource::<ActiveTab>();
     app.add_systems(
         OnEnter(Screen::Title),
-        inject_settings_from_cfg.run_if(resource_exists::<Config>.and(run_once)),
+        load_settings.run_if(resource_exists::<Config>.and(run_once)),
     );
 }
-
-pub const SETTINGS_PATH: &str = "assets/settings.ron";
 
 #[derive(Resource, Reflect, Deserialize, Serialize, Debug, Clone)]
 #[reflect(Resource)]
@@ -60,7 +61,7 @@ impl Default for Settings {
     }
 }
 
-fn inject_settings_from_cfg(mut commands: Commands) {
+fn load_settings(mut commands: Commands) {
     let settings = match Settings::read() {
         Ok(settings) => {
             info!("loaded settings from '{SETTINGS_PATH}'");

@@ -1,9 +1,11 @@
 use super::*;
 
 mod keybind_editor;
+mod modals;
 mod settings;
 
 pub use keybind_editor::*;
+pub use modals::*;
 pub use settings::*;
 
 pub fn plugin(app: &mut App) {

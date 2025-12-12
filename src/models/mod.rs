@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_enhanced_input::prelude::*;
 use bevy_seedling::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 mod event_dispatch;
 mod ext_traits;
@@ -47,6 +47,7 @@ pub fn plugin(app: &mut App) {
 /// High-level groupings of systems for the app in the [`Update`] schedule.
 /// When adding a new variant, make sure to order it in the `configure_sets`
 /// call above.
+/// courtesy of janhohenheim
 #[derive(SystemSet, Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum PostPhysicsAppSystems {
     /// Tick timers.
@@ -59,25 +60,4 @@ pub enum PostPhysicsAppSystems {
     PlayAnimations,
     /// Do everything else (consider splitting this into further variants).
     Update,
-}
-
-#[derive(Reflect, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Modal {
-    Main,
-    Settings,
-}
-
-#[derive(Reflect, Debug, Clone, Serialize, Deserialize)]
-pub enum SunCycle {
-    DayNight,
-    Nimbus,
-}
-
-impl SunCycle {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SunCycle::DayNight => "DayNight",
-            SunCycle::Nimbus => "Nimbus",
-        }
-    }
 }

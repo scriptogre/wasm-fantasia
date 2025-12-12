@@ -9,6 +9,7 @@ pub fn plugin(app: &mut App) {
 fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
     commands.spawn((
         DespawnOnExit(Screen::Title),
+        GlobalZIndex(1),
         ui_root("Title UI"),
         BackgroundColor(colors::TRANSLUCENT),
         children![(

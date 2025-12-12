@@ -1,6 +1,7 @@
 use super::*;
 
 /// Macro to hide the derive trait boilerplate
+#[macro_export]
 macro_rules! markers {
   ( $( $name:ident ),* ) => {
         $(
@@ -55,6 +56,7 @@ markers!(
 #[cfg(feature = "dev_native")]
 markers!(DiagnosticsLabel, DebugUiLabel);
 
+#[macro_export]
 macro_rules! timers {
   ( $( $name:ident ),* ) => {
         $(

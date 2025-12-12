@@ -90,3 +90,45 @@ pub mod colors {
     /// #AB4051
     pub const RED: Color = Color::oklcha(0.5232, 0.1404, 13.84, 1.0);
 }
+
+/// TODO: text is not working at the moment due to a button ECS hierarchy being tricky
+#[derive(Component, Clone, Debug, Reflect)]
+pub struct Palette {
+    pub text: Color,
+    pub bg: Color,
+    pub border: BorderColor,
+}
+
+impl Palette {
+    pub fn new(text: Color, bg: Color, border: BorderColor) -> Self {
+        Self { text, bg, border }
+    }
+}
+
+/// Palette for widget interactions
+/// Add this to an entity you want changing color properties
+#[derive(Component, Clone, Debug, Reflect)]
+pub struct PaletteSet {
+    pub none: Palette,
+    pub hovered: Palette,
+    pub pressed: Palette,
+    pub disabled: Palette,
+}
+impl Default for PaletteSet {
+    fn default() -> Self {
+        Self {
+            none: Palette::new(
+                colors::WHITEISH,
+                colors::TRANSPARENT,
+                BorderColor::all(colors::WHITEISH),
+            ),
+            pressed: Palette::new(
+                colors::TRANSPARENT,
+                colors::BRIGHT_BLUE,
+                BorderColor::DEFAULT,
+            ),
+            hovered: Palette::new(colors::WHITEISH, colors::DIM_BLUE, BorderColor::DEFAULT),
+            disabled: Palette::new(colors::TRANSPARENT, colors::DIM_BLUE, BorderColor::DEFAULT),
+        }
+    }
+}

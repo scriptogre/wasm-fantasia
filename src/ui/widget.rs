@@ -92,30 +92,40 @@ where
 }
 
 /// A simple button with text and an action defined as an [`Observer`]. The button's layout is provided by `button_bundle`.
-/// Background color is set by [`UiInteraction`]
+/// Background color is set by [`UiPalette`]
 pub fn btn<E, B, M, I>(opts: impl Into<Props>, action: I) -> impl Bundle
 where
     E: EntityEvent,
     B: Bundle,
     I: IntoObserverSystem<E, B, M>,
 {
-    let opts: Props = opts.into();
+    let mut opts: Props = opts.into();
     let action = IntoObserverSystem::into_system(action);
 
     (
+        Button,
         Name::new("Button"),
         Node::default(),
+        Pickable::IGNORE,
         Children::spawn(SpawnWith(move |parent: &mut ChildSpawner| {
             let content = match &opts.content {
-                WidgetContent::Image(_) => parent.spawn(opts.clone().into_image_bundle()).id(),
-                WidgetContent::Text(_) => parent.spawn(opts.clone().into_text_bundle()).id(),
+                WidgetContent::Image(_) => parent
+                    .spawn((opts.clone().into_image_bundle(), Pickable::IGNORE))
+                    .id(),
+                WidgetContent::Text(_) => parent
+                    .spawn((opts.clone().into_text_bundle(), Pickable::IGNORE))
+                    .id(),
             };
+            opts.node.width = Percent(100.0);
+            opts.node.height = Percent(100.0);
+
             parent
                 .spawn((
-                    Button,
+                    Name::new("Button Content"),
+                    opts.bg_color,
                     opts.border_radius,
                     opts.border_color,
-                    opts.ui_palette,
+                    opts.palette_set.clone(),
                 ))
                 .insert(opts.node)
                 .add_children(&[content])

@@ -64,8 +64,14 @@ pub fn on_go_to(goto: On<GoTo>, mut next_screen: ResMut<NextState<Screen>>) {
 pub mod to {
     use super::*;
 
-    pub fn title(_: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<GameState>) {
+    pub fn title(
+        _: On<Pointer<Click>>,
+        mut commands: Commands,
+        mut state: ResMut<GameState>,
+        mut modals: ResMut<Modals>,
+    ) {
         state.reset();
+        modals.clear();
         commands.trigger(GoTo(Screen::Title));
     }
     pub fn settings(_: On<Pointer<Click>>, mut commands: Commands) {
