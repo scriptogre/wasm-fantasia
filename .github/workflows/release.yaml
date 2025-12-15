@@ -62,6 +62,10 @@ env:
   # The path to the assets directory.
   assets_path: assets
 
+  # The path to the libraries directory. Useful for vendoring libraries.
+  # https://github.com/TheBevyFlock/bevy_new_2d/commit/0ef708b3a182223f78c60d378709667d5edc3ad4
+  libs_path: lib
+
   # The ID of the app produced by this workflow.
   # Applies to macOS releases.
   # Must contain only A-Z, a-z, 0-9, hyphen, and period: https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleidentifier
@@ -188,15 +192,18 @@ jobs:
           if [ '${{ matrix.platform }}' != 'windows' ]; then
             RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }"'-Zshare-generics=y'
           fi
+          # Set up platform library rpaths
+          if [ '${{ matrix.platform }}' = 'linux' ]; then
+            RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }"'-C link-arg=-Wl,-rpath,$ORIGIN'
+          fi
+          if [ '${{ matrix.platform }}' = 'macos' ]; then
+            RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }"'-C link-arg=-Wl,-rpath,@loader_path'
+          fi
           if [ '${{ inputs.deny_warnings }}' = 'true' ]; then
             RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }"'-Dwarnings'
           fi
           echo "RUSTFLAGS=${RUSTFLAGS}" >> "${GITHUB_ENV}"
 
-          # Web environment:
-          if [ '${{ matrix.platform }}' = 'web' ]; then
-            echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }"'--cfg getrandom_backend="wasm_js"' >> "${GITHUB_ENV}"
-          fi
 
           # macOS environment:
           if [ '${{ matrix.platform }}' == 'macos' ]; then
@@ -229,6 +236,7 @@ jobs:
         if: ${{ env.is_platform_enabled == 'true' && env.use_github_cache == 'true' }}
         uses: Swatinem/rust-cache@v2
         with:
+          shared-key: release
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install dependencies (Linux)
@@ -273,6 +281,10 @@ jobs:
       - name: Add assets to app (non-Web)
         if: ${{ env.is_platform_enabled == 'true' && matrix.platform != 'web' }}
         run: cp -R ./'${{ env.assets_path }}' '${{ env.app }}' || true # Ignore error if assets folder does not exist
+
+      - name: Add platform libraries (non-Web)
+        if: ${{ env.is_platform_enabled == 'true' && matrix.platform != 'web' }}
+        run: cp -R ./'${{ env.libs_path }}'/'${{ matrix.platform }}'/* '${{ env.app }}' || true
 
       - name: Add metadata to app (macOS)
         if: ${{ env.is_platform_enabled == 'true' && matrix.platform == 'macos' }}
