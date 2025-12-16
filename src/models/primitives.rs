@@ -12,49 +12,7 @@ macro_rules! markers {
     };
 }
 
-markers!(
-    SceneCamera,
-    // scene
-    Sun,
-    Moon,
-    Zone,
-    Combat,
-    Exploration,
-    // TODO: The idea is to create a boombox with spatial audio
-    // <https://github.com/bevyengine/bevy/blob/main/examples/audio/spatial_audio_3d.rs>
-    // Boombox,
-    SunCycleLabel,
-    // user input contexts
-    GlobalCtx,
-    PlayerCtx,
-    ModalCtx,
-    TopDownCtx,
-    // UI: mostly for nodes or labels that have to change visibility or content at some point
-    PerfUi,
-    GameplayUi,
-    PauseIcon,
-    MuteIcon,
-    MenuModal,
-    // settings
-    SettingsModal,
-    TabBar,
-    TabContent,
-    // Slider,
-    // SliderThumb,
-    // Checkbox,
-    GeneralVolumeLabel,
-    MusicVolumeLabel,
-    SfxVolumeLabel,
-    SaveSettingsLabel,
-    VsyncLabel,
-    FovLabel,
-    // animations
-    FadeIn,
-    FadeOut
-);
-
-#[cfg(feature = "dev_native")]
-markers!(DiagnosticsLabel, DebugUiLabel);
+markers!(SceneCamera);
 
 #[macro_export]
 macro_rules! timers {

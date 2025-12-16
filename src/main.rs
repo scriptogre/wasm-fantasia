@@ -19,6 +19,7 @@ pub mod screens;
 pub mod ui;
 
 use asset_loading::{AudioSources, Models, ResourceHandles, Textures};
+use audio::*;
 use models::*;
 use scene::*;
 use ui::*;

@@ -11,6 +11,8 @@ pub fn plugin(app: &mut App) {
         .add_observer(add_player_ctx);
 }
 
+markers!(GlobalCtx, PlayerCtx, ModalCtx);
+
 fn spawn_ctx(mut commands: Commands) {
     commands.spawn(ModalCtx);
 }

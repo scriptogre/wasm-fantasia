@@ -1,5 +1,4 @@
 use super::*;
-use crate::models::*;
 
 const FADE_TIME: f64 = 2.0;
 
@@ -8,6 +7,8 @@ pub fn plugin(app: &mut App) {
         .add_observer(fade_in)
         .add_observer(fade_out);
 }
+
+markers!(FadeIn, FadeOut);
 
 fn fade_in(
     on: On<Add, SampleEffects>,

@@ -69,3 +69,22 @@ impl Transform {
         direction.normalize_or_zero()
     }
 }
+
+#[ext(ReplaceRecursive)]
+impl Entity {
+    pub fn replace_recursive(
+        &mut self,
+        children_q: Query<&Children>,
+        mut commands: Commands,
+        r: impl Bundle,
+    ) {
+        if let Ok(c) = children_q.get(*self) {
+            for child in c.iter() {
+                commands.entity(child).despawn();
+            }
+
+            let text = commands.spawn(r).id();
+            commands.entity(*self).add_children(&[text]);
+        }
+    }
+}

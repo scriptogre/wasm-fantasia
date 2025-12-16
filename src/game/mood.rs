@@ -11,6 +11,13 @@ pub fn plugin(app: &mut App) {
         .add_observer(change_mood);
 }
 
+#[derive(Component, Reflect, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[reflect(Component)]
+pub enum Zone {
+    Combat,
+    Exploration,
+}
+
 fn start_soundtrack(
     settings: Res<Settings>,
     mut commands: Commands,
@@ -20,22 +27,24 @@ fn start_soundtrack(
     let mut rng = rand::rng();
     let handle = sources.explore.pick(&mut rng);
 
-    // // Play music from boombox entity
+    // TODO: The idea is to create a boombox with spatial audio
+    // <https://github.com/bevyengine/bevy/blob/main/examples/audio/spatial_audio_3d.rs>
     // cmds
     //     .entity(boombox.single()?)
-    //     .insert(music(handle.clone(), settings.music());
+    //     .insert(music(handle.clone(), settings.music())
+
     // Or just play music
-    commands.spawn((
-        MusicPool,
-        SamplePlayer::new(handle.clone())
-            .with_volume(settings.music())
-            .looping(),
-        sample_effects![VolumeNode {
-            volume: Volume::SILENT,
-            ..default()
-        }],
-        FadeIn,
-    ));
+    // commands.spawn((
+    //     MusicPool,
+    //     SamplePlayer::new(handle.clone())
+    //         .with_volume(settings.music())
+    //         .looping(),
+    //     sample_effects![VolumeNode {
+    //         volume: Volume::SILENT,
+    //         ..default()
+    //     }],
+    //     FadeIn,
+    // ));
     // .observe(crossfade);
 }
 
@@ -51,29 +60,35 @@ fn stop_soundtrack(
 fn trigger_mood_change(
     collisions: Collisions,
     state: ResMut<GameState>,
-    zones: Query<(Entity, Option<&Combat>, Option<&Exploration>), With<Zone>>,
+    zones: Query<(Entity, &Zone)>,
+    // zones: Query<(Entity, Option<&Combat>, Option<&Exploration>), With<Zone>>,
     mut commands: Commands,
     mut player: Query<Entity, With<Player>>,
 ) {
     let Ok(player) = player.single_mut() else {
         return;
     };
-    for (e, combat, exploration) in zones.iter() {
+    for (e, zone) in zones.iter() {
         if collisions.contains(player, e) {
-            info_once!("player is colliding with zone {:?}", e);
-            if combat.is_some() && state.current_mood != MoodType::Combat {
-                info_once!("changing mood to combat");
-                commands.trigger(ChangeMood {
-                    mood: MoodType::Combat,
-                    entity: player,
-                });
-            }
-            if exploration.is_some() && state.current_mood != MoodType::Exploration {
-                info_once!("changing mood to exploration");
-                commands.trigger(ChangeMood {
-                    mood: MoodType::Exploration,
-                    entity: player,
-                })
+            match zone {
+                Zone::Combat => {
+                    info_once!("player is colliding with {:?}", zone);
+                    if state.current_mood != MoodType::Combat {
+                        commands.trigger(ChangeMood {
+                            mood: MoodType::Combat,
+                            entity: player,
+                        });
+                    }
+                }
+                Zone::Exploration => {
+                    info_once!("player is colliding with {:?}", zone);
+                    if state.current_mood != MoodType::Exploration {
+                        commands.trigger(ChangeMood {
+                            mood: MoodType::Exploration,
+                            entity: player,
+                        })
+                    }
+                }
             }
         }
     }

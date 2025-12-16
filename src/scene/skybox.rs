@@ -11,6 +11,8 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Update, sun_cycle.run_if(in_state(Screen::Gameplay)));
 }
 
+markers!(Sun, Moon);
+
 /// Mainly this example:
 /// <https://bevyengine.org/examples/3d-rendering/atmosphere/>
 pub fn add_skybox_to_camera(

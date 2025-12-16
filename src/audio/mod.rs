@@ -58,13 +58,14 @@
 //! }
 //! ```
 //!
-use crate::models::Settings;
-use bevy::prelude::*;
+use crate::*;
 use bevy_seedling::prelude::*;
 
-pub mod fade;
-pub mod fdsp_host;
-pub mod radio;
+mod fade;
+mod fdsp_host;
+mod radio;
+
+pub use fade::*;
 
 /// Utility for converting a simple `[0.0, 1.0]` range to [`Volume`].
 ///

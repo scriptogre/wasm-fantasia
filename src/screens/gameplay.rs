@@ -10,6 +10,8 @@ pub(super) fn plugin(app: &mut App) {
         .add_observer(trigger_menu_toggle_on_esc);
 }
 
+markers!(PauseIcon, MuteIcon, GameplayUi);
+
 fn spawn_gameplay_ui(mut cmds: Commands, textures: Res<Textures>, _settings: Res<Settings>) {
     // info!("settings on gameplay enter:{settings:?}");
     let opts = Props::default().hidden().width(Vw(5.0)).height(Vw(5.0));

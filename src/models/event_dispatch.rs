@@ -21,13 +21,9 @@ pub struct SwitchTab {
 #[derive(EntityEvent)]
 pub struct CamCursorToggle(pub Entity);
 #[derive(Event)]
-pub struct ToggleVsync;
-#[derive(Event)]
 pub struct TogglePause;
 #[derive(Event)]
 pub struct ToggleMute;
-#[derive(Event)]
-pub struct ToggleDiagnostics;
 #[derive(Event)]
 pub struct ToggleDebugUi;
 #[derive(EntityEvent)]

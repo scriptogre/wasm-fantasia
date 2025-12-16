@@ -1,13 +1,27 @@
+//! This plugin handles loading and saving scenes
+//!
+//! We use blender->bevy workflow with the the help of skein plugin
+//! Which allows you to add components to meshes inside blender
+//!
+//! Sometimes libraries you depend on and use their components in blender add some changes
+//! like rename components or add new enum variants, for example it appened once when
+//! avian3d added voxel stuff and all TrimeshFromMesh collider constructors were replaced by
+//! VoxelisedTrimesh because blender storing enums not as a string but as a enum discriminant.
+//!
+//! In such cases the mass rename exists:
+//! ```bash
+//! blender --background -b art/tunic.blend -c change_component_path --old_path tunic_bush::BushSensor --new_path api::BushSensor
+//!
+//! ```
+//! more on that here: https://bevyskein.dev/docs/migration-tools
+//! Scene logic is only active during the State `Screen::Playing`
 use crate::*;
 use avian3d::prelude::*;
 use bevy_skein::SkeinPlugin;
 
 mod skybox;
-
 pub use skybox::*;
 
-/// This plugin handles loading and saving scenes
-/// Scene logic is only active during the State `Screen::Playing`
 pub fn plugin(app: &mut App) {
     app.add_plugins((
         PhysicsPlugins::default(),
