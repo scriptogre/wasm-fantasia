@@ -16,6 +16,21 @@ pub(super) fn plugin(app: &mut App) {
     );
 }
 
+markers!(
+    GeneralVolumeLabel,
+    MusicVolumeLabel,
+    SfxVolumeLabel,
+    SunCycleLabel,
+    SaveSettingsLabel,
+    VsyncLabel,
+    FovLabel,
+    TabBar,
+    TabContent,
+    PerfUi
+);
+#[cfg(feature = "dev_native")]
+markers!(DiagnosticsLabel, DebugUiLabel);
+
 // ============================ CONTROL KNOBS OBSERVERS ============================
 
 pub fn save_settings(
@@ -91,7 +106,7 @@ fn update_tab_content(
 
 // ============================ +/- BUTTON HOOKS ============================
 
-fn lower_fov(
+fn fov_lower(
     _: On<Pointer<Click>>,
     cfg: Res<Config>,
     mut settings: ResMut<Settings>,
@@ -105,7 +120,7 @@ fn lower_fov(
     settings.fov = perspective.fov.to_degrees();
 }
 
-fn raise_fov(
+fn fov_raise(
     _: On<Pointer<Click>>,
     cfg: Res<Config>,
     mut settings: ResMut<Settings>,
@@ -126,7 +141,7 @@ fn update_fov_label(settings: Res<Settings>, mut label: Single<&mut Text, With<F
 }
 
 // GENERAL
-fn lower_general(
+fn general_lower(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
@@ -137,7 +152,7 @@ fn lower_general(
     general.volume = Volume::Linear(new_volume);
 }
 
-fn raise_general(
+fn general_raise(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
@@ -158,7 +173,7 @@ fn update_general_volume_label(
 }
 
 // MUSIC
-fn lower_music(
+fn music_lower(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
@@ -169,7 +184,7 @@ fn lower_music(
     music.volume = settings.music();
 }
 
-fn raise_music(
+fn music_raise(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
@@ -190,7 +205,7 @@ fn update_music_volume_label(
 }
 
 // SFX
-fn lower_sfx(
+fn sfx_lower(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
@@ -201,7 +216,7 @@ fn lower_sfx(
     sfx.volume = settings.sfx();
 }
 
-fn raise_sfx(
+fn sfx_raise(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
     mut settings: ResMut<Settings>,
@@ -248,74 +263,68 @@ fn click_toggle_vsync(
 #[cfg(not(target_arch = "wasm32"))]
 fn click_toggle_diagnostics(
     _: On<Pointer<Click>>,
-    mut commands: Commands,
     mut state: ResMut<GameState>,
     mut perf_ui: Query<&mut Node, With<PerfUi>>,
     mut label: Query<&mut Text, With<DiagnosticsLabel>>,
 ) {
     if let Ok(mut perf_ui) = perf_ui.single_mut() {
-        if perf_ui.display == NodeDisplay::None {
+        state.diagnostics = !state.diagnostics;
+        let s = if perf_ui.display == NodeDisplay::None {
             perf_ui.display = NodeDisplay::Flex;
-            if let Ok(mut label) = label.single_mut() {
-                label.0 = "on".to_owned();
-            }
+            "on"
         } else {
             perf_ui.display = NodeDisplay::None;
-            if let Ok(mut label) = label.single_mut() {
-                label.0 = "off".to_owned();
-            }
-        }
+            "off"
+        };
 
-        if let Ok(label) = label.single_mut() {
-            info!("new label: {}", label.0);
+        if let Ok(mut label) = label.single_mut() {
+            label.0 = s.to_owned();
         }
-        state.diagnostics = !state.diagnostics;
-        commands.trigger(ToggleDiagnostics);
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn clock_toggle_debug_ui(
+fn click_toggle_debug_ui(
     _: On<Pointer<Click>>,
+    children: Query<&Children>,
     mut commands: Commands,
     mut state: ResMut<GameState>,
-    mut label: Query<&mut Text, With<DiagnosticsLabel>>,
+    mut label: Query<Entity, With<DebugUiLabel>>,
 ) {
     state.debug_ui = !state.debug_ui;
 
     if let Ok(mut label) = label.single_mut() {
-        if state.debug_ui {
-            label.0 = "on".to_owned();
-        } else {
-            label.0 = "off".to_owned();
-        }
-        info!("new label: {}", label.0);
+        commands.trigger(ToggleDebugUi);
+        let s = if state.debug_ui { "on" } else { "off" };
+        label.replace_recursive(
+            children,
+            commands,
+            (btn(s, click_toggle_debug_ui), DebugUiLabel),
+        );
     }
-    commands.trigger(ToggleDebugUi);
 }
 
 fn click_toggle_sun_cycle(
     _: On<Pointer<Click>>,
-    labels: Query<&Children, With<SunCycleLabel>>,
-    mut texts: Query<&mut Text>,
+    children: Query<&Children>,
+    commands: Commands,
     mut settings: ResMut<Settings>,
+    mut labels: Query<Entity, With<SunCycleLabel>>,
 ) {
     match settings.sun_cycle {
-        SunCycle::Nimbus => {
-            settings.sun_cycle = SunCycle::DayNight;
-        }
-        SunCycle::DayNight => {
-            settings.sun_cycle = SunCycle::Nimbus;
-        }
+        SunCycle::Nimbus => settings.sun_cycle = SunCycle::DayNight,
+        SunCycle::DayNight => settings.sun_cycle = SunCycle::Nimbus,
     }
-    for children in labels.iter() {
-        for child_entity in children.iter() {
-            // Try to get the Text component from the child entity
-            if let Ok(mut label) = texts.get_mut(child_entity) {
-                label.0 = settings.sun_cycle.as_str().to_owned();
-                info!("new sun cycle:{}", label.0);
-            }
-        }
+
+    if let Ok(mut label) = labels.single_mut() {
+        label.replace_recursive(
+            children,
+            commands,
+            (
+                btn(settings.sun_cycle.as_str(), click_toggle_sun_cycle),
+                SunCycleLabel,
+            ),
+        );
     }
 }
 
@@ -430,7 +439,7 @@ fn video_grid(cycle: &SunCycle) -> impl Bundle {
             label("Sun cycle"),
             (btn(cycle.as_str(), click_toggle_sun_cycle), SunCycleLabel),
             label("FOV"),
-            fov(),
+            plus_minus_bar(FovLabel, fov_lower, fov_raise),
             // TODO: do checkboxes when feathers
             label("VSync"),
             (btn("on", click_toggle_vsync), VsyncLabel),
@@ -440,14 +449,14 @@ fn video_grid(cycle: &SunCycle) -> impl Bundle {
             label("Sun cycle"),
             (btn(cycle.as_str(), click_toggle_sun_cycle), SunCycleLabel),
             label("FOV"),
-            fov(),
+            plus_minus_bar(FovLabel, fov_lower, fov_raise),
             // TODO: do checkboxes when feathers
             label("VSync"),
             (btn("on", click_toggle_vsync), VsyncLabel),
             label("diagnostics"),
             (btn("on", click_toggle_diagnostics), DiagnosticsLabel),
             label("debug ui"),
-            (btn("off", clock_toggle_debug_ui), DebugUiLabel),
+            (btn("off", click_toggle_debug_ui), DebugUiLabel),
         ],
     )
 }
@@ -464,79 +473,11 @@ fn audio_grid() -> impl Bundle {
         },
         children![
             label("general"),
-            general_volume(),
+            plus_minus_bar(GeneralVolumeLabel, general_lower, general_raise),
             label("music"),
-            music_volume(),
+            plus_minus_bar(MusicVolumeLabel, music_lower, music_raise),
             label("sfx"),
-            sfx_volume(),
+            plus_minus_bar(SfxVolumeLabel, sfx_lower, sfx_raise),
         ],
     )
-}
-
-fn general_volume() -> impl Bundle {
-    (
-        Node {
-            justify_self: JustifySelf::Center,
-            ..Default::default()
-        },
-        children![
-            btn_small("-", lower_general),
-            knob_label(GeneralVolumeLabel),
-            btn_small("+", raise_general),
-        ],
-    )
-}
-
-// TODO: fov slider when feathers
-fn fov() -> impl Bundle {
-    (
-        knobs_container(),
-        children![
-            btn_small("-", lower_fov),
-            knob_label(FovLabel),
-            btn_small("+", raise_fov),
-        ],
-    )
-}
-
-fn music_volume() -> impl Bundle {
-    (
-        knobs_container(),
-        children![
-            btn_small("-", lower_music),
-            knob_label(MusicVolumeLabel),
-            btn_small("+", raise_music),
-        ],
-    )
-}
-
-fn sfx_volume() -> impl Bundle {
-    (
-        knobs_container(),
-        children![
-            btn_small("-", lower_sfx),
-            knob_label(SfxVolumeLabel),
-            btn_small("+", raise_sfx),
-        ],
-    )
-}
-
-fn knob_label(knob: impl Component) -> impl Bundle {
-    (
-        Node {
-            padding: UiRect::horizontal(Px(10.0)),
-            justify_content: JustifyContent::Center,
-            ..Default::default()
-        },
-        children![(label(""), knob)],
-    )
-}
-
-fn knobs_container() -> impl Bundle {
-    Node {
-        justify_self: JustifySelf::Center,
-        align_content: AlignContent::SpaceEvenly,
-        min_width: Px(100.0),
-        ..Default::default()
-    }
 }

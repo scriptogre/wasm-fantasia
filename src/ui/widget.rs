@@ -80,7 +80,7 @@ where
     let opts: Props = opts.into();
     let new_node = Node {
         margin: UiRect::ZERO,
-        padding: UiRect::ZERO,
+        padding: UiRect::horizontal(Vw(1.0)),
         align_items: AlignItems::Center,
         justify_content: JustifyContent::Center,
         ..opts.node.clone()
@@ -131,5 +131,30 @@ where
                 .add_children(&[content])
                 .observe(action);
         })),
+    )
+}
+
+// courtesy of @jannhohenheim
+pub(crate) fn plus_minus_bar<E, B, M, I1, I2>(
+    label_marker: impl Component,
+    lower: I1,
+    raise: I2,
+) -> impl Bundle
+where
+    E: EntityEvent,
+    B: Bundle,
+    I1: IntoObserverSystem<E, B, M>,
+    I2: IntoObserverSystem<E, B, M>,
+{
+    (
+        Node {
+            justify_self: JustifySelf::Start,
+            ..default()
+        },
+        children![
+            btn_small("-", lower),
+            (label(""), label_marker),
+            btn_small("+", raise),
+        ],
     )
 }

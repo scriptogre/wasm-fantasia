@@ -6,6 +6,8 @@ pub fn plugin(app: &mut App) {
         .add_observer(clear_modals);
 }
 
+markers!(MenuModal, SettingsModal);
+
 pub fn click_pop_modal(on: On<Pointer<Click>>, mut commands: Commands) {
     commands.entity(on.entity).trigger(PopModal);
 }
