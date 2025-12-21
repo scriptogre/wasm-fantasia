@@ -1,5 +1,4 @@
 //! The screen state for the main gameplay.
-
 use super::*;
 
 pub(super) fn plugin(app: &mut App) {

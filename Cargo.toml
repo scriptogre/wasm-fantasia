@@ -103,6 +103,7 @@ fundsp = "^0.20"
 
 bevy_third_person_camera = { version = "^0.3", optional = true }                            # 3rd person camera
 bevy_top_down_camera = { version = "^0.2", optional = true }                                # top down camera
+# bevy_sky_gradient = "0.2"                                                                   # skybox
 
 # characrter control
 bevy-tnua = "^0.25.0-rc"                                                                    # floating character control
@@ -135,7 +136,7 @@ firewheel-web-audio = { git = "https://github.com/CorvusPrudens/firewheel-web-au
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [patch.crates-io]
-# bevy-inspector-egui = { git = "https://github.com/dsgallups/bevy-inspector-egui", branch = "dsgallups/0.17" }
+bevy_sky_gradient = { git = "https://github.com/olekspickle/bevy_sky_gradient", branch = "main" }
 avian3d = { git = "https://github.com/Jondolf/avian", branch = "main" }
 bevy-tnua = { git = "https://github.com/janhohenheim/bevy-tnua", branch = "bevy-0.17.0-dev" }
 bevy-tnua-avian3d = { git = "https://github.com/janhohenheim/bevy-tnua", branch = "bevy-0.17.0-dev" }

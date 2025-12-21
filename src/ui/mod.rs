@@ -12,7 +12,6 @@ use bevy::{
     ui_widgets::{Button, Checkbox, RadioButton},
     window::{CursorIcon, CursorOptions, SystemCursorIcon, Window},
 };
-use bevy_seedling::prelude::*;
 use serde::{Deserialize, Serialize};
 
 mod constants;

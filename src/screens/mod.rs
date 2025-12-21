@@ -1,8 +1,7 @@
 //! The game's main screen states and transitions between them.
 
-use crate::{models::*, *};
+use crate::*;
 use bevy::ui::Val::*;
-use bevy_seedling::prelude::*;
 
 mod credits;
 mod gameplay;
@@ -15,6 +14,7 @@ pub fn plugin(app: &mut App) {
     app.init_state::<Screen>();
 
     app.add_plugins((
+        camera::plugin,
         splash::plugin,
         loading::plugin,
         title::plugin,

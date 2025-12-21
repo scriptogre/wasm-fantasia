@@ -1,6 +1,7 @@
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
+// use bevy_ahoy::prelude::*;
 use bevy_enhanced_input::prelude::*;
 #[cfg(feature = "third_person")]
 use bevy_third_person_camera::*;
@@ -23,6 +24,7 @@ pub const IDLE_TO_RUN_TRESHOLD: f32 = 0.01;
 /// Player logic is only active during the State `Screen::Playing`
 pub fn plugin(app: &mut App) {
     app.add_plugins((
+        // AhoyPlugin::default(),
         TnuaControllerPlugin::new(FixedUpdate),
         TnuaAvian3dPlugin::new(FixedUpdate),
         control::plugin,

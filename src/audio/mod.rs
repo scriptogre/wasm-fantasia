@@ -59,7 +59,7 @@
 //! ```
 //!
 use crate::*;
-use bevy_seedling::prelude::*;
+pub use bevy_seedling::prelude::*;
 
 mod fade;
 mod fdsp_host;

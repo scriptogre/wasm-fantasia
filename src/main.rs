@@ -11,6 +11,7 @@ use winit::window::Icon;
 
 pub mod asset_loading;
 pub mod audio;
+pub mod camera;
 pub mod game;
 pub mod models;
 pub mod player;

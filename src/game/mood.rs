@@ -1,5 +1,6 @@
 //! An abstraction for changing mood of the game depending on some triggers
-use super::*;
+use crate::*;
+use avian3d::prelude::Collisions;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnExit(Screen::Gameplay), stop_soundtrack)
