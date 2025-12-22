@@ -9,7 +9,7 @@ pub(super) fn plugin(app: &mut App) {
     );
 }
 
-fn spawn_credits_screen(mut commands: Commands, credits: Res<Credits>) {
+fn spawn_credits_screen(mut commands: Commands, credits: Res<CreditsPreset>) {
     commands.spawn((
         DespawnOnExit(Screen::Credits),
         Name::new("Credits Screen"),

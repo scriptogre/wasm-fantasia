@@ -1,5 +1,4 @@
 //! The game's main screen states and transitions between them.
-
 use crate::*;
 use bevy::ui::Val::*;
 

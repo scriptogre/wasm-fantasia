@@ -17,7 +17,7 @@ pub fn plugin(app: &mut App) {
 #[reflect(Resource)]
 pub struct Settings {
     // audio
-    pub sound: Sound,
+    pub sound: SoundPreset,
     // video
     pub fov: f32,
     pub sun_cycle: SunCycle,
@@ -54,7 +54,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             sun_cycle: SunCycle::DayNight,
-            sound: Sound::default(),
+            sound: SoundPreset::default(),
             fov: 45.0, // bevy default
             input_map: InputSettings::default(),
         }

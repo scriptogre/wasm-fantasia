@@ -26,6 +26,7 @@ pub fn plugin(app: &mut App) {
     app.configure_sets(
         Update,
         (
+            PostPhysicsAppSystems::UserInput,
             PostPhysicsAppSystems::TickTimers,
             PostPhysicsAppSystems::ChangeUi,
             PostPhysicsAppSystems::PlaySounds,
@@ -49,6 +50,8 @@ pub fn plugin(app: &mut App) {
 /// courtesy of janhohenheim
 #[derive(SystemSet, Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum PostPhysicsAppSystems {
+    /// User Input
+    UserInput,
     /// Tick timers.
     TickTimers,
     /// Change UI.

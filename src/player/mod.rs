@@ -1,7 +1,6 @@
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
-// use bevy_ahoy::prelude::*;
 use bevy_enhanced_input::prelude::*;
 #[cfg(feature = "third_person")]
 use bevy_third_person_camera::*;
@@ -10,7 +9,7 @@ use bevy_tnua::{TnuaAnimatingState, control_helpers::TnuaSimpleAirActionsCounter
 use bevy_tnua_avian3d::*;
 #[cfg(feature = "top_down")]
 use bevy_top_down_camera::*;
-use std::{f32::consts::PI, time::Duration};
+use std::time::Duration;
 
 mod animation;
 mod control;
@@ -24,7 +23,6 @@ pub const IDLE_TO_RUN_TRESHOLD: f32 = 0.01;
 /// Player logic is only active during the State `Screen::Playing`
 pub fn plugin(app: &mut App) {
     app.add_plugins((
-        // AhoyPlugin::default(),
         TnuaControllerPlugin::new(FixedUpdate),
         TnuaAvian3dPlugin::new(FixedUpdate),
         control::plugin,
@@ -46,7 +44,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             animating
-                .in_set(TnuaUserControlsSystemSet)
+                .in_set(TnuaUserControlsSystems)
                 .run_if(in_state(Screen::Gameplay)),
         )
         .add_observer(player_post_spawn);

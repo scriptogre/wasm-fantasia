@@ -73,11 +73,7 @@ pub struct RightTab;
 #[action_output(bool)]
 pub struct LeftTab;
 
-pub fn add_player_ctx(
-    add: On<Add, PlayerCtx>,
-    mut commands: Commands,
-    // mut settings: ResMut<Settings>,
-) {
+pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
     let mut e = commands.entity(add.entity);
 
     e.insert(actions!(PlayerCtx[
@@ -184,8 +180,8 @@ fn add_modal_ctx(add: On<Add, ModalCtx>, mut commands: Commands) {
     ));
 }
 
-fn rm_modal_ctx(rm: On<Remove, ModalCtx>, mut commands: Commands) {
-    commands
-        .entity(rm.entity)
-        .despawn_related::<Actions<ModalCtx>>();
-}
+// fn _rm_modal_ctx(rm: On<Remove, ModalCtx>, mut commands: Commands) {
+//     commands
+//         .entity(rm.entity)
+//         .despawn_related::<Actions<ModalCtx>>();
+// }

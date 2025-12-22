@@ -4,22 +4,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect, Asset, Resource)]
 #[reflect(Resource)]
 pub struct Config {
-    pub camera: Camera,
-    pub sound: Sound,
-    pub physics: Physics,
-    pub player: PlayerConfig,
-    pub settings: SettingsPreloaded,
-    pub timers: Timers,
+    pub camera: CameraPreset,
+    pub sound: SoundPreset,
+    pub physics: PhysicsPreset,
+    pub player: PlayerPreset,
+    pub settings: SettingsPreset,
+    pub timers: TimersPreset,
 }
 
 #[derive(Resource, Debug, Clone, Serialize, Deserialize, Reflect)]
-pub struct Sound {
+pub struct SoundPreset {
     pub general: f32,
     pub music: f32,
     pub sfx: f32,
 }
 
-impl Default for Sound {
+impl Default for SoundPreset {
     fn default() -> Self {
         Self {
             general: 1.0,
@@ -30,7 +30,7 @@ impl Default for Sound {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct Physics {
+pub struct PhysicsPreset {
     pub distance_fog: bool,
     pub fog_directional_light_exponent: f32,
     pub fog_visibility: f32,
@@ -38,22 +38,22 @@ pub struct Physics {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct PlayerConfig {
-    pub movement: Movement,
-    pub hitbox: Hitbox,
+pub struct PlayerPreset {
+    pub movement: MovementPreset,
+    pub hitbox: HitboxPreset,
     pub zoom: (f32, f32),
     pub fov: f32,
     pub spawn_pos: (f32, f32, f32),
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct Hitbox {
+pub struct HitboxPreset {
     pub radius: f32,
     pub height: f32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct Movement {
+pub struct MovementPreset {
     pub actions_in_air: u8,
     pub dash_distance: f32,
     pub speed: f32,
@@ -63,7 +63,7 @@ pub struct Movement {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct SettingsPreloaded {
+pub struct SettingsPreset {
     pub min_volume: f32,
     pub max_volume: f32,
     pub min_fov: f32,
@@ -72,13 +72,13 @@ pub struct SettingsPreloaded {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct Timers {
+pub struct TimersPreset {
     pub step: f32,
     pub jump: f32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct Camera {
+pub struct CameraPreset {
     pub edge_margin: f32,
     pub rotate_speed: f32,
     pub zoom_speed: f32,
@@ -89,7 +89,7 @@ pub struct Camera {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect, Asset, Resource)]
 #[reflect(Resource)]
-pub struct Credits {
+pub struct CreditsPreset {
     pub assets: Vec<(String, String)>,
     pub devs: Vec<(String, String)>,
 }

@@ -8,7 +8,7 @@ pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         movement
-            .in_set(TnuaUserControlsSystemSet)
+            .in_set(TnuaUserControlsSystems)
             .run_if(in_state(Screen::Gameplay)),
     )
     .add_observer(handle_sprint_in)

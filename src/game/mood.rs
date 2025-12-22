@@ -35,18 +35,17 @@ fn start_soundtrack(
     //     .insert(music(handle.clone(), settings.music())
 
     // Or just play music
-    // commands.spawn((
-    //     MusicPool,
-    //     SamplePlayer::new(handle.clone())
-    //         .with_volume(settings.music())
-    //         .looping(),
-    //     sample_effects![VolumeNode {
-    //         volume: Volume::SILENT,
-    //         ..default()
-    //     }],
-    //     FadeIn,
-    // ));
-    // .observe(crossfade);
+    commands.spawn((
+        MusicPool,
+        SamplePlayer::new(handle.clone())
+            .with_volume(settings.music())
+            .looping(),
+        sample_effects![VolumeNode {
+            volume: Volume::SILENT,
+            ..default()
+        }],
+        FadeIn,
+    ));
 }
 
 fn stop_soundtrack(
