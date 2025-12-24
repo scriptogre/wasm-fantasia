@@ -1,7 +1,7 @@
 (
     sound: (
         general: 1.0,
-        music: 1.2000002,
+        music: 1.0000001,
         sfx: 0.5,
     ),
     fov: 45.0,

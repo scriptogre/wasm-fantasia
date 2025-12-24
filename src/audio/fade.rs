@@ -1,112 +1,90 @@
 use super::*;
+use bevy::time::common_conditions::on_timer;
+use std::time::Duration;
 
-const FADE_TIME: f64 = 2.0;
+const FADE_TIME: u64 = 2;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, check_fade_completion)
-        .add_observer(fade_in)
-        .add_observer(fade_out);
+    app.add_systems(
+        Update,
+        crossfade_music.run_if(on_timer(Duration::from_secs(FADE_TIME))),
+    );
+
+    // app.add_systems(Update, check_fade_completion)
+    //     .add_observer(fade_in)
+    //     .add_observer(fade_out);
 }
 
 markers!(FadeIn, FadeOut);
 
-fn fade_in(
-    on: On<Add, SampleEffects>,
+// fn fade_in(
+//     on: On<Add, FadeIn>,
+//     settings: Res<Settings>,
+//     fade_in: Query<&SampleEffects, With<FadeIn>>,
+//     mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents), With<MainBus>>,
+// ) {
+//     info!("fade_in: {}", on.entity);
+//     if let Ok(effects) = fade_in.get(on.entity) {
+//         info!("fade_in: {}, effects: {effects:?}", on.entity);
+//         if let Ok((node, mut events)) = volume_nodes.get_effect_mut(effects) {
+//             info!("fade to music: {}", settings.music().linear());
+//             node.fade_to(settings.music(), DurationSeconds(FADE_TIME), &mut events);
+//         }
+//     }
+// }
+//
+// fn fade_out(
+//     on: On<Add, FadeOut>,
+//     fade_out: Query<&SampleEffects>,
+//     mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents), With<MainBus>>,
+// ) -> Result {
+//     let effects = fade_out.get(on.entity)?;
+//     info!("fade_out: {}", on.entity);
+//     if let Ok((node, mut events)) = volume_nodes.get_effect_mut(effects) {
+//         info!("fade to silent");
+//         node.fade_to(Volume::SILENT, DurationSeconds(FADE_TIME), &mut events);
+//     }
+//
+//     Ok(())
+// }
+
+fn crossfade_music(
     settings: Res<Settings>,
-    fade_in: Query<&SampleEffects, With<FadeIn>>,
+    mut fade_out: Query<(Entity, &SampleEffects), (With<FadeOut>, Without<FadeIn>)>,
+    mut fade_in: Query<(Entity, &SampleEffects), (With<FadeIn>, Without<FadeOut>)>,
     mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents)>,
+    mut commands: Commands,
 ) {
-    if let Ok(effects) = fade_in.get(on.entity) {
-        info!("fade_in: {}, effects: {effects:?}", on.entity);
+    let fade_duration = DurationSeconds(FADE_TIME as f64);
+
+    for (e, effects) in fade_out.iter_mut() {
         if let Ok((node, mut events)) = volume_nodes.get_effect_mut(effects) {
-            info!("fade to music");
-            node.fade_to(settings.music(), DurationSeconds(FADE_TIME), &mut events);
+            info!("to fade out: {e}");
+            let mut audio = commands.entity(e);
+            if node.volume.linear() <= 0.01 {
+                info!("despawning audio entity: {e}");
+                audio.despawn();
+            }
+            // to prevent doing both fades it makes more sense to
+            // remove the FadeIn to not cause a cacophony of sounds
+            audio.remove::<FadeIn>();
+            info!("fade to silent, entity: {e}");
+            node.fade_to(Volume::SILENT, fade_duration, &mut events);
+        }
+    }
+
+    for (e, effects) in fade_in.iter_mut() {
+        if let Ok((node, mut events)) = volume_nodes.get_effect_mut(effects) {
+            info!("to fade in: {e}");
+            if node.volume.linear() < settings.music().linear() {
+                info!("fade to music, entity: {e}");
+                node.fade_to(settings.music(), fade_duration, &mut events);
+            } else {
+                commands.entity(e).remove::<FadeIn>();
+            }
         }
     }
 }
-
-fn fade_out(
-    on: On<Add, FadeOut>,
-    fade_out: Query<&SampleEffects>,
-    mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents)>,
-) -> Result {
-    let effects = fade_out.get(on.entity)?;
-    info!("fade_out: {}", on.entity);
-    if let Ok((node, mut events)) = volume_nodes.get_effect_mut(effects) {
-        info!("fade to silent");
-        node.fade_to(Volume::SILENT, DurationSeconds(FADE_TIME), &mut events);
-    }
-
-    Ok(())
-}
-
-// fn crossfade(
-//     _: On<OnAdd, FadeIn>,
-//     settings: Res<Settings>,
-//     fade_in: Query<&SampleEffects, With<FadeIn>>,
-//     mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents)>,
-// ) -> Result {
-//     let fade_duration = DurationSeconds(FADE_TIME);
-//
-//     for effects in fade_out.iter() {
-//         let (node, mut events) = volume_nodes.get_effect_mut(effects)?;
-//         node.fade_to(Volume::SILENT, fade_duration, &mut events);
-//     }
-//
-//     for effects in fade_in.iter() {
-//         let (node, mut events) = volume_nodes.get_effect_mut(effects)?;
-//         node.fade_to(settings.music(), fade_duration, &mut events);
-//     }
-//
-//     Ok(())
-// }
-
-// fn on_fade_in(
-//     _: On<OnAdd, FadeIn>,
-//     settings: Res<Settings>,
-//     fade_in: Query<&SampleEffects, With<FadeIn>>,
-//     mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents)>,
-// ) -> Result {
-//     info!("on_fade_in");
-//
-//     for effects in fade_in.iter() {
-//         info!("on_fade_in in query");
-//         let (node, mut events) = volume_nodes.get_effect_mut(effects)?;
-//         info!("on_fade_in in query effects");
-//         node.fade_to(settings.music(), FADE_TIME, &mut events);
-//
-//         info!(
-//             "fade in volume: {}, need to match: <= {:?}",
-//             node.volume.linear(),
-//             settings.music().linear()
-//         );
-//     }
-//
-//     Ok(())
-// }
-//
-// fn on_fade_out(
-//     _: On<OnAdd, FadeOut>,
-//     settings: Res<Settings>,
-//     fade_out: Query<&SampleEffects, With<FadeOut>>,
-//     mut volume_nodes: Query<(&VolumeNode, &mut AudioEvents)>,
-// ) -> Result {
-//     info!("on_fade_out");
-//
-//     for effects in fade_out.iter() {
-//         let (node, mut events) = volume_nodes.get_effect_mut(effects)?;
-//         node.fade_to(Volume::SILENT, FADE_TIME, &mut events);
-//
-//         info!(
-//             "fade in volume: {}, need to match: <= {:?}",
-//             node.volume.linear(),
-//             settings.music().linear()
-//         );
-//     }
-//     info!("on_fade_out done");
-//
-//     Ok(())
-// }
 
 fn check_fade_completion(
     settings: Res<Settings>,
@@ -117,6 +95,7 @@ fn check_fade_completion(
 ) {
     for entity in fade_in.iter() {
         let Ok(node) = volume_nodes.get(entity) else {
+            info!("fade in volume: no node for FadeIn entity: {entity}");
             continue;
         };
         info!(
@@ -125,22 +104,23 @@ fn check_fade_completion(
             settings.music().linear()
         );
 
-        if node.volume.linear() >= settings.music().linear() {
+        if node.volume.linear() > settings.music().linear() {
             info!("on_fade_in remove: {entity}");
             commands.entity(entity).remove::<FadeIn>();
         }
     }
     for entity in fade_out.iter() {
         let Ok(node) = volume_nodes.get(entity) else {
+            info!("fade out volume: no node for FadeOut entity: {entity}");
             continue;
         };
         info!(
             "fade out volume: {}, need to match: <= {:?}",
             node.volume.linear(),
-            0.001
+            0.01
         );
 
-        if node.volume.linear() <= 0.001 {
+        if node.volume.linear() <= 0.01 {
             info!("on_fade_out despawn: {entity}");
             commands.entity(entity).despawn();
         }

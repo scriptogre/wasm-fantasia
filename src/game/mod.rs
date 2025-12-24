@@ -1,5 +1,4 @@
 use crate::*;
-use avian3d::prelude::*;
 
 #[cfg(any(feature = "dev_native", not(target_arch = "wasm32")))]
 mod dev_tools;

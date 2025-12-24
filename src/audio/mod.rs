@@ -96,10 +96,10 @@ pub fn plugin(app: &mut App) {
         },
     );
 
+    app.add_systems(Startup, setup);
+
     #[cfg(not(target_arch = "wasm32"))]
     app.add_plugins((SeedlingPlugin::default(), fdsp_host::plugin, fade::plugin));
-
-    app.add_systems(Startup, setup);
 }
 
 fn setup(mut master: Single<&mut VolumeNode, With<MainBus>>, settings: Res<Settings>) {

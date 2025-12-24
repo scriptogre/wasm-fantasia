@@ -137,6 +137,6 @@ pub fn spawn_player(
 fn player_post_spawn(on: On<Add, Player>, mut players: Query<&mut Player>) {
     if let Ok(mut p) = players.get_mut(on.entity) {
         p.id = on.entity; // update player id with spawned entity
-        info!("player entity: Player.id: {}", p.id);
+        // info!("player entity: Player.id: {}", p.id);
     }
 }

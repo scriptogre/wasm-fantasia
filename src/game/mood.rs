@@ -1,13 +1,17 @@
 //! An abstraction for changing mood of the game depending on some triggers
 use crate::*;
 use avian3d::prelude::Collisions;
+use bevy::time::common_conditions::on_timer;
+use std::time::Duration;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnExit(Screen::Gameplay), stop_soundtrack)
         .add_systems(OnEnter(Screen::Gameplay), start_soundtrack)
         .add_systems(
             Update,
-            trigger_mood_change.run_if(in_state(Screen::Gameplay)),
+            trigger_mood_change
+                .run_if(in_state(Screen::Gameplay))
+                .run_if(on_timer(Duration::from_secs(1))),
         )
         .add_observer(change_mood);
 }
@@ -29,7 +33,7 @@ fn start_soundtrack(
     let handle = sources.explore.pick(&mut rng);
 
     // TODO: The idea is to create a boombox with spatial audio
-    // <https://github.com/bevyengine/bevy/blob/main/examples/audio/spatial_audio_3d.rs>
+    // <https://github.com/bevyengine/bevy/blob/main/e500xamples/audio/spatial_audio_3d.rs>
     // cmds
     //     .entity(boombox.single()?)
     //     .insert(music(handle.clone(), settings.music())
@@ -72,8 +76,8 @@ fn trigger_mood_change(
         if collisions.contains(player, e) {
             match zone {
                 Zone::Combat => {
-                    info_once!("player is colliding with {:?}", zone);
                     if state.current_mood != MoodType::Combat {
+                        info!("Trigger changing mood from:{:?}", state.current_mood);
                         commands.trigger(ChangeMood {
                             mood: MoodType::Combat,
                             entity: player,
@@ -81,8 +85,8 @@ fn trigger_mood_change(
                     }
                 }
                 Zone::Exploration => {
-                    info_once!("player is colliding with {:?}", zone);
                     if state.current_mood != MoodType::Exploration {
+                        info!("Trigger changing mood from:{:?}", state.current_mood);
                         commands.trigger(ChangeMood {
                             mood: MoodType::Exploration,
                             entity: player,
@@ -104,17 +108,18 @@ fn change_mood(
     mut state: ResMut<GameState>,
     mut sources: ResMut<AudioSources>,
 ) {
-    let mood = &on.mood;
     let mut rng = rand::rng();
 
     // Fade out all currently running tracks
     for track in music.iter() {
+        info!("adding FadeOut: {track}");
         commands.entity(track).insert(FadeOut);
     }
+    info!("Changing mood to: {:?}", on.mood);
 
     // Spawn a new music with the appropriate soundtrack based on new mood
     // Volume is set to start at zero and is then increased by the fade_in system.
-    let handle = match mood {
+    let handle = match &on.mood {
         MoodType::Exploration => sources.explore.pick(&mut rng),
         MoodType::Combat => sources.combat.pick(&mut rng),
     };
@@ -130,5 +135,5 @@ fn change_mood(
         }],
         FadeIn,
     ));
-    state.current_mood = mood.clone();
+    state.current_mood = on.mood.clone();
 }
