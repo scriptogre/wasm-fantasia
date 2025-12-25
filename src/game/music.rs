@@ -11,52 +11,44 @@ pub fn plugin(app: &mut App) {
             Update,
             trigger_mood_change
                 .run_if(in_state(Screen::Gameplay))
-                .run_if(on_timer(Duration::from_secs(1))),
+                .run_if(on_timer(Duration::from_millis(200))),
         )
         .add_observer(change_mood);
-}
-
-#[derive(Component, Reflect, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[reflect(Component)]
-pub enum Zone {
-    Combat,
-    Exploration,
 }
 
 fn start_soundtrack(
     settings: Res<Settings>,
     mut commands: Commands,
     mut sources: ResMut<AudioSources>,
-    // boombox: Query<Entity, With<Boombox>>,
 ) {
     let mut rng = rand::rng();
     let handle = sources.explore.pick(&mut rng);
 
-    // TODO: The idea is to create a boombox with spatial audio
-    // <https://github.com/bevyengine/bevy/blob/main/e500xamples/audio/spatial_audio_3d.rs>
-    // cmds
-    //     .entity(boombox.single()?)
-    //     .insert(music(handle.clone(), settings.music())
-
-    // Or just play music
-    commands.spawn((
-        MusicPool,
-        SamplePlayer::new(handle.clone())
-            .with_volume(settings.music())
-            .looping(),
-        sample_effects![VolumeNode {
-            volume: Volume::SILENT,
-            ..default()
-        }],
-        FadeIn,
-    ));
+    let e = commands
+        .spawn((
+            MusicPool,
+            SamplePlayer::new(handle.clone())
+                .with_volume(settings.music())
+                .looping(),
+            sample_effects![VolumeNode {
+                volume: Volume::SILENT,
+                ..default()
+            }],
+            FadeIn,
+        ))
+        .id();
+    let mp: MusicPlaybacks = [(Mood::default(), e)].into_iter().collect();
+    commands.insert_resource(mp);
 }
 
 fn stop_soundtrack(
-    // boombox: Query<&mut PlaybackSettings, With<Boombox>>,
-    mut bg_music: Query<&mut PlaybackSettings, With<MusicPool>>,
+    mut music: Query<&mut PlaybackSettings, With<MusicPool>>,
+    mut music_pb: ResMut<MusicPlaybacks>,
 ) {
-    for mut s in bg_music.iter_mut() {
+    for (_, e) in music_pb.iter_mut() {
+        let Ok(mut s) = music.get_mut(*e) else {
+            continue;
+        };
         s.pause();
     }
 }
@@ -64,8 +56,7 @@ fn stop_soundtrack(
 fn trigger_mood_change(
     collisions: Collisions,
     state: ResMut<GameState>,
-    zones: Query<(Entity, &Zone)>,
-    // zones: Query<(Entity, Option<&Combat>, Option<&Exploration>), With<Zone>>,
+    zones: Query<(Entity, &Mood)>,
     mut commands: Commands,
     mut player: Query<Entity, With<Player>>,
 ) {
@@ -75,20 +66,20 @@ fn trigger_mood_change(
     for (e, zone) in zones.iter() {
         if collisions.contains(player, e) {
             match zone {
-                Zone::Combat => {
-                    if state.current_mood != MoodType::Combat {
-                        info!("Trigger changing mood from:{:?}", state.current_mood);
+                Mood::Combat => {
+                    if state.current_mood != Mood::Combat {
+                        debug!("Trigger changing mood from:{:?}", state.current_mood);
                         commands.trigger(ChangeMood {
-                            mood: MoodType::Combat,
+                            mood: Mood::Combat,
                             entity: player,
                         });
                     }
                 }
-                Zone::Exploration => {
-                    if state.current_mood != MoodType::Exploration {
-                        info!("Trigger changing mood from:{:?}", state.current_mood);
+                Mood::Exploration => {
+                    if state.current_mood != Mood::Exploration {
+                        debug!("Trigger changing mood from:{:?}", state.current_mood);
                         commands.trigger(ChangeMood {
-                            mood: MoodType::Exploration,
+                            mood: Mood::Exploration,
                             entity: player,
                         })
                     }
@@ -98,30 +89,36 @@ fn trigger_mood_change(
     }
 }
 
-// Every time the current mood in GameState resource changes,
-// this system is run to trigger the song change
+/// Every time the current mood in GameState resource changes,
+/// this system is run to trigger the song change
 fn change_mood(
     on: On<ChangeMood>,
     settings: Res<Settings>,
-    music: Query<Entity, With<MusicPool>>,
+    music_pb: ResMut<MusicPlaybacks>,
     mut commands: Commands,
     mut state: ResMut<GameState>,
     mut sources: ResMut<AudioSources>,
 ) {
     let mut rng = rand::rng();
-
-    // Fade out all currently running tracks
-    for track in music.iter() {
-        info!("adding FadeOut: {track}");
-        commands.entity(track).insert(FadeOut);
+    for (z, track) in music_pb.iter() {
+        if z != &on.mood {
+            commands.entity(*track).insert(FadeOut);
+        }
     }
-    info!("Changing mood to: {:?}", on.mood);
+    state.current_mood = on.mood;
 
+    if let Some(track) = music_pb.get(&on.mood) {
+        debug!("found existing track, fading IN: {track}");
+        commands.entity(*track).insert(FadeIn);
+        return;
+    }
+
+    debug!("did not find existing track, spawning new for mood");
     // Spawn a new music with the appropriate soundtrack based on new mood
     // Volume is set to start at zero and is then increased by the fade_in system.
     let handle = match &on.mood {
-        MoodType::Exploration => sources.explore.pick(&mut rng),
-        MoodType::Combat => sources.combat.pick(&mut rng),
+        Mood::Exploration => sources.explore.pick(&mut rng),
+        Mood::Combat => sources.combat.pick(&mut rng),
     };
 
     commands.spawn((
@@ -134,6 +131,6 @@ fn change_mood(
             ..default()
         }],
         FadeIn,
+        on.mood,
     ));
-    state.current_mood = on.mood.clone();
 }

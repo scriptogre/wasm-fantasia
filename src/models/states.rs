@@ -1,15 +1,14 @@
 use super::*;
-use std::collections::HashMap;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<GameState>().init_resource::<Moods>();
+    app.init_resource::<GameState>().register_type::<Mood>();
 }
 
 #[derive(Resource, Reflect, Debug, Clone)]
 #[reflect(Resource)]
 pub struct GameState {
     pub last_screen: Screen,
-    pub current_mood: MoodType,
+    pub current_mood: Mood,
 
     pub diagnostics: bool,
     pub debug_ui: bool,
@@ -21,7 +20,7 @@ impl Default for GameState {
     fn default() -> Self {
         Self {
             last_screen: Screen::Title,
-            current_mood: MoodType::Exploration,
+            current_mood: Mood::Exploration,
             diagnostics: true,
             debug_ui: true,
             paused: false,
@@ -56,14 +55,9 @@ pub enum Screen {
     Gameplay,
 }
 
-#[derive(Resource, Reflect, Debug, Clone, Default)]
-#[reflect(Resource)]
-pub struct Moods {
-    pub inner: HashMap<MoodType, Entity>,
-}
-
-#[derive(Default, Clone, Eq, PartialEq, Debug, Hash, Reflect)]
-pub enum MoodType {
+#[derive(Component, Reflect, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[reflect(Component)]
+pub enum Mood {
     #[default]
     Exploration,
     Combat,

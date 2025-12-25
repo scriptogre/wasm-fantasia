@@ -29,7 +29,7 @@ pub struct ToggleDebugUi;
 #[derive(EntityEvent)]
 pub struct ChangeMood {
     pub entity: Entity,
-    pub mood: MoodType,
+    pub mood: Mood,
 }
 /// Event triggered on a UI entity when the [`Interaction`] component on the same entity changes to
 /// [`Interaction::Pressed`]. Observe this event to detect e.g. button presses.
