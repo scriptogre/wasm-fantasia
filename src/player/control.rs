@@ -4,6 +4,8 @@ use bevy_tnua::{
     control_helpers::TnuaSimpleAirActionsCounter,
 };
 
+pub const IDLE_TO_RUN_TRESHOLD: f32 = 0.01;
+
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,

@@ -1,7 +1,10 @@
 use super::*;
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective, builtins::*};
 
-const ANIMATION_FACTOR: f32 = 0.1;
+mod anim_knobs {
+    pub const GENERAL_SPEED: f32 = 0.1;
+    pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
+}
 
 pub fn prepare_animations(
     _: On<SceneInstanceReady>,
@@ -96,15 +99,15 @@ pub fn animating(
             match (speed, is_crouching) {
                 (None, false) => AnimationState::StandIdle,
                 (None, true) => match crouch_state {
-                    TnuaBuiltinCrouchState::Maintaining => AnimationState::Crouch,
+                    TnuaBuiltinCrouchState::Maintaining => AnimationState::CrouchIdle,
                     // TODO: have rise animation
-                    TnuaBuiltinCrouchState::Rising => AnimationState::Crouch,
+                    TnuaBuiltinCrouchState::Rising => AnimationState::CrouchIdle,
                     // TODO: sink animation
-                    TnuaBuiltinCrouchState::Sinking => AnimationState::Crouch,
+                    TnuaBuiltinCrouchState::Sinking => AnimationState::CrouchIdle,
                 },
-                (Some(speed), false) => AnimationState::Run(ANIMATION_FACTOR * speed),
+                (Some(speed), false) => AnimationState::Run(speed),
                 // TODO: place to handle slide here
-                (Some(speed), true) => AnimationState::Crawl(ANIMATION_FACTOR * speed * 4.0),
+                (Some(speed), true) => AnimationState::Crouch(speed),
             }
         }
         // Unless you provide the action names yourself, prefer matching against the `NAME` const
@@ -150,7 +153,7 @@ pub fn animating(
             } else {
                 let basis_speed = basis_state.running_velocity.length();
                 if basis_speed > cfg.player.movement.idle_to_run_threshold {
-                    let speed = ANIMATION_FACTOR * basis_speed;
+                    let speed = anim_knobs::GENERAL_SPEED * basis_speed;
                     if basis_speed > cfg.player.movement.speed {
                         AnimationState::Sprint(speed)
                     } else {
@@ -175,7 +178,7 @@ pub fn animating(
             // of the animation based on the speed of the movement.
             AnimationState::Run(speed)
             | AnimationState::Sprint(speed)
-            | AnimationState::Crawl(speed)
+            | AnimationState::Crouch(speed)
             | AnimationState::Climb(speed) => {
                 for (_, active_animation) in animation_player.playing_animations_mut() {
                     active_animation.set_speed(*speed);
@@ -246,12 +249,15 @@ pub fn animating(
                         animation_player.start(*index).set_speed(1.0).repeat();
                     }
                 }
-                AnimationState::Crawl(speed) => {
+                AnimationState::Crouch(speed) => {
                     if let Some(index) = player.animations.get("Crouch_Fwd_Loop") {
-                        animation_player.start(*index).set_speed(*speed).repeat();
+                        animation_player
+                            .start(*index)
+                            .set_speed(*speed * anim_knobs::CROUCH_ANIMATION_SPEED)
+                            .repeat();
                     }
                 }
-                AnimationState::Crouch => {
+                AnimationState::CrouchIdle => {
                     if let Some(index) = player.animations.get("Crouch_Idle_Loop") {
                         animation_player.start(*index).set_speed(1.0).repeat();
                     }

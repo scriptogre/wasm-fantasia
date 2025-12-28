@@ -15,7 +15,7 @@
         movement: (
             speed: 10,
             sprint_factor: 1.5,
-            crouch_factor: 0.5,
+            crouch_factor: 0.2,
             actions_in_air: 3,
             dash_distance: 10,
             idle_to_run_threshold: 0.01,

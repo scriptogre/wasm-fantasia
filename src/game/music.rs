@@ -1,4 +1,4 @@
-//! An abstraction for changing mood of the game depending on some triggers
+//! An abstraction for changing music of the game depending on some triggers
 use crate::*;
 use avian3d::prelude::Collisions;
 use bevy::time::common_conditions::on_timer;
@@ -65,6 +65,7 @@ fn trigger_mood_change(
     };
     for (e, zone) in zones.iter() {
         if collisions.contains(player, e) {
+            info!("colliding with zone: {:?}", zone);
             match zone {
                 Mood::Combat => {
                     if state.current_mood != Mood::Combat {
