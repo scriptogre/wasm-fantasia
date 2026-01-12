@@ -103,6 +103,8 @@ fundsp = { version = "^0.20", optional = true }
 
 
 bevy_third_person_camera = { version = "^0.3", optional = true }                            # 3rd person camera
+bevy_spacetimedb = "1.0"                                                                     # multiplayer networking (Bevy integration)
+spacetimedb-sdk = "1.0"                                                                      # SpacetimeDB client SDK
 
 # characrter control
 bevy-tnua = "^0.26"                                                                         # floating character control

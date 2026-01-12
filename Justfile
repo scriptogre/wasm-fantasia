@@ -1,6 +1,6 @@
 # Default recipe - run dev native build
 default:
-    cargo run
+    cargo run --features dev_native
 
 # Clean rebuild + lint + web check
 clean-build:

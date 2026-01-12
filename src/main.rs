@@ -14,6 +14,8 @@ pub mod audio;
 pub mod camera;
 pub mod game;
 pub mod models;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod networking;
 pub mod player;
 pub mod scene;
 pub mod screens;
@@ -66,8 +68,12 @@ fn main() {
         asset_loading::plugin,
         ui::plugin,
         game::plugin,
-    ))
-    .add_systems(Startup, set_window_icon);
+    ));
+
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_plugins(networking::NetworkingPlugin);
+
+    app.add_systems(Startup, set_window_icon);
 
     // override default font
     load_internal_binary_asset!(
