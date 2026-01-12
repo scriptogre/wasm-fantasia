@@ -10,11 +10,11 @@ description = "Simple but comprehensive 3D RPG game template with gamepad suppor
 keywords = ["bevy", "game", "template", "devkit", "third person", "topdown", "gamedev"]
 
 [features]
-default = [ "dev_native", "third_person" ]
-web = []
+default = ["dev_native", "third_person"]
+web = ["bevy/webgpu", "third_person"]
 custom_cursor  = []
-top_down = ["bevy_top_down_camera"]
 third_person = ["bevy_third_person_camera"]
+audio = ["bevy_seedling", "bevy_shuffle_bag", "firewheel", "fundsp"]  # Audio support (disabled on web due to dependency conflicts)
 dev = [
     "bevy/bevy_dev_tools",
     "bevy/bevy_ui_debug",
@@ -24,6 +24,7 @@ dev = [
 dev_native = [
     "dev",
     "enhanced",
+    "audio",                        # Audio enabled for native builds
     "custom_cursor",
     "bevy-inspector-egui",
     "bevy/embedded_watcher",        # Enable embedded asset hot reloading for native dev builds.
@@ -95,14 +96,13 @@ bevy_skein = "^0.4"                                                             
 # iyes_perf_ui = "0.5"                                                                      # diagnostics overlay
 
 avian3d = { version = "^0.4", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics
-bevy_seedling = { version = "^0.6", features = ["hrtf", "ogg"] }                            # audio plugin using firewheel
-bevy_shuffle_bag = "^0.3"                                                                   # random container for audio
-firewheel = "^0.9"
-fundsp = "^0.20"
+bevy_seedling = { version = "^0.6", features = ["hrtf", "ogg"], optional = true }           # audio plugin using firewheel
+bevy_shuffle_bag = { version = "^0.3", optional = true }                                    # random container for audio
+firewheel = { version = "^0.9", optional = true }
+fundsp = { version = "^0.20", optional = true }
 
 
 bevy_third_person_camera = { version = "^0.3", optional = true }                            # 3rd person camera
-bevy_top_down_camera = { version = "^0.2", optional = true }                                # top down camera
 
 # characrter control
 bevy-tnua = "^0.26"                                                                         # floating character control

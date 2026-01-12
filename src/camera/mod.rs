@@ -1,5 +1,4 @@
 use crate::*;
-use avian3d::prelude::*;
 use bevy::{
     anti_alias::{fxaa::Fxaa, taa::TemporalAntiAliasing},
     core_pipeline::prepass::DeferredPrepass,
@@ -9,8 +8,6 @@ use bevy::{
 
 #[cfg(feature = "third_person")]
 mod third_person;
-#[cfg(feature = "top_down")]
-mod top_down;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(DefaultOpaqueRendererMethod::deferred())
@@ -19,9 +16,6 @@ pub fn plugin(app: &mut App) {
 
     #[cfg(feature = "third_person")]
     app.add_plugins(third_person::plugin);
-
-    #[cfg(feature = "top_down")]
-    app.add_plugins(top_down::plugin);
 }
 
 pub fn spawn_camera(mut commands: Commands) {

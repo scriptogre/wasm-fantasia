@@ -1,7 +1,10 @@
 //! An abstraction for changing music of the game depending on some triggers
+#![cfg(not(target_arch = "wasm32"))]
+
 use crate::*;
 use avian3d::prelude::Collisions;
 use bevy::time::common_conditions::on_timer;
+use bevy_seedling::prelude::*;
 use std::time::Duration;
 
 pub fn plugin(app: &mut App) {

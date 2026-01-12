@@ -59,69 +59,71 @@
 //! ```
 //!
 use crate::*;
-pub use bevy_seedling::prelude::*;
 use std::collections::HashMap;
 
+#[cfg(not(target_arch = "wasm32"))]
+use bevy_seedling::prelude::*;
+
+#[cfg(not(target_arch = "wasm32"))]
 mod fade;
+#[cfg(not(target_arch = "wasm32"))]
 mod fdsp_host;
+#[cfg(not(target_arch = "wasm32"))]
 mod radio;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use fade::*;
 
 /// Utility for converting a simple `[0.0, 1.0]` range to [`Volume`].
-///
-///# Example
-/// ```
-/// use bevy_seedling::prelude::*;
-/// use bevy::prelude::*;
-///
-/// const STEP: f32 = 0.1;
-/// const MIN_VOLUME: f32 = 0.0;
-/// const MAX_VOLUME: f32 = 1.0;
-///
-/// pub fn increment_volume(volume: Volume) -> Volume {
-///     let perceptual = CONVERTER.volume_to_perceptual(volume);
-///     let new_perceptual = (perceptual + STEP).min(MAX_VOLUME);
-///     CONVERTER.perceptual_to_volume(new_perceptual)
-/// }
-/// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub const CONVERTER: PerceptualVolume = PerceptualVolume::new();
 
 pub fn plugin(app: &mut App) {
-    #[cfg(target_arch = "wasm32")]
-    app.add_plugins(
-        bevy_seedling::SeedlingPlugin::<firewheel_web_audio::WebAudioBackend> {
-            config: Default::default(),
-            graph_config: Default::default(),
-            stream_config: Default::default(),
-        },
-    );
-
-    app.init_resource::<MusicPlaybacks>();
-    app.add_systems(Startup, setup)
-        .add_observer(MusicPlaybacks::track_entity)
-        .add_observer(MusicPlaybacks::clear_entity_on_finish);
+    // TODO: Web audio disabled due to firewheel version conflict
+    // Uncomment when firewheel-web-audio is updated to firewheel 0.9
+    // #[cfg(target_arch = "wasm32")]
+    // app.add_plugins(
+    //     bevy_seedling::SeedlingPlugin::<firewheel_web_audio::WebAudioBackend> {
+    //         config: Default::default(),
+    //         graph_config: Default::default(),
+    //         stream_config: Default::default(),
+    //     },
+    // );
 
     #[cfg(not(target_arch = "wasm32"))]
-    app.add_plugins((SeedlingPlugin::default(), fdsp_host::plugin, fade::plugin));
+    app.add_plugins((SeedlingPlugin::default(), fdsp_host::plugin));
+
+    // Common setup for both platforms
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.init_resource::<MusicPlaybacks>()
+            .add_systems(Startup, setup)
+            .add_observer(MusicPlaybacks::track_entity)
+            .add_observer(MusicPlaybacks::clear_entity_on_finish)
+            .add_plugins(fade::plugin);
+    }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn setup(mut master: Single<&mut VolumeNode, With<MainBus>>, settings: Res<Settings>) {
     master.volume = CONVERTER.perceptual_to_volume(settings.general().linear());
 }
 
 /// Map of entities that are currently playing music for a specific mood
 /// Use them to keep track of [`PlaybackSettings`] and play/pause instead of spawning new ones
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Resource, Reflect, Debug, Clone, Default, Deref, DerefMut)]
 #[reflect(Resource)]
 pub struct MusicPlaybacks(HashMap<Mood, Entity>);
 
+#[cfg(not(target_arch = "wasm32"))]
 impl FromIterator<(Mood, Entity)> for MusicPlaybacks {
     fn from_iter<T: IntoIterator<Item = (Mood, Entity)>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl MusicPlaybacks {
     fn track_entity(
         on: On<Add, (Mood, SamplePlayer)>,

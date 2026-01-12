@@ -1,12 +1,17 @@
 //! A credits screen that can be accessed from the main menu
 use super::*;
 use bevy::ecs::spawn::SpawnIter;
+#[cfg(not(target_arch = "wasm32"))]
+use bevy_seedling::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
+    #[cfg(not(target_arch = "wasm32"))]
     app.add_systems(
         OnEnter(Screen::Credits),
         (start_credits_music, spawn_credits_screen),
     );
+    #[cfg(target_arch = "wasm32")]
+    app.add_systems(OnEnter(Screen::Credits), spawn_credits_screen);
 }
 
 fn spawn_credits_screen(mut commands: Commands, credits: Res<CreditsPreset>) {
@@ -68,6 +73,7 @@ fn grid(content: Vec<[String; 2]>) -> impl Bundle {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn start_credits_music(
     settings: Res<Settings>,
     mut commands: Commands,

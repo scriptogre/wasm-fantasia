@@ -1,9 +1,14 @@
 use super::*;
+#[cfg(not(target_arch = "wasm32"))]
+use bevy_seedling::prelude::*;
 
 /// This plugin is responsible for the game menu
 /// The menu is only drawn during the State [`Screen::Title`] and is removed when that state is exited
 pub fn plugin(app: &mut App) {
+    #[cfg(not(target_arch = "wasm32"))]
     app.add_systems(OnEnter(Screen::Title), (setup_menu, start_main_menu_music));
+    #[cfg(target_arch = "wasm32")]
+    app.add_systems(OnEnter(Screen::Title), setup_menu);
 }
 
 fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
@@ -46,6 +51,7 @@ fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
     state.reset();
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn start_main_menu_music(
     settings: Res<Settings>,
     mut commands: Commands,

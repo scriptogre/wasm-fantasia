@@ -1,5 +1,7 @@
 use super::*;
 use bevy::window::CursorOptions;
+#[cfg(not(target_arch = "wasm32"))]
+use bevy_seedling::prelude::*;
 
 // TODO: there is quite a lot of duplication, maybe there is a better way
 
@@ -9,12 +11,40 @@ pub(super) fn plugin(app: &mut App) {
         .add_observer(on_out);
 }
 
-fn on_click(
-    click: On<Pointer<Click>>,
+#[cfg(not(target_arch = "wasm32"))]
+fn play_click_sound(
     settings: Res<Settings>,
-    sources: If<Res<AudioSources>>,
+    sources: Res<AudioSources>,
     cursor_opt: Query<&CursorOptions>,
     mut commands: Commands,
+) {
+    if let Ok(cursor) = cursor_opt.single() {
+        if cursor.visible {
+            commands.spawn(SamplePlayer::new(sources.press.clone()).with_volume(settings.sfx()));
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn play_hover_sound(
+    settings: Res<Settings>,
+    sources: Res<AudioSources>,
+    cursor_opt: Query<&CursorOptions>,
+    mut commands: Commands,
+) {
+    if let Ok(cursor) = cursor_opt.single() {
+        if cursor.visible {
+            commands.spawn(SamplePlayer::new(sources.hover.clone()).with_volume(settings.sfx()));
+        }
+    }
+}
+
+fn on_click(
+    click: On<Pointer<Click>>,
+    #[cfg(not(target_arch = "wasm32"))] settings: Res<Settings>,
+    #[cfg(not(target_arch = "wasm32"))] sources: Res<AudioSources>,
+    cursor_opt: Query<&CursorOptions>,
+    #[cfg(not(target_arch = "wasm32"))] mut commands: Commands,
     mut palette_q: Query<(
         &PaletteSet,
         &mut BorderColor,
@@ -35,18 +65,15 @@ fn on_click(
         }
     }
 
-    if let Ok(cursor) = cursor_opt.single() {
-        if cursor.visible {
-            commands.spawn(SamplePlayer::new(sources.press.clone()).with_volume(settings.sfx()));
-        }
-    }
+    #[cfg(not(target_arch = "wasm32"))]
+    play_click_sound(settings, sources, cursor_opt, commands);
 }
 fn on_hover(
     hover: On<Pointer<Over>>,
-    settings: Res<Settings>,
-    sources: If<Res<AudioSources>>,
+    #[cfg(not(target_arch = "wasm32"))] settings: Res<Settings>,
+    #[cfg(not(target_arch = "wasm32"))] sources: Res<AudioSources>,
     cursor_opt: Query<&CursorOptions>,
-    mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] mut commands: Commands,
     mut palette_q: Query<(
         &PaletteSet,
         &mut BorderColor,
@@ -67,19 +94,16 @@ fn on_hover(
         }
     }
 
-    if let Ok(cursor) = cursor_opt.single() {
-        if cursor.visible {
-            commands.spawn(SamplePlayer::new(sources.hover.clone()).with_volume(settings.sfx()));
-        }
-    }
+    #[cfg(not(target_arch = "wasm32"))]
+    play_hover_sound(settings, sources, cursor_opt, commands);
 }
 
 fn on_out(
     hover: On<Pointer<Out>>,
-    settings: Res<Settings>,
-    sources: If<Res<AudioSources>>,
+    #[cfg(not(target_arch = "wasm32"))] settings: Res<Settings>,
+    #[cfg(not(target_arch = "wasm32"))] sources: Res<AudioSources>,
     cursor_opt: Query<&CursorOptions>,
-    mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] mut commands: Commands,
     mut palette_q: Query<(
         &PaletteSet,
         &mut BorderColor,
@@ -101,11 +125,8 @@ fn on_out(
         }
     }
 
-    if let Ok(cursor) = cursor_opt.single() {
-        if cursor.visible {
-            commands.spawn(SamplePlayer::new(sources.hover.clone()).with_volume(settings.sfx()));
-        }
-    }
+    #[cfg(not(target_arch = "wasm32"))]
+    play_hover_sound(settings, sources, cursor_opt, commands);
 }
 
 // TODO: adding Disabled observer

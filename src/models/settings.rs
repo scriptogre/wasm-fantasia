@@ -3,6 +3,18 @@ use crate::scene::SunCycle;
 use serde::Deserialize;
 use std::{error::Error, fs};
 
+#[cfg(not(target_arch = "wasm32"))]
+use bevy_seedling::prelude::Volume;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone, Copy)]
+pub struct Volume;
+
+#[cfg(target_arch = "wasm32")]
+impl Volume {
+    pub const SILENT: Volume = Volume;
+}
+
 pub const SETTINGS_PATH: &str = "assets/settings.ron";
 
 pub fn plugin(app: &mut App) {
@@ -27,14 +39,23 @@ pub struct Settings {
 
 impl Settings {
     pub fn general(&self) -> Volume {
-        Volume::Linear(self.sound.general)
+        #[cfg(not(target_arch = "wasm32"))]
+        return Volume::Linear(self.sound.general);
+        #[cfg(target_arch = "wasm32")]
+        return Volume::SILENT;
     }
     pub fn music(&self) -> Volume {
-        Volume::Linear(self.sound.general * self.sound.music)
+        #[cfg(not(target_arch = "wasm32"))]
+        return Volume::Linear(self.sound.general * self.sound.music);
+        #[cfg(target_arch = "wasm32")]
+        return Volume::SILENT;
     }
 
     pub fn sfx(&self) -> Volume {
-        Volume::Linear(self.sound.general * self.sound.sfx)
+        #[cfg(not(target_arch = "wasm32"))]
+        return Volume::Linear(self.sound.general * self.sound.sfx);
+        #[cfg(target_arch = "wasm32")]
+        return Volume::SILENT;
     }
 
     pub fn read() -> Result<Self, Box<dyn Error>> {

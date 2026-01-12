@@ -1,4 +1,5 @@
 use super::*;
+use bevy_seedling::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(movement_sound)

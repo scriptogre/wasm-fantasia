@@ -48,10 +48,7 @@ fn add_tpv_cam(
 
 fn rm_tpv_cam(mut commands: Commands, mut camera: Query<Entity, With<ThirdPersonCamera>>) {
     if let Ok(camera) = camera.single_mut() {
-        commands
-            .entity(camera)
-            .remove::<RigidBody>()
-            .remove::<ThirdPersonCamera>();
+        commands.entity(camera).remove::<ThirdPersonCamera>();
     }
 }
 

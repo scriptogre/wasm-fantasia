@@ -1,10 +1,12 @@
 use crate::*;
 use bevy::{asset::Asset, gltf::GltfLoaderSettings};
+#[cfg(not(target_arch = "wasm32"))]
 use bevy_seedling::sample::AudioSample;
 
 mod ron;
 mod tracking;
 
+#[cfg(not(target_arch = "wasm32"))]
 use bevy_shuffle_bag::ShuffleBag;
 pub use ron::*;
 pub use tracking::*;
@@ -16,10 +18,12 @@ pub fn plugin(app: &mut App) {
         .load_resource_from_path::<Config>("config.ron")
         .add_plugins(RonAssetPlugin::<CreditsPreset>::default())
         .load_resource_from_path::<CreditsPreset>("credits.ron")
-        .load_resource::<AudioSources>()
         .load_resource::<Textures>()
         // .load_resource::<Fonts>()
         .load_resource::<Models>();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    app.load_resource::<AudioSources>();
 }
 
 // #[derive(Asset, Clone, Reflect, Resource)]
@@ -84,6 +88,7 @@ impl FromWorld for Models {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Asset, Clone, Reflect, Resource)]
 #[reflect(Resource)]
 pub struct AudioSources {
@@ -104,6 +109,7 @@ pub struct AudioSources {
     pub combat: ShuffleBag<Handle<AudioSample>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AudioSources {
     pub const BTN_HOVER: &'static str = "audio/sfx/btn-hover.ogg";
     pub const BTN_PRESS: &'static str = "audio/sfx/btn-press.ogg";
@@ -120,6 +126,7 @@ impl AudioSources {
     pub const COMBAT: &[&'static str] = &["audio/music/smnbl-trouble.ogg"];
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl FromWorld for AudioSources {
     fn from_world(world: &mut World) -> Self {
         let mut rng = rand::rng();

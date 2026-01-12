@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 mod constants;
 mod interaction;
 mod modal;
+#[cfg(feature = "dev")]
 mod perf;
 mod prefabs;
 mod props;

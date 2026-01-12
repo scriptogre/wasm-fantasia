@@ -7,12 +7,11 @@ use bevy_third_person_camera::*;
 use bevy_tnua::prelude::*;
 use bevy_tnua::{TnuaAnimatingState, control_helpers::TnuaSimpleAirActionsCounter};
 use bevy_tnua_avian3d::*;
-#[cfg(feature = "top_down")]
-use bevy_top_down_camera::*;
 use std::time::Duration;
 
 mod animation;
 mod control;
+#[cfg(not(target_arch = "wasm32"))]
 mod sound;
 
 pub use animation::*;
@@ -24,6 +23,7 @@ pub fn plugin(app: &mut App) {
         TnuaControllerPlugin::new(FixedUpdate),
         TnuaAvian3dPlugin::new(FixedUpdate),
         control::plugin,
+        #[cfg(not(target_arch = "wasm32"))]
         sound::plugin,
     ));
 
@@ -31,11 +31,6 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(ThirdPersonCameraPlugin).configure_sets(
         PostUpdate,
         bevy_third_person_camera::CameraSyncSet.before(TransformSystems::Propagate),
-    );
-    #[cfg(feature = "top_down")]
-    app.add_plugins(TopDownCameraPlugin).configure_sets(
-        PostUpdate,
-        bevy_top_down_camera::CameraSyncSet.before(TransformSystems::Propagate),
     );
 
     app.add_systems(OnEnter(Screen::Gameplay), spawn_player)
@@ -77,12 +72,8 @@ pub fn spawn_player(
             pos,
             player,
             // camera target component
-            (
-                #[cfg(feature = "third_person")]
-                ThirdPersonCameraTarget,
-                #[cfg(feature = "top_down")]
-                TopDownCameraTarget,
-            ),
+            #[cfg(feature = "third_person")]
+            ThirdPersonCameraTarget,
             PlayerCtx,
             // tnua character control bundles
             (
