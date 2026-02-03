@@ -40,10 +40,8 @@ pub struct PlayerInput {
 const MOVE_SPEED: f32 = 6.0;
 const SPRINT_MULTIPLIER: f32 = 1.6;
 const CROUCH_MULTIPLIER: f32 = 0.3;
-const JUMP_VELOCITY: f32 = 7.0;
 const GRAVITY: f32 = 20.0;
-const TICK_RATE: f32 = 60.0;  // Server tick rate
-const DT: f32 = 1.0 / TICK_RATE;
+const DT: f32 = 1.0 / 60.0;  // 60 Hz tick rate
 
 #[spacetimedb::reducer]
 pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>) {
@@ -146,15 +144,15 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext) {
 
             // Determine animation state
             player.anim_state = if !player.on_ground {
-                "Jump"
+                "Jump".to_string()
             } else if input.crouch {
-                "Crouch"
+                "Crouch".to_string()
             } else if input.sprint && (input.forward.abs() > 0.1 || input.right.abs() > 0.1) {
-                "Run"
+                "Run".to_string()
             } else if input.forward.abs() > 0.1 || input.right.abs() > 0.1 {
-                "Walk"
+                "Walk".to_string()
             } else {
-                "Idle"
+                "Idle".to_string()
             };
 
             // Update rotation to face movement direction
@@ -168,6 +166,23 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext) {
 
         // Remove processed input
         ctx.db.player_input().delete(input);
+    }
+}
+
+/// Simple position relay — client sends its position directly.
+/// Temporary until input-based model is wired end-to-end.
+#[spacetimedb::reducer]
+pub fn update_position(ctx: &spacetimedb::ReducerContext, x: f32, y: f32, z: f32, rot_y: f32, anim_state: String) {
+    if let Some(player) = ctx.db.player().identity().find(&ctx.sender) {
+        ctx.db.player().identity().update(Player {
+            x,
+            y,
+            z,
+            rot_y,
+            anim_state,
+            last_update: ctx.timestamp.to_micros_since_unix_epoch(),
+            ..player
+        });
     }
 }
 

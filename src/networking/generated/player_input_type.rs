@@ -6,21 +6,19 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub struct Player {
+pub struct PlayerInput {
+    pub id: u64,
     pub identity: __sdk::Identity,
-    pub name: Option<String>,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub rot_y: f32,
-    pub vel_x: f32,
-    pub vel_z: f32,
-    pub on_ground: bool,
-    pub anim_state: String,
-    pub online: bool,
-    pub last_update: i64,
+    pub sequence: u32,
+    pub forward: f32,
+    pub right: f32,
+    pub jump: bool,
+    pub sprint: bool,
+    pub crouch: bool,
+    pub yaw: f32,
+    pub timestamp: i64,
 }
 
-impl __sdk::InModule for Player {
+impl __sdk::InModule for PlayerInput {
     type Module = super::RemoteModule;
 }

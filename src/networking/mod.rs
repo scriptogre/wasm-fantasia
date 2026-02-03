@@ -151,7 +151,7 @@ fn connect_to_spacetimedb(config: Res<SpacetimeDbConfig>, mut commands: Commands
         .build();
 
     let Ok(conn) = conn else {
-        error!("Failed to build SpacetimeDB connection");
+        warn!("No SpacetimeDB server found — running in offline mode");
         return;
     };
 

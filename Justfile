@@ -1,54 +1,48 @@
-# Default recipe - run dev native build
+# Run native dev build
 default:
     cargo run --features dev_native
 
-# Clean rebuild + lint + web check
-clean-build:
-    cargo clean
-    just build-dev
-    just lint
-    just check-web
+# Multiplayer: start server, publish module, launch two clients
+spacetime := env('HOME') / ".local/bin/spacetime"
+mp:
+    #!/usr/bin/env bash
+    set -euo pipefail
 
-# Generate and open documentation
-docs:
-    cargo doc --open --no-deps --workspace
+    # Ensure SpacetimeDB is installed
+    command -v "{{spacetime}}" &>/dev/null || \
+        (echo "Installing SpacetimeDB..." && curl -sSf https://install.spacetimedb.com | sh)
 
-# Run linters: clippy, fmt check, machete (unused deps)
-lint:
-    cargo clippy -- -D warnings
-    cargo fmt --all -- --check
-    cargo machete
+    # Start server
+    "{{spacetime}}" start --pg-port 5432 &
+    sleep 2
 
-# Debug build
-build-dev:
-    cargo build
+    # Deploy module
+    "{{spacetime}}" publish wasm-fantasia \
+        --project-path server \
+        --yes \
+        --delete-data=on-conflict
 
-# Release build
+    # Launch two game clients
+    cargo run --features dev_native &
+    cargo run --features dev_native &
+
+    # Print Postgres connection string (after clients start so it's visible)
+    TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "  Postgres: postgresql://token:${TOKEN}@localhost:5432/wasm-fantasia"
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo ""
+
+    wait
+
+# Native release build
 build:
     cargo build --release
 
-# Check web compilation (fast, doesn't build wasm)
-check-web:
+# Pre-commit checks: lint + web compilation
+check:
+    cargo clippy -- -D warnings
+    cargo fmt --all -- --check
+    cargo machete
     cargo check --profile ci --no-default-features --features web --target wasm32-unknown-unknown
-
-# Full web release build with wasm tools
-build-web:
-    cargo binstall --locked -y --force wasm-bindgen-cli
-    cargo binstall --locked -y --force wasm-opt
-    bevy build --locked --release --features=web --yes web --bundle
-
-# Run with hot patching (dx serve)
-hot:
-    BEVY_ASSET_ROOT="." dx serve --hot-patch
-
-# Run dev native build
-run:
-    cargo run
-
-# Run web with trunk (current working method)
-run-web:
-    trunk serve --port 8080
-
-# Run web with SharedArrayBuffer headers (original bevy method)
-run-web-headers:
-    bevy run web --headers="Cross-Origin-Opener-Policy:same-origin" --headers="Cross-Origin-Embedder-Policy:credentialless"

@@ -66,10 +66,6 @@ use bevy_seedling::prelude::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod fade;
-#[cfg(not(target_arch = "wasm32"))]
-mod fdsp_host;
-#[cfg(not(target_arch = "wasm32"))]
-mod radio;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use fade::*;
@@ -91,7 +87,7 @@ pub fn plugin(app: &mut App) {
     // );
 
     #[cfg(not(target_arch = "wasm32"))]
-    app.add_plugins((SeedlingPlugin::default(), fdsp_host::plugin));
+    app.add_plugins(SeedlingPlugin::default());
 
     // Common setup for both platforms
     #[cfg(not(target_arch = "wasm32"))]

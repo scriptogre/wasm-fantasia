@@ -42,9 +42,9 @@ fn play_hover_sound(
 fn on_click(
     click: On<Pointer<Click>>,
     #[cfg(not(target_arch = "wasm32"))] settings: Res<Settings>,
-    #[cfg(not(target_arch = "wasm32"))] sources: Res<AudioSources>,
+    #[cfg(not(target_arch = "wasm32"))] sources: Option<Res<AudioSources>>,
     cursor_opt: Query<&CursorOptions>,
-    #[cfg(not(target_arch = "wasm32"))] mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] commands: Commands,
     mut palette_q: Query<(
         &PaletteSet,
         &mut BorderColor,
@@ -66,14 +66,16 @@ fn on_click(
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    play_click_sound(settings, sources, cursor_opt, commands);
+    if let Some(sources) = sources {
+        play_click_sound(settings, sources, cursor_opt, commands);
+    }
 }
 fn on_hover(
     hover: On<Pointer<Over>>,
     #[cfg(not(target_arch = "wasm32"))] settings: Res<Settings>,
-    #[cfg(not(target_arch = "wasm32"))] sources: Res<AudioSources>,
+    #[cfg(not(target_arch = "wasm32"))] sources: Option<Res<AudioSources>>,
     cursor_opt: Query<&CursorOptions>,
-    #[cfg(not(target_arch = "wasm32"))] mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] commands: Commands,
     mut palette_q: Query<(
         &PaletteSet,
         &mut BorderColor,
@@ -95,15 +97,17 @@ fn on_hover(
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    play_hover_sound(settings, sources, cursor_opt, commands);
+    if let Some(sources) = sources {
+        play_hover_sound(settings, sources, cursor_opt, commands);
+    }
 }
 
 fn on_out(
     hover: On<Pointer<Out>>,
     #[cfg(not(target_arch = "wasm32"))] settings: Res<Settings>,
-    #[cfg(not(target_arch = "wasm32"))] sources: Res<AudioSources>,
+    #[cfg(not(target_arch = "wasm32"))] sources: Option<Res<AudioSources>>,
     cursor_opt: Query<&CursorOptions>,
-    #[cfg(not(target_arch = "wasm32"))] mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] commands: Commands,
     mut palette_q: Query<(
         &PaletteSet,
         &mut BorderColor,
@@ -126,7 +130,9 @@ fn on_out(
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    play_hover_sound(settings, sources, cursor_opt, commands);
+    if let Some(sources) = sources {
+        play_hover_sound(settings, sources, cursor_opt, commands);
+    }
 }
 
 // TODO: adding Disabled observer

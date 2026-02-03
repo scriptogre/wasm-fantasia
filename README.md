@@ -20,7 +20,7 @@ Session-based MMO prototype. Bevy 0.17 + SpacetimeDB multiplayer, targeting nati
 - [Rust](https://rustup.rs/) (latest stable)
 - [just](https://github.com/casey/just) (command runner)
 - [Bevy CLI](https://github.com/TheBevyFlock/bevy_cli) (for web builds)
-- [SpacetimeDB CLI](https://spacetimedb.com/install) (for multiplayer)
+- [SpacetimeDB](https://spacetimedb.com/install) (for multiplayer, auto-installed by `just mp`)
 - Linux users: install [Bevy's Linux dependencies](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)
 
 ## Getting started

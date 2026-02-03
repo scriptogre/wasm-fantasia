@@ -14,7 +14,7 @@ default = ["dev_native", "third_person"]
 web = ["bevy/webgpu", "third_person"]
 custom_cursor  = []
 third_person = ["bevy_third_person_camera"]
-audio = ["bevy_seedling", "bevy_shuffle_bag", "firewheel", "fundsp"]  # Audio support (disabled on web due to dependency conflicts)
+audio = ["bevy_seedling", "bevy_shuffle_bag", "firewheel"]  # Audio support (disabled on web due to dependency conflicts)
 dev = [
     "bevy/bevy_dev_tools",
     "bevy/bevy_ui_debug",
@@ -99,7 +99,6 @@ avian3d = { version = "^0.4", features = ["debug-plugin", "3d", "parallel", "col
 bevy_seedling = { version = "^0.6", features = ["hrtf", "ogg"], optional = true }           # audio plugin using firewheel
 bevy_shuffle_bag = { version = "^0.3", optional = true }                                    # random container for audio
 firewheel = { version = "^0.9", optional = true }
-fundsp = { version = "^0.20", optional = true }
 
 
 bevy_third_person_camera = { version = "^0.3", optional = true }                            # 3rd person camera
