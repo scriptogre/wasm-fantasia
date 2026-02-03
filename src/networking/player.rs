@@ -1,9 +1,8 @@
 //! Player-specific networking logic
 
 use bevy::prelude::*;
-use super::{SpacetimeDbConnection, PositionSyncTimer};
+use super::{SpacetimeDbConnection, PositionSyncTimer, LagSimulator, LagBuffers, PendingOutboundUpdate, BufferedInboundState};
 use super::generated::player_table::PlayerTableAccess;
-use super::generated::update_position_reducer::update_position;
 use spacetimedb_sdk::{Table, DbContext};
 use crate::models::Player as LocalPlayer;
 use crate::asset_loading::Models;
@@ -77,15 +76,64 @@ pub fn spawn_remote_players(
     }
 }
 
+/// System to buffer incoming remote player updates from SpacetimeDB
+/// This runs BEFORE update_remote_players to populate the delay buffer
+pub fn buffer_inbound_updates(
+    conn: Res<SpacetimeDbConnection>,
+    lag: Res<LagSimulator>,
+    mut buffers: ResMut<LagBuffers>,
+) {
+    // If no lag simulation, skip buffering (update_remote_players will read directly)
+    if lag.inbound_delay_ms == 0 && lag.packet_loss_chance == 0.0 {
+        return;
+    }
+
+    let now = std::time::Instant::now();
+
+    for player in conn.conn.db.player().iter() {
+        // Skip offline players
+        if !player.online {
+            continue;
+        }
+
+        // Check for packet loss simulation
+        if lag.packet_loss_chance > 0.0 && rand::random::<f32>() < lag.packet_loss_chance {
+            continue; // Drop this update
+        }
+
+        buffers.inbound_buffer.insert(player.identity, BufferedInboundState {
+            x: player.x, y: player.y, z: player.z, rot_y: player.rot_y,
+            received_at: now,
+        });
+    }
+}
+
 /// System to update remote player positions from SpacetimeDB
 pub fn update_remote_players(
     conn: Res<SpacetimeDbConnection>,
+    lag: Res<LagSimulator>,
+    buffers: Res<LagBuffers>,
     mut query: Query<(&RemotePlayer, &mut InterpolatedPosition)>,
 ) {
+    let now = std::time::Instant::now();
+
     for (rp, mut interp) in query.iter_mut() {
-        if let Some(player) = conn.conn.db.player().identity().find(&rp.identity) {
-            interp.target = Vec3::new(player.x, player.y, player.z);
-            interp.target_rotation = player.rot_y;
+        if lag.inbound_delay_ms == 0 && lag.packet_loss_chance == 0.0 {
+            // No lag - read directly from DB
+            if let Some(player) = conn.conn.db.player().identity().find(&rp.identity) {
+                interp.target = Vec3::new(player.x, player.y, player.z);
+                interp.target_rotation = player.rot_y;
+            }
+        } else {
+            // Read from buffer if delay has elapsed
+            if let Some(state) = buffers.inbound_buffer.get(&rp.identity) {
+                let elapsed = now.duration_since(state.received_at).as_millis() as u64;
+                if elapsed >= lag.inbound_delay_ms {
+                    interp.target = Vec3::new(state.x, state.y, state.z);
+                    interp.target_rotation = state.rot_y;
+                }
+                // If delay hasn't elapsed, keep old target (no update yet)
+            }
         }
     }
 }
@@ -131,7 +179,8 @@ pub fn interpolate_positions(
 
 /// System to send local player position to the server
 pub fn send_local_position(
-    conn: Res<SpacetimeDbConnection>,
+    lag: Res<LagSimulator>,
+    mut buffers: ResMut<LagBuffers>,
     mut timer: ResMut<PositionSyncTimer>,
     time: Res<Time>,
     query: Query<&Transform, With<LocalPlayer>>,
@@ -152,7 +201,18 @@ pub fn send_local_position(
     // TODO: Get actual animation state from player
     let anim_state = "Idle".to_string();
 
-    if let Err(e) = conn.conn.reducers.update_position(pos.x, pos.y, pos.z, rot_y, anim_state) {
-        warn!("Failed to send position update: {:?}", e);
+    if lag.outbound_delay_ms == 0 && lag.packet_loss_chance == 0.0 {
+        // No lag - this will be sent immediately by process_outbound_lag
+        buffers.outbound_queue.push(PendingOutboundUpdate {
+            x: pos.x, y: pos.y, z: pos.z, rot_y, anim_state,
+            send_at: std::time::Instant::now(),
+        });
+    } else {
+        // Queue with delay
+        let send_at = std::time::Instant::now() + std::time::Duration::from_millis(lag.outbound_delay_ms);
+        buffers.outbound_queue.push(PendingOutboundUpdate {
+            x: pos.x, y: pos.y, z: pos.z, rot_y, anim_state,
+            send_at,
+        });
     }
 }
