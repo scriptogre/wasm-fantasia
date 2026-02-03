@@ -1,210 +1,84 @@
+# wasm-fantasia
 
-# 3D RPG Bevy game template (WIP)
-<table border="0">
-    <tr>
-        <td><video src="https://github.com/user-attachments/assets/6533b1d9-5971-41fd-acc4-5d2f567266be" controls="controls"></video></td>
-        <td><video src="https://github.com/user-attachments/assets/3aadf8fc-7bb2-477d-82c6-44dc1d56ed08" controls="controls"></video></td>
-    </tr>
-    <tr>
-        <td><video src="https://github.com/user-attachments/assets/7f470899-29b0-44c5-b418-6fdf240d130c" controls="controls"></video></td>
-        <td><video src="https://github.com/user-attachments/assets/ea236931-6c59-456f-98de-447d3f6eb287" controls="controls"></video></td>
-    </tr>
-</table>
+Session-based MMO prototype. Bevy 0.17 + SpacetimeDB multiplayer, targeting native and WebAssembly.
 
-This template is based on the awesome [BevyFlock 2D template][BevyFlock] featuring out of the box builds for:
-- Windows
-- Linux
-- macOS
-- Web (Wasm)
-This template is a great way to get started if you aim to build new 3D RPG [Bevy] game!
-It is not as simple as bevy_new_2d which is aimed to an easy start and no dependencies.
-It focuses instead to a rather solid starting template with some basic bells and whistles to be able to carry the weight of big projects and tries to follow the [flat architercture](#project-structure) principle.
-Start with a [basic project](#write-your-game) and [CI / CD](#release-your-game) that can deploy to [itch.io](https://itch.io).
-You can [try this template in your browser!](https://olekspickle.itch.io/bevy-3d-rpg)
+**Status:** Early prototype. Expect rough edges.
 
-## Best way to start
-Install [cargo-generate] or [bevy_cli] and run:
+## What's here
+
+- 3D character controller (Tnua + Avian3d physics)
+- Third-person camera with gamepad support
+- SpacetimeDB multiplayer with server-authoritative movement
+- Network lag/packet-loss simulator for testing (F1-F7)
+- Day/night skybox cycle
+- Audio system with music crossfading (native only)
+- Screen flow: splash, loading, title, settings, gameplay
+- Blender scene integration via bevy_skein
+
+## Prerequisites
+
+- [Rust](https://rustup.rs/) (latest stable)
+- [just](https://github.com/casey/just) (command runner)
+- [Bevy CLI](https://github.com/TheBevyFlock/bevy_cli) (for web builds)
+- [SpacetimeDB CLI](https://spacetimedb.com/install) (for multiplayer)
+- Linux users: install [Bevy's Linux dependencies](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)
+
+## Getting started
+
 ```bash
-cargo generate olekspickle/bevy_new_3d_rpg -n my-rpg
-# or with bevy_cli
-bevy new -t=olekspickle/bevy_new_3d_rpg my-rpg
+just              # Run native dev build
+just run-web      # Run web build via trunk
+just hot          # Run with hotpatching (BEVY_ASSET_ROOT="." dx serve --hot-patch)
+just lint         # Clippy + fmt check + machete
+just check-web    # Quick web compilation check
+just build        # Native release build
+just build-web    # Full web release bundle
+just docs         # Generate and open docs
 ```
 
-### Hotpatching
-To set this up, follow the instructions in the [release announcement](https://bevy.org/news/bevy-0-17/#hot-patching-systems-in-a-running-app)
-- Linux: `make hot` or `bash BEVY_ASSET_ROOT="." dx serve --hot-patch`
-- Windows PS:`$env:BEVY_ASSET_ROOT="." ; dx serve --hot-patch`
+### SpacetimeDB server
 
-## Features:
-- [x] flat cargo project structure for game logic crates that can grow and be maintainable
-- [x] import and usage of game mechanics and parameters from .ron (config, credits) (kudos to Caudiciform)
-- [x] simple asset loading based on [bevy_asset_loader] with loading from path addition (kudos to Caudiciform)
-- [x] third person camera with [bevy_third_person_camera]
-- [x] top down camera with [bevy_top_down_camera]
-- [x] solid keyboard & gamepad mapping to ui & game actions using [bevy_enhanced_input]
-- [x] simple scene with colliders and rigid bodies using [avian3d]
-- [x] simple player movement using [bevy_tnua]
-- [x] simple skybox sun cycle using [bevy atmosphere example], with daynight and nimbus modes
-- [x] featuring rig and animations using [Universal Animation Library] from quaternius
-- [x] experimental sound with [bevy_seedling] based on Firewheel audio engine (which will probably replace bevy_audio), with **highly** experimental audio stutter fix for web
-- [x] consistent Esc back navigation in gameplay and menu via stacked modals (kudos for the idea to skyemakesgames)
-- [x] serialize and save settings
-- [x] audio, video and keys rebind tabs in settings (currently broken)
-- [x] easy drop in scene integration using awesome [skein] with a simple scene
+```bash
+cd server
+spacetimedb publish wasm-fantasia
+```
 
-### TODOs
-- [ ] implement different music states(exploration, combat) on mood change event
-- [ ] enhance ui widgets with feathers
-- [ ] pool with light textures
-- [ ] custom font replace example using pre-loaded font
-- [ ] Movement sfx sounds: jump, dash, sprint
-- [ ] sky background instead of just void lol
-- [ ] 3d and 2d particles demo: shooting magic balls, fireplace, step dust
-- [ ] spatial audio demo: boombox emitting background music
-- [ ] small door/portal demo
-- [ ] split screen for local coop
-- [ ] flying around suit/mode
-- [ ] vault on objects if they are reachable
-- [ ] climbing
-- [ ] basic fighting: punch, kick, take weapon
-- [ ] modern weapon select wheel
-- [ ] rifle
-- [ ] bow
-- [ ] Jump with timer(tricky with tnua jump in air counter)
-- [ ] do not rotate player on aim(silly bug, if you release aim looking to the floor - player model left rotated parallel to the floor)
+## Project structure
 
-## Write your game
+| Path | Description |
+|------|-------------|
+| `src/main.rs` | App entrypoint, plugin registration |
+| `src/models/` | Data layer: input bindings, game state, settings |
+| `src/player/` | Character control, animation, footstep sounds |
+| `src/camera/` | Third-person / top-down camera (feature-flagged) |
+| `src/scene/` | Environment loading, skybox |
+| `src/audio/` | Music bus, crossfading, radio (native only) |
+| `src/networking/` | SpacetimeDB client, position sync, lag simulator |
+| `src/screens/` | Splash, loading, title, settings, gameplay |
+| `src/ui/` | Reusable UI components, modals |
+| `src/game/` | Game mechanics, dev tools |
+| `server/` | SpacetimeDB server module |
+| `docs/` | Design documents |
 
-This template comes with a basic project structure that you may find useful:
+## Feature flags
 
-### Project structure
-| Path                                                  | Description                                                           |
-| ----------------------------------------------------- | --------------------------------------------------------------------- |
-| [`assets`](./assets)                                  | Asset directory                                                       |
-| [`src/main.rs`](./src/main.rs)                        | App entrypoint where system plugins and window set up                 |
-| [`src/asset_loading`](./src/asset_loading)            | A high-level way to load collections of asset handles as resources    |
-| [`src/models`](./src/models)                          | Data source for the game: inputs, markers, timers                     |
-| [`src/audio`](./src/audio)                            | Marker components for sound effects and music, bus setup              |
-| [`src/scene`](./src/scene)                            | Scene setup, skybox                                                   |
-| [`src/player`](./src/player)                          | Player control & animation                                            |
-| [`src/game`](./src/game)                              | Game mechanics & content                                              |
-| [`src/ui`](./src/ui)                                  | Reusable UI widgets & game color pallet control                       |
-| [`src/screens`](./src/screens)                        | Splash/title/gameplay and other screen related systems and ui         |
-
-Feel free to move things around however you want, though
-
-## Run your game
-
-### Makefile
-There are some helpful commands in [Makefile](./Makefile) to simplify build options
-But generally running your game locally is very simple:
-
-<details>
-    <summary><ins>with bevy_cli</ins></summary>
-
-- Dev: `bevy run` to run a native dev build
-- Release: `bevy run --release` to run a native release build
-- Use `bevy run --release web` to run a web release build
-To run a **web** dev build to run audio in separate thread to avoid audio stuttering:
-- :`bash bevy run web --headers="Cross-Origin-Opener-Policy:same-origin" --headers="Cross-Origin-Embedder-Policy:credentialless" `
-</details>
-
-<details>
-    <summary><ins>with cmake</ins></summary>
-
-- Dev: `make run` to run a **native** dev build
-- Release: `make build` to build a **native** release build
-- Web: `make run-web` to run a **web** dev build to run audio in separate thread to avoid audio stuttering
-</details>
-
-<details>
-<summary><ins>Installing Linux dependencies</ins></summary>
-
-  If you're using Linux, make sure you've installed Bevy's [Linux dependencies].
-  Note that this template enables Wayland support, which requires additional dependencies as detailed in the link above.
-  Wayland is activated by using the `bevy/wayland` feature in the [`Cargo.toml`](./Cargo.toml).
-</details>
-
-<details>
-<summary><ins>(Optional) Improving compile times</ins></summary>
-
-[`.cargo/config.toml`](./.cargo/config.toml) contains documentation on how to set up your environment to improve compile times.
-</details>
-
-WARNING: if you work in a private repository, please be aware that macOS and Windows runners cost more build minutes.
-**For public repositories the workflow runners are free!**
-
-## Release your game
-
-This template uses [GitHub workflows] to run tests and build releases.
-Check the [release-flow](.github/workflows/release.yaml)
-
-## Known issues
-
-There are some known issues in Bevy that can require arcane workarounds.
-
-### My audio is stuttering on web
-
-This template uses firewheel experimental audio runnign in the separate worker thread, so it should not be happening, but if you experience it nevertheless, here are a few tips:
-- If you're using materials, you should force your render pipelines to [load at the start of the game]
-- Optimize your game as much as you can to keep its FPS high.
-- Apply the suggestions from the blog post [Workaround for the Choppy Music in Bevy Web Builds].
-- Advise your users to try a Chromium-based browser if there are still issues.
-
-### My game window flashes white for a split second when I start the game on Windows
-
-The game window is created before the GPU is ready to render everything.
-This means that it'll start with a white screen for a few frames.
-The workaround is to [spawn the Window hidden] and only [make it visible a few frames later]
-
-### My character or camera movement is choppy
-
-Choppy character movement is often caused by movement updates being tied to the frame rate.
-See the [`physics_in_fixed_timestep`] example for how to fix this.
-
-Choppy camera movement is almost always caused by the camera being tied too tightly to a moving target position.
-You can use [`smooth_nudge`] to make your camera smoothly approach its target position instead.
+| Flag | Description |
+|------|-------------|
+| `dev_native` | Dev tools, inspector, asset hot-reloading (default) |
+| `audio` | bevy_seedling audio, native only (included in `dev_native`) |
+| `third_person` | Third-person camera (default) |
+| `top_down` | Top-down camera |
+| `web` | WebGPU/WASM target |
 
 ## Credits
 
-The [assets](./assets) in this repository are all 3rd-party. See the see [credits](assets/credits.json) for more information.
+Assets are all third-party. See [credits](assets/credits.json).
 
 ## License
 
-The source code in this repository is licensed under any of the following at your option:
-- [CC0-1.0 License](./LICENSE-CC0)
-- [MIT License](./LICENSE-MIT)
-- [Apache License, Version 2.0](./LICENSE-APACHE)
+Source code is licensed under any of:
+- [CC0-1.0](./LICENSE-CC0)
+- [MIT](./LICENSE-MIT)
+- [Apache 2.0](./LICENSE-APACHE)
 
-## Bevy Compatibility
-
-| bevy | bevy_new_3d_rpg  |
-| ---- | ---------------------- |
-| 0.16 |       main,0.1.4       |
-
-[avian3d]: https://github.com/Jondolf/avian/tree/main/crates/avian3d
-[bevy]: https://bevyengine.org/
-[bevy atmosphere example]: https://bevyengine.org/examples/3d-rendering/atmosphere/
-[bevy-discord]: https://discord.gg/bevy
-[bevy_asset_loader]: https://github.com/NiklasEi/bevy_asset_loader
-[bevy_cli]: https://github.com/TheBevyFlock/bevy_cli
-[bevy-learn]: https://bevyengine.org/learn/
-[bevy_seedling]: https://github.com/CorvusPrudens/bevy_seedling
-[bevy_third_person_camera]: https://github.com/The-DevBlog/bevy_third_person_camera
-[bevy_top_down_camera]: https://github.com/olekspickle/bevy_top_down_camera
-[bevy_tnua]: https://github.com/idanarye/bevy-tnua
-[Bevy Cheat Book]: https://bevy-cheatbook.github.io/introduction.html
-[BevyFlock]: https://github.com/TheBevyFlock/bevy_new_2d
-[bevy_enhanced_input]: https://github.com/projectharmonia/bevy_enhanced_input
-[cargo-generate]: https://github.com/cargo-generate/cargo-generate
-[GitHub workflows]: https://docs.github.com/en/actions/using-workflows
-[Linux dependencies]: https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md
-[skein]: https://bevyskein.dev
-[trunk]: https://trunkrs.dev/
-[Universal Animation Library]: https://quaternius.itch.io/universal-animation-library
-
-[spawn the Window hidden]: https://github.com/bevyengine/bevy/blob/release-0.14.0/examples/window/window_settings.rs#L29-L32
-[make it visible a few frames later]: https://github.com/bevyengine/bevy/blob/release-0.14.0/examples/window/window_settings.rs#L56-L64
-[`physics_in_fixed_timestep`]: https://github.com/bevyengine/bevy/blob/main/examples/movement/physics_in_fixed_timestep.rs
-[`smooth_nudge`]: https://github.com/bevyengine/bevy/blob/main/examples/movement/smooth_follow.rs#L127-L142
-[load at the start of the game]: https://github.com/rparrett/bevy_pipelines_ready/blob/main/src/lib.rs
+Based on [bevy_new_3d_rpg](https://github.com/olekspickle/bevy_new_3d_rpg) by Oleks Pickle.
