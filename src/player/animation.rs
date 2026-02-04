@@ -1,5 +1,5 @@
 use super::*;
-use crate::combat::{AttackState, PunchConnect};
+use crate::combat::{AttackConnect, AttackState};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective, builtins::*};
 
 mod anim_knobs {
@@ -7,8 +7,9 @@ mod anim_knobs {
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
 }
 
-/// Time in seconds when the punch visually connects (set by observing the animation)
-const PUNCH_CONNECT_TIME: f32 = 0.3;
+/// Time in seconds when attacks connect (tuned per animation)
+const PUNCH_HIT_TIME: f32 = 0.3;
+const HOOK_HIT_TIME: f32 = 0.35;
 
 pub fn prepare_animations(
     _: On<SceneInstanceReady>,
@@ -34,20 +35,19 @@ pub fn prepare_animations(
     let root_node = graph.root;
 
     // Create flat animation graph
-    info!("Loading {} animations:", gltf.named_animations.len());
     for (name, clip_handle) in gltf.named_animations.iter() {
-        info!("  - {}", name);
-
         // Clone the clip so we can add events to punch animations
         let Some(original_clip) = animation_clips.get(clip_handle) else {
             continue;
         };
         let mut clip = original_clip.clone();
 
-        // Add PunchConnect event to punch animations
+        // Add AttackConnect event to all attack animations
         if name.as_ref() == "Punch_Jab" || name.as_ref() == "Punch_Cross" {
-            clip.add_event(PUNCH_CONNECT_TIME, PunchConnect);
-            info!("    Added PunchConnect event at {}s", PUNCH_CONNECT_TIME);
+            clip.add_event(PUNCH_HIT_TIME, AttackConnect);
+        }
+        if name.as_ref() == "Melee_Hook" {
+            clip.add_event(HOOK_HIT_TIME, AttackConnect);
         }
 
         let modified_handle = animation_clips.add(clip);
@@ -97,40 +97,38 @@ pub fn animating(
             player.animation_state = AnimationState::Attack;
             let animating_directive = animating_state.update_by_discriminant(AnimationState::Attack);
 
-            match animating_directive {
-                TnuaAnimatingStateDirective::Alter { .. } => {
-                    // 2-hit punch combo: jab -> cross
-                    let anim_name = if attack.attack_count % 2 == 0 {
-                        "Punch_Jab"
-                    } else {
-                        "Punch_Cross"
-                    };
-                    if let Some(index) = player.animations.get(anim_name) {
-                        transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(1.2);
-                    }
-                }
-                TnuaAnimatingStateDirective::Maintain { .. } => {
-                    // Smooth speed curve: wind-up -> strike -> follow-through
-                    // Frame 0-6: wind-up (1.2x)
-                    // Frame 6-12: accelerate to strike (up to 2.5x)
-                    // Frame 12-20: hold at peak for impact feel (2.0x)
-                    // Frame 20+: slow follow-through (1.5x)
-                    let frame = attack.attack_frame;
-                    let speed = if frame < 6 {
-                        1.2
-                    } else if frame < 12 {
-                        1.2 + (frame - 6) as f32 * 0.22
-                    } else if frame < 20 {
-                        2.0
-                    } else {
-                        1.5
-                    };
+            // Alternate between jab and cross
+            let anim_name = if attack.attack_count % 2 == 0 {
+                "Punch_Jab"
+            } else {
+                "Punch_Cross"
+            };
 
-                    for (_, anim) in animation_player.playing_animations_mut() {
-                        anim.set_speed(speed);
-                    }
+            // Play new animation on state change OR at start of new attack
+            let should_switch_anim = matches!(animating_directive, TnuaAnimatingStateDirective::Alter { .. })
+                || attack.attack_frame <= 1;
+
+            if should_switch_anim {
+                if let Some(index) = player.animations.get(anim_name) {
+                    transitions
+                        .play(&mut animation_player, *index, BLEND_DURATION)
+                        .set_speed(1.2);
+                }
+            } else {
+                // Speed curve for ongoing animation
+                let frame = attack.attack_frame;
+                let speed = if frame < 6 {
+                    1.2
+                } else if frame < 12 {
+                    1.2 + (frame - 6) as f32 * 0.22
+                } else if frame < 20 {
+                    2.0
+                } else {
+                    1.5
+                };
+
+                for (_, anim) in animation_player.playing_animations_mut() {
+                    anim.set_speed(speed);
                 }
             }
             return;

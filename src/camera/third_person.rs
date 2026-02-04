@@ -51,9 +51,6 @@ fn rm_tpv_cam(mut commands: Commands, mut camera: Query<Entity, With<ThirdPerson
     }
 }
 
-fn toggle_cam_cursor(_: On<CamCursorToggle>, mut cam: Query<&mut ThirdPersonCamera>) {
-    let Ok(mut cam) = cam.single_mut() else {
-        return;
-    };
+fn toggle_cam_cursor(_: On<CamCursorToggle>, mut cam: Single<&mut ThirdPersonCamera>) {
     cam.cursor_lock_active = !cam.cursor_lock_active;
 }

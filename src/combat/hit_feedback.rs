@@ -5,12 +5,14 @@ use crate::models::SceneCamera;
 pub fn plugin(app: &mut App) {
     app.insert_resource(HitStop::default())
         .insert_resource(ScreenShake::default())
+        .insert_resource(DamageNumberCooldown::default())
         .add_observer(on_hit_stop)
         .add_observer(on_screen_shake)
         .add_observer(on_impact_vfx)
+        .add_observer(on_damage_number)
         .add_systems(
             Update,
-            (tick_hit_stop, tick_screen_shake, tick_impact_vfx),
+            (tick_hit_stop, tick_screen_shake, tick_impact_vfx, tick_damage_numbers),
         );
 }
 
@@ -19,6 +21,7 @@ pub fn plugin(app: &mut App) {
 pub struct HitEvent {
     pub target: Entity,
     pub damage: f32,
+    pub is_crit: bool,
 }
 
 // ============================================================================
@@ -201,6 +204,173 @@ fn tick_impact_vfx(
         }
 
         if impact.timer.is_finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+// ============================================================================
+// DAMAGE NUMBERS
+// ============================================================================
+
+/// Damage number colors
+pub const DAMAGE_COLOR: Color = Color::srgb(1.0, 0.85, 0.2); // Gold for normal hits
+pub const DAMAGE_SHADOW_COLOR: Color = Color::srgb(0.2, 0.1, 0.0);
+pub const CRIT_COLOR: Color = Color::srgb(1.0, 0.3, 0.2); // Red-orange for crits
+pub const CRIT_SHADOW_COLOR: Color = Color::srgb(0.3, 0.05, 0.0);
+
+/// Cooldown to prevent duplicate damage numbers from animation blend events
+#[derive(Resource, Default)]
+pub struct DamageNumberCooldown {
+    pub last_hit_time: f32,
+    pub last_target: Option<Entity>,
+}
+
+impl DamageNumberCooldown {
+    /// Minimum time between damage numbers on the SAME target
+    pub const MIN_INTERVAL: f32 = 0.1;
+}
+
+#[derive(Component)]
+pub struct DamageNumber {
+    pub timer: Timer,
+    pub world_pos: Vec3,
+    pub start_pos: Vec3,
+    pub is_crit: bool,
+}
+
+/// Marker for shadow text (rendered with offset)
+#[derive(Component)]
+pub struct DamageNumberShadow;
+
+/// Animation phases for damage numbers
+impl DamageNumber {
+    pub const TOTAL_DURATION: f32 = 0.9;
+    pub const POP_DURATION: f32 = 0.06;   // Very fast pop
+    pub const OVERSHOOT_DURATION: f32 = 0.08; // Bounce back from overshoot
+    pub const HOLD_DURATION: f32 = 0.2;   // Hold at peak
+    pub const FADE_DURATION: f32 = 0.56;  // Fade out
+    pub const RISE_AMOUNT: f32 = 1.5;     // How far it floats up
+    pub const MIN_SCALE: f32 = 0.0;       // Start invisible
+    pub const OVERSHOOT_SCALE: f32 = 1.4; // Pop bigger than final
+    pub const MAX_SCALE: f32 = 1.0;       // Settle to this
+}
+
+fn on_damage_number(
+    on: On<HitEvent>,
+    targets: Query<&Transform>,
+    mut cooldown: ResMut<DamageNumberCooldown>,
+    time: Res<Time<Real>>,
+    mut commands: Commands,
+) {
+    let event = on.event();
+    let now = time.elapsed_secs();
+    let delta = now - cooldown.last_hit_time;
+
+    // Prevent duplicate damage numbers within cooldown window
+    if delta < DamageNumberCooldown::MIN_INTERVAL {
+        return;
+    }
+
+    cooldown.last_hit_time = now;
+    cooldown.last_target = Some(event.target);
+
+    let Ok(target_transform) = targets.get(event.target) else {
+        return;
+    };
+
+    // Spawn at target's chest height
+    let world_pos = target_transform.translation + Vec3::Y * 1.4;
+    let is_crit = event.is_crit;
+
+    let damage_text = format!("{}", event.damage as i32);
+    let base_font_size = if is_crit { 80.0 } else { 64.0 };
+    let color = if is_crit { CRIT_COLOR } else { DAMAGE_COLOR };
+
+    commands.spawn((
+        DamageNumber {
+            timer: Timer::from_seconds(DamageNumber::TOTAL_DURATION, TimerMode::Once),
+            world_pos,
+            start_pos: world_pos,
+            is_crit,
+        },
+        Text::new(damage_text),
+        TextFont {
+            font_size: base_font_size,
+            ..default()
+        },
+        TextColor(color),
+        TextLayout::new_with_justify(Justify::Center),
+        Node {
+            position_type: PositionType::Absolute,
+            ..default()
+        },
+    ));
+}
+
+fn tick_damage_numbers(
+    time: Res<Time>,
+    mut commands: Commands,
+    camera: Query<(&Camera, &GlobalTransform), With<SceneCamera>>,
+    mut numbers: Query<(Entity, &mut DamageNumber, &mut Node, &mut TextColor, &mut TextFont)>,
+) {
+    let Ok((camera, camera_transform)) = camera.single() else {
+        return;
+    };
+
+    for (entity, mut dmg, mut node, mut color, mut font) in numbers.iter_mut() {
+        dmg.timer.tick(time.delta());
+        let elapsed = dmg.timer.elapsed_secs();
+
+        let phase1_end = DamageNumber::POP_DURATION;
+        let phase2_end = phase1_end + DamageNumber::OVERSHOOT_DURATION;
+        let phase3_end = phase2_end + DamageNumber::HOLD_DURATION;
+
+        // Phase-based animation with overshoot bounce
+        let (scale, alpha, rise_progress) = if elapsed < phase1_end {
+            // Phase 1: Explosive pop to overshoot
+            let t = elapsed / DamageNumber::POP_DURATION;
+            let eased = 1.0 - (1.0 - t).powi(2); // Ease out quad
+            let scale = DamageNumber::MIN_SCALE + (DamageNumber::OVERSHOOT_SCALE - DamageNumber::MIN_SCALE) * eased;
+            (scale, 1.0, 0.0)
+        } else if elapsed < phase2_end {
+            // Phase 2: Settle back from overshoot (bounce)
+            let t = (elapsed - phase1_end) / DamageNumber::OVERSHOOT_DURATION;
+            let eased = t * t; // Ease in
+            let scale = DamageNumber::OVERSHOOT_SCALE - (DamageNumber::OVERSHOOT_SCALE - DamageNumber::MAX_SCALE) * eased;
+            (scale, 1.0, t * 0.05)
+        } else if elapsed < phase3_end {
+            // Phase 3: Hold at peak
+            let _t = (elapsed - phase2_end) / DamageNumber::HOLD_DURATION;
+            (DamageNumber::MAX_SCALE, 1.0, 0.15)
+        } else {
+            // Phase 4: Rise and fade out
+            let t = (elapsed - phase3_end) / DamageNumber::FADE_DURATION;
+            let t_clamped = t.min(1.0);
+            let rise_eased = 1.0 - (1.0 - t_clamped).powi(2);
+            let alpha_eased = (1.0 - t_clamped).powi(3);
+            let scale = DamageNumber::MAX_SCALE * (1.0 - t_clamped * 0.2);
+            (scale, alpha_eased, 0.15 + rise_eased * 0.85)
+        };
+
+        // Update world position (smooth rise)
+        dmg.world_pos = dmg.start_pos + Vec3::Y * (rise_progress * DamageNumber::RISE_AMOUNT);
+
+        // Project to screen space
+        if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, dmg.world_pos) {
+            node.left = Val::Px(screen_pos.x - 30.0);
+            node.top = Val::Px(screen_pos.y - 24.0);
+        }
+
+        // Apply scale via font size (crits are bigger)
+        let base_font_size = if dmg.is_crit { 80.0 } else { 64.0 };
+        font.font_size = base_font_size * scale;
+
+        // Apply alpha
+        let base_color = if dmg.is_crit { CRIT_COLOR } else { DAMAGE_COLOR };
+        color.0 = base_color.with_alpha(alpha);
+
+        if dmg.timer.is_finished() {
             commands.entity(entity).despawn();
         }
     }

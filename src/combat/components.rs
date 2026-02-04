@@ -53,6 +53,8 @@ pub struct AttackState {
     pub attack_count: u32,
     /// Whether the hit has been triggered for this attack.
     pub hit_triggered: bool,
+    /// Whether current attack is a critical hit.
+    pub is_crit: bool,
 }
 
 impl AttackState {
@@ -63,6 +65,7 @@ impl AttackState {
             attack_frame: 0,
             attack_count: 0,
             hit_triggered: false,
+            is_crit: false,
         }
     }
 
@@ -93,6 +96,7 @@ pub struct DamageEvent {
     pub damage: f32,
     pub knockback_direction: Vec3,
     pub knockback_force: f32,
+    pub is_crit: bool,
 }
 
 /// Event fired when an entity dies (use with commands.trigger()).
@@ -116,10 +120,10 @@ pub struct PlayerCombatant;
 #[reflect(Component)]
 pub struct Enemy;
 
-/// Animation event fired when a punch connects.
-/// Added to punch animation clips at the exact frame where the fist extends.
+/// Animation event fired when an attack connects.
+/// Added to attack animation clips at the frame where the hit lands.
 #[derive(AnimationEvent, Clone, Debug)]
-pub struct PunchConnect;
+pub struct AttackConnect;
 
 /// Physics collision layers for combat entities.
 #[derive(PhysicsLayer, Clone, Copy, Debug, Default)]

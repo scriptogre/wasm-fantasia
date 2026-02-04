@@ -15,7 +15,7 @@ pub(super) fn plugin(app: &mut App) {
             Update,
             (
                 log_transitions::<Screen>,
-                tab_trigger_system.run_if(input_just_pressed(KeyCode::Tab)),
+                tab_trigger_system.run_if(input_just_pressed(KeyCode::F3)),
             ),
         )
         .add_observer(toggle_debug_ui);
