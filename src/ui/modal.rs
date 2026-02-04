@@ -30,7 +30,7 @@ pub fn add_new_modal(
             if !state.paused {
                 commands.trigger(TogglePause);
             }
-            commands.entity(on.entity).trigger(CamCursorToggle);
+            commands.trigger(CamCursorToggle);
         }
     }
 
@@ -45,7 +45,7 @@ pub fn add_new_modal(
 }
 
 pub fn pop_modal(
-    pop: On<PopModal>,
+    _pop: On<PopModal>,
     screen: Res<State<Screen>>,
     menu_marker: Query<Entity, With<MenuModal>>,
     settings_marker: Query<Entity, With<SettingsModal>>,
@@ -56,7 +56,6 @@ pub fn pop_modal(
         return;
     }
 
-    info!("Chat are we popping? {:?}", modals);
     // just a precaution
     assert!(!modals.is_empty());
 
@@ -83,12 +82,8 @@ pub fn pop_modal(
     }
 
     if modals.is_empty() {
-        info!("PopModal target entity: {}", pop.event_target());
         commands.trigger(TogglePause);
-        commands
-            .entity(pop.event_target())
-            .insert(ModalCtx)
-            .trigger(CamCursorToggle);
+        commands.trigger(CamCursorToggle);
     }
 }
 

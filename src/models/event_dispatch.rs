@@ -18,8 +18,8 @@ pub struct SwitchTab {
     pub entity: Entity,
     pub tab: UiTab,
 }
-#[derive(EntityEvent)]
-pub struct CamCursorToggle(pub Entity);
+#[derive(Event)]
+pub struct CamCursorToggle;
 #[derive(Event)]
 pub struct TogglePause;
 #[derive(Event)]
