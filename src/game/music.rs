@@ -44,15 +44,9 @@ fn start_soundtrack(
     commands.insert_resource(mp);
 }
 
-fn stop_soundtrack(
-    mut music: Query<&mut PlaybackSettings, With<MusicPool>>,
-    mut music_pb: ResMut<MusicPlaybacks>,
-) {
-    for (_, e) in music_pb.iter_mut() {
-        let Ok(mut s) = music.get_mut(*e) else {
-            continue;
-        };
-        s.pause();
+fn stop_soundtrack(mut commands: Commands, music_pb: Res<MusicPlaybacks>) {
+    for (_, e) in music_pb.iter() {
+        commands.entity(*e).insert(FadeOut);
     }
 }
 

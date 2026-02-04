@@ -2,7 +2,7 @@ use super::*;
 use bevy::time::common_conditions::on_timer;
 use std::time::Duration;
 
-const FADE_TIME: f64 = 0.5; // seconds
+const FADE_TIME: f64 = 2.0; // seconds
 
 pub fn plugin(app: &mut App) {
     app.add_systems(

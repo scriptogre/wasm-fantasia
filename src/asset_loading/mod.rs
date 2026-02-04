@@ -104,8 +104,6 @@ pub struct AudioSources {
 
     // music
     #[dependency]
-    pub menu: ShuffleBag<Handle<AudioSample>>,
-    #[dependency]
     pub explore: ShuffleBag<Handle<AudioSample>>,
     #[dependency]
     pub combat: ShuffleBag<Handle<AudioSample>>,
@@ -124,9 +122,7 @@ impl AudioSources {
         "audio/sfx/step4.ogg",
     ];
     pub const PUNCHES: &[&'static str] = &["audio/sfx/punch.wav"];
-    pub const MENU: &[&'static str] = &["audio/music/smnbl-green-embrace.ogg"];
-    pub const EXPLORE: &[&'static str] = &["audio/music/smnbl-rush-through-the-field.ogg"];
-    pub const COMBAT: &[&'static str] = &["audio/music/smnbl-trouble.ogg"];
+    pub const GAMEPLAY: &'static str = "audio/music/embrace-the-fight.ogg";
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -137,16 +133,14 @@ impl FromWorld for AudioSources {
 
         let steps = Self::STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
         let punches = Self::PUNCHES.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
-        let explore = Self::EXPLORE.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
-        let combat = Self::COMBAT.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
-        let menu = Self::MENU.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+        let gameplay: Handle<AudioSample> = a.load(Self::GAMEPLAY);
 
         Self {
-            menu: ShuffleBag::try_new(menu, &mut rng).unwrap(),
             steps: ShuffleBag::try_new(steps, &mut rng).unwrap(),
             punches: ShuffleBag::try_new(punches, &mut rng).unwrap(),
-            combat: ShuffleBag::try_new(combat, &mut rng).unwrap(),
-            explore: ShuffleBag::try_new(explore, &mut rng).unwrap(),
+            // Same track for both moods
+            combat: ShuffleBag::try_new(vec![gameplay.clone()], &mut rng).unwrap(),
+            explore: ShuffleBag::try_new(vec![gameplay], &mut rng).unwrap(),
             hover: a.load(Self::BTN_HOVER),
             press: a.load(Self::BTN_PRESS),
         }
