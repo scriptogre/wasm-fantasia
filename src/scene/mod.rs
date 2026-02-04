@@ -40,7 +40,7 @@ pub fn setup_animus_scene(
         Mesh3d(floor_mesh),
         MeshMaterial3d(floor_material),
         Transform::from_translation(Vec3::ZERO),
-        Collider::half_space(Vec3::Y), // Infinite flat collision plane
+        Collider::half_space(Vec3::Y),
         RigidBody::Static,
     ));
 

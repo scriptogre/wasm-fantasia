@@ -7,10 +7,10 @@ pub fn plugin(app: &mut App) {
         .insert_resource(ScreenShake::default())
         .add_observer(on_hit_stop)
         .add_observer(on_screen_shake)
-        .add_observer(on_flash)
+        .add_observer(on_impact_vfx)
         .add_systems(
             Update,
-            (tick_hit_stop, tick_screen_shake, tick_flash),
+            (tick_hit_stop, tick_screen_shake, tick_impact_vfx),
         );
 }
 
@@ -32,7 +32,7 @@ pub struct HitStop {
 }
 
 impl HitStop {
-    pub const DURATION: f32 = 0.08; // ~5 frames at 60fps - more punch
+    pub const DURATION: f32 = 0.05; // ~3 frames - quick punch
 }
 
 fn on_hit_stop(
@@ -73,9 +73,9 @@ pub struct ScreenShake {
 }
 
 impl ScreenShake {
-    pub const DECAY: f32 = 4.0;
-    pub const MAX_OFFSET: f32 = 0.5;
-    pub const HIT_TRAUMA: f32 = 0.5;
+    pub const DECAY: f32 = 3.0;      // Slower decay = longer shake
+    pub const MAX_OFFSET: f32 = 0.8; // Stronger shake
+    pub const HIT_TRAUMA: f32 = 0.6; // More initial trauma
 }
 
 fn on_screen_shake(_on: On<HitEvent>, mut shake: ResMut<ScreenShake>) {
@@ -106,52 +106,102 @@ fn tick_screen_shake(
 }
 
 // ============================================================================
-// WHITE FLASH
+// IMPACT VFX (Modern/Sleek Style)
 // ============================================================================
 
 #[derive(Component)]
-pub struct HitFlash {
+pub struct ImpactVfx {
     pub timer: Timer,
-    pub original_color: Color,
+    pub start_scale: Vec3,
+    pub end_scale: Vec3,
 }
 
-fn on_flash(
+fn on_impact_vfx(
     on: On<HitEvent>,
+    targets: Query<&Transform>,
+    hand_bones: Query<(&Name, &GlobalTransform)>,
     mut commands: Commands,
-    targets: Query<&MeshMaterial3d<StandardMaterial>, Without<HitFlash>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let event = on.event();
 
-    if let Ok(mat_handle) = targets.get(event.target) {
-        if let Some(mat) = materials.get(&mat_handle.0) {
-            let original = mat.base_color;
-            commands.entity(event.target).insert(HitFlash {
-                timer: Timer::from_seconds(0.05, TimerMode::Once),
-                original_color: original,
-            });
-            // Set to white
-            if let Some(mat) = materials.get_mut(&mat_handle.0) {
-                mat.base_color = Color::WHITE;
-            }
-        }
+    let Ok(target_transform) = targets.get(event.target) else {
+        return;
+    };
+
+    let target_pos = target_transform.translation;
+
+    // Find the hand bone closest to the target - that's the one punching
+    let impact_pos = hand_bones
+        .iter()
+        .filter(|(name, _)| {
+            let n = name.as_str().to_lowercase();
+            n.contains("hand")
+        })
+        .min_by(|(_, a), (_, b)| {
+            let dist_a = a.translation().distance_squared(target_pos);
+            let dist_b = b.translation().distance_squared(target_pos);
+            dist_a.partial_cmp(&dist_b).unwrap()
+        })
+        .map(|(_, gt)| gt.translation())
+        .unwrap_or_else(|| target_pos + Vec3::Y * 0.8);
+
+    // Impact lines only (no sphere)
+    let line_mesh = meshes.add(Cuboid::new(0.08, 0.08, 0.6));
+    let line_mat = materials.add(StandardMaterial {
+        base_color: Color::srgba(1.0, 0.8, 0.3, 1.0),
+        emissive: LinearRgba::new(8.0, 5.0, 1.0, 1.0),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        ..default()
+    });
+
+    // Spawn 8 lines at different angles
+    for i in 0..8 {
+        let angle = (i as f32 / 8.0) * std::f32::consts::TAU;
+        let dir = Vec3::new(angle.cos(), 0.0, angle.sin()).normalize();
+        let rotation = Quat::from_rotation_arc(Vec3::Z, dir);
+
+        commands.spawn((
+            Mesh3d(line_mesh.clone()),
+            MeshMaterial3d(line_mat.clone()),
+            Transform::from_translation(impact_pos + dir * 0.3)
+                .with_rotation(rotation)
+                .with_scale(Vec3::new(1.0, 1.0, 0.3)),
+            ImpactVfx {
+                timer: Timer::from_seconds(0.12, TimerMode::Once),
+                start_scale: Vec3::new(1.0, 1.0, 0.3),
+                end_scale: Vec3::new(0.3, 0.3, 2.5),
+            },
+        ));
     }
 }
 
-fn tick_flash(
+fn tick_impact_vfx(
     time: Res<Time>,
     mut commands: Commands,
-    mut flashing: Query<(Entity, &mut HitFlash, &MeshMaterial3d<StandardMaterial>)>,
+    mut vfx: Query<(Entity, &mut ImpactVfx, &mut Transform, &MeshMaterial3d<StandardMaterial>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (entity, mut flash, mat_handle) in flashing.iter_mut() {
-        flash.timer.tick(time.delta());
+    for (entity, mut impact, mut transform, mat_handle) in vfx.iter_mut() {
+        impact.timer.tick(time.delta());
 
-        if flash.timer.is_finished() {
-            if let Some(mat) = materials.get_mut(&mat_handle.0) {
-                mat.base_color = flash.original_color;
-            }
-            commands.entity(entity).remove::<HitFlash>();
+        let progress = impact.timer.fraction();
+        // Ease out for snappy feel
+        let eased = 1.0 - (1.0 - progress).powi(2);
+
+        let scale = impact.start_scale.lerp(impact.end_scale, eased);
+        transform.scale = scale;
+
+        // Quick fade out
+        if let Some(mat) = materials.get_mut(&mat_handle.0) {
+            let alpha = (1.0 - eased).max(0.0);
+            mat.base_color = mat.base_color.with_alpha(alpha);
+        }
+
+        if impact.timer.is_finished() {
+            commands.entity(entity).despawn();
         }
     }
 }

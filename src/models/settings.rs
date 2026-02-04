@@ -1,5 +1,4 @@
 use super::*;
-use crate::scene::SunCycle;
 use serde::Deserialize;
 use std::{error::Error, fs};
 
@@ -32,7 +31,6 @@ pub struct Settings {
     pub sound: SoundPreset,
     // video
     pub fov: f32,
-    pub sun_cycle: SunCycle,
     // keybindings
     pub input_map: InputSettings,
 }
@@ -74,7 +72,6 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            sun_cycle: SunCycle::DayNight,
             sound: SoundPreset::default(),
             fov: 45.0, // bevy default
             input_map: InputSettings::default(),

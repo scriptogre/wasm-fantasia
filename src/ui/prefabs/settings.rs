@@ -22,7 +22,6 @@ markers!(
     GeneralVolumeLabel,
     MusicVolumeLabel,
     SfxVolumeLabel,
-    SunCycleLabel,
     SaveSettingsLabel,
     VsyncLabel,
     FovLabel,
@@ -87,9 +86,7 @@ fn update_tab_content(
                             commands.spawn(audio_grid()).insert(ChildOf(e));
                         }
                         UiTab::Video => {
-                            commands
-                                .spawn(video_grid(&settings.sun_cycle))
-                                .insert(ChildOf(e));
+                            commands.spawn(video_grid()).insert(ChildOf(e));
                         }
                         UiTab::Keybindings => {
                             commands
@@ -318,30 +315,6 @@ fn click_toggle_debug_ui(
     }
 }
 
-fn click_toggle_sun_cycle(
-    _: On<Pointer<Click>>,
-    children: Query<&Children>,
-    commands: Commands,
-    mut settings: ResMut<Settings>,
-    mut labels: Query<Entity, With<SunCycleLabel>>,
-) {
-    match settings.sun_cycle {
-        SunCycle::Nimbus => settings.sun_cycle = SunCycle::DayNight,
-        SunCycle::DayNight => settings.sun_cycle = SunCycle::Nimbus,
-    }
-
-    if let Ok(mut label) = labels.single_mut() {
-        label.replace_recursive(
-            children,
-            commands,
-            (
-                btn(settings.sun_cycle.as_str(), click_toggle_sun_cycle),
-                SunCycleLabel,
-            ),
-        );
-    }
-}
-
 fn click_toggle_settings(
     click: On<Pointer<Click>>,
     mut commands: Commands,
@@ -460,7 +433,7 @@ fn bottom_row() -> impl Bundle {
     )
 }
 
-fn video_grid(cycle: &SunCycle) -> impl Bundle {
+fn video_grid() -> impl Bundle {
     (
         Name::new("Settings Video Grid"),
         Node {
@@ -474,21 +447,15 @@ fn video_grid(cycle: &SunCycle) -> impl Bundle {
         },
         #[cfg(target_arch = "wasm32")]
         children![
-            label("Sun cycle"),
-            (btn(cycle.as_str(), click_toggle_sun_cycle), SunCycleLabel),
             label("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
-            // TODO: do checkboxes when feathers
             label("VSync"),
             (btn("on", click_toggle_vsync), VsyncLabel),
         ],
         #[cfg(not(target_arch = "wasm32"))]
         children![
-            label("Sun cycle"),
-            (btn(cycle.as_str(), click_toggle_sun_cycle), SunCycleLabel),
             label("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
-            // TODO: do checkboxes when feathers
             label("VSync"),
             (btn("on", click_toggle_vsync), VsyncLabel),
             label("diagnostics"),

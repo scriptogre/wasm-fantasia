@@ -18,6 +18,7 @@ pub mod models;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod networking;
 pub mod player;
+pub mod postfx;
 pub mod scene;
 pub mod screens;
 pub mod ui;
@@ -28,7 +29,6 @@ use asset_loading::{Models, ResourceHandles, Textures};
 #[cfg(not(target_arch = "wasm32"))]
 use audio::*;
 use models::*;
-use scene::*;
 use ui::*;
 
 fn main() {

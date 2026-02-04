@@ -5,11 +5,6 @@ use bevy::{
     light::{CascadeShadowConfigBuilder, light_consts::lux},
     pbr::{Atmosphere, AtmosphereSettings, DistanceFog, FogFalloff},
 };
-use serde::{Deserialize, Serialize};
-
-pub fn plugin(app: &mut App) {
-    app.add_systems(Update, sun_cycle.run_if(in_state(Screen::Gameplay)));
-}
 
 markers!(Sun, Moon);
 
@@ -104,36 +99,5 @@ pub fn distance_fog(cfg: Res<Config>) -> impl Bundle {
         //     Color::srgb(0.35, 0.5, 0.66), // atmospheric extinction color (after light is lost due to absorption by atmospheric particles)
         //     Color::srgb(0.8, 0.844, 1.0), // atmospheric inscattering color (light gained due to scattering from the sun)
         // ),
-    }
-}
-
-#[allow(clippy::type_complexity)]
-fn sun_cycle(
-    settings: Res<Settings>,
-    mut sky_lights: Query<&mut Transform, Or<(With<Moon>, With<Sun>)>>,
-    time: Res<Time>,
-) {
-    match settings.sun_cycle {
-        SunCycle::DayNight => sky_lights
-            .iter_mut()
-            .for_each(|mut tf| tf.rotate_x(-time.delta_secs() * std::f32::consts::PI / 50.0)),
-        SunCycle::Nimbus => sky_lights
-            .iter_mut()
-            .for_each(|mut tf| tf.rotate_y(-time.delta_secs() * std::f32::consts::PI / 50.0)),
-    }
-}
-
-#[derive(Reflect, Debug, Clone, Serialize, Deserialize)]
-pub enum SunCycle {
-    DayNight,
-    Nimbus,
-}
-
-impl SunCycle {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SunCycle::DayNight => "DayNight",
-            SunCycle::Nimbus => "Nimbus",
-        }
     }
 }

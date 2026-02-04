@@ -1,5 +1,5 @@
 use super::*;
-use avian3d::prelude::{Collider, LockedAxes, RigidBody};
+use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
 use bevy_enhanced_input::prelude::Start;
 use crate::models::SpawnEnemy;
 
@@ -38,10 +38,11 @@ fn spawn_enemy_in_front(
         Health::new(1000.0),
         Enemy,
         Combatant,
-        // Physics
+        // Physics - heavy so player can't push easily
         Collider::capsule(0.5, 1.0),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
+        Mass(500.0),
     ));
 
     info!("Spawned enemy at {:?}", spawn_pos);

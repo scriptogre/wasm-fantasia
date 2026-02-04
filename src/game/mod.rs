@@ -11,6 +11,7 @@ pub fn plugin(app: &mut App) {
         scene::plugin,
         player::plugin,
         combat::plugin,
+        postfx::plugin,
         #[cfg(not(target_arch = "wasm32"))]
         music::plugin,
         #[cfg(any(feature = "dev_native", not(target_arch = "wasm32")))]

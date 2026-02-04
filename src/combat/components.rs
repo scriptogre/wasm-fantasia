@@ -1,4 +1,5 @@
-use bevy::prelude::*;
+use avian3d::prelude::PhysicsLayer;
+use bevy::{animation::AnimationEvent, prelude::*};
 
 pub fn plugin(app: &mut App) {
     app.register_type::<Health>()
@@ -46,10 +47,12 @@ pub struct AttackState {
     pub cooldown: Timer,
     /// Whether we're currently in an attack animation.
     pub attacking: bool,
-    /// Frame within the attack (for hit window timing).
+    /// Frame within the attack (for animation speed control).
     pub attack_frame: u32,
     /// Counter for alternating attack animations.
     pub attack_count: u32,
+    /// Whether the hit has been triggered for this attack.
+    pub hit_triggered: bool,
 }
 
 impl AttackState {
@@ -59,6 +62,7 @@ impl AttackState {
             attacking: false,
             attack_frame: 0,
             attack_count: 0,
+            hit_triggered: false,
         }
     }
 
@@ -70,6 +74,7 @@ impl AttackState {
         self.attacking = true;
         self.attack_frame = 0;
         self.attack_count += 1;
+        self.hit_triggered = false;
         self.cooldown.reset();
     }
 }
@@ -110,3 +115,17 @@ pub struct PlayerCombatant;
 #[derive(Component, Reflect, Debug, Clone, Default)]
 #[reflect(Component)]
 pub struct Enemy;
+
+/// Animation event fired when a punch connects.
+/// Added to punch animation clips at the exact frame where the fist extends.
+#[derive(AnimationEvent, Clone, Debug)]
+pub struct PunchConnect;
+
+/// Physics collision layers for combat entities.
+#[derive(PhysicsLayer, Clone, Copy, Debug, Default)]
+pub enum GameLayer {
+    #[default]
+    Ground,
+    Player,
+    Enemy,
+}

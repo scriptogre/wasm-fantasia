@@ -11,7 +11,7 @@
     player:(
         spawn_pos: (0.0, 1.5, 0.0),
         fov: 60,
-        zoom: (1.5, 30),
+        zoom: (2.0, 10),  // Initial zoom is midpoint (6.0)
         movement: (
             speed: 10,
             sprint_factor: 1.5,

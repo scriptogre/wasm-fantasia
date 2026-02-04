@@ -1,11 +1,14 @@
 use super::*;
-use crate::combat::AttackState;
+use crate::combat::{AttackState, PunchConnect};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective, builtins::*};
 
 mod anim_knobs {
     pub const GENERAL_SPEED: f32 = 0.1;
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
 }
+
+/// Time in seconds when the punch visually connects (set by observing the animation)
+const PUNCH_CONNECT_TIME: f32 = 0.3;
 
 pub fn prepare_animations(
     _: On<SceneInstanceReady>,
@@ -15,6 +18,7 @@ pub fn prepare_animations(
     mut player: Query<&mut Player>,
     mut commands: Commands,
     mut animation_graphs: ResMut<Assets<AnimationGraph>>,
+    mut animation_clips: ResMut<Assets<AnimationClip>>,
 ) {
     let Some(gltf) = gltf_assets.get(&models.player) else {
         return;
@@ -31,13 +35,26 @@ pub fn prepare_animations(
 
     // Create flat animation graph
     info!("Loading {} animations:", gltf.named_animations.len());
-    for (name, clip) in gltf.named_animations.iter() {
+    for (name, clip_handle) in gltf.named_animations.iter() {
         info!("  - {}", name);
-        let node_index = graph.add_clip(clip.clone(), 1.0, root_node);
+
+        // Clone the clip so we can add events to punch animations
+        let Some(original_clip) = animation_clips.get(clip_handle) else {
+            continue;
+        };
+        let mut clip = original_clip.clone();
+
+        // Add PunchConnect event to punch animations
+        if name.as_ref() == "Punch_Jab" || name.as_ref() == "Punch_Cross" {
+            clip.add_event(PUNCH_CONNECT_TIME, PunchConnect);
+            info!("    Added PunchConnect event at {}s", PUNCH_CONNECT_TIME);
+        }
+
+        let modified_handle = animation_clips.add(clip);
+        let node_index = graph.add_clip(modified_handle, 1.0, root_node);
         player.animations.insert(name.to_string(), node_index);
     }
 
-    // TODO: check if it still works on the second gamepad
     commands.entity(animation_player).insert((
         AnimationGraphHandle(animation_graphs.add(graph)),
         AnimationTransitions::new(),
@@ -89,23 +106,26 @@ pub fn animating(
                         "Punch_Cross"
                     };
                     if let Some(index) = player.animations.get(anim_name) {
-                        // Start slow (wind-up)
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(1.5);
+                            .set_speed(1.2);
                     }
                 }
                 TnuaAnimatingStateDirective::Maintain { .. } => {
-                    // Accelerate animation: slow wind-up -> fast strike
-                    // Frame 0-5: wind-up (1.5x), Frame 5-15: accelerate (up to 5x)
+                    // Smooth speed curve: wind-up -> strike -> follow-through
+                    // Frame 0-6: wind-up (1.2x)
+                    // Frame 6-12: accelerate to strike (up to 2.5x)
+                    // Frame 12-20: hold at peak for impact feel (2.0x)
+                    // Frame 20+: slow follow-through (1.5x)
                     let frame = attack.attack_frame;
-                    let speed = if frame < 5 {
-                        1.5 // Slow wind-up
-                    } else if frame < 15 {
-                        // Accelerate from 1.5 to 5.0
-                        1.5 + (frame - 5) as f32 * 0.35
+                    let speed = if frame < 6 {
+                        1.2
+                    } else if frame < 12 {
+                        1.2 + (frame - 6) as f32 * 0.22
+                    } else if frame < 20 {
+                        2.0
                     } else {
-                        5.0 // Fast follow-through
+                        1.5
                     };
 
                     for (_, anim) in animation_player.playing_animations_mut() {

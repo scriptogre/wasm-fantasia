@@ -1,24 +1,23 @@
 use super::*;
+use avian3d::prelude::LinearVelocity;
 use avian3d::spatial_query::{SpatialQuery, SpatialQueryFilter};
 use bevy_enhanced_input::prelude::Start;
 use bevy_tnua::prelude::*;
 
 /// Attack configuration
-pub const ATTACK_RANGE: f32 = 2.0;
-pub const ATTACK_RADIUS: f32 = 1.2;
+pub const ATTACK_RANGE: f32 = 1.2;
+pub const ATTACK_RADIUS: f32 = 0.5;
 pub const ATTACK_DAMAGE: f32 = 25.0;
-pub const ATTACK_KNOCKBACK: f32 = 25.0;
-pub const ATTACK_HIT_FRAME: u32 = 12; // Delay hit to match visual punch connection
+pub const ATTACK_KNOCKBACK: f32 = 3.0;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(handle_attack)
+        .add_observer(on_punch_connect)
         .add_observer(on_damage)
         .add_observer(on_death)
         .add_systems(
             Update,
-            (tick_attack_state, process_attack_hits)
-                .chain()
-                .run_if(in_state(Screen::Gameplay)),
+            tick_attack_state.run_if(in_state(Screen::Gameplay)),
         );
 }
 
@@ -44,8 +43,8 @@ fn tick_attack_state(time: Res<Time>, mut query: Query<&mut AttackState>) {
         if state.attacking {
             state.attack_frame += 1;
 
-            // Let animation play through to punch connection
-            if state.attack_frame > 25 {
+            // Let animation play through fully (longer duration for complete punch)
+            if state.attack_frame > 35 {
                 state.attacking = false;
                 state.attack_frame = 0;
             }
@@ -53,18 +52,22 @@ fn tick_attack_state(time: Res<Time>, mut query: Query<&mut AttackState>) {
     }
 }
 
-/// Check for hits on the attack's active frame using spatial query.
-fn process_attack_hits(
+/// Observer: triggered by PunchConnect animation event when the punch visually connects.
+fn on_punch_connect(
+    _on: On<PunchConnect>,
     spatial: SpatialQuery,
-    attackers: Query<(Entity, &AttackState, &Transform), With<PlayerCombatant>>,
+    mut attackers: Query<(Entity, &mut AttackState, &Transform), With<PlayerCombatant>>,
     targets: Query<Entity, (With<Health>, With<Enemy>)>,
     mut commands: Commands,
 ) {
-    for (attacker_entity, attack_state, transform) in attackers.iter() {
-        // Only check on the hit frame
-        if !attack_state.attacking || attack_state.attack_frame != ATTACK_HIT_FRAME {
+    for (attacker_entity, mut attack_state, transform) in attackers.iter_mut() {
+        // Only process if attacking and hit not yet triggered
+        if !attack_state.attacking || attack_state.hit_triggered {
             continue;
         }
+
+        // Mark hit as triggered
+        attack_state.hit_triggered = true;
 
         // Calculate attack position (in front of player)
         let forward = transform.forward();
@@ -80,7 +83,6 @@ fn process_attack_hits(
         );
 
         for hit_entity in hits {
-            // Only damage valid targets
             if targets.get(hit_entity).is_ok() {
                 let knockback_dir = forward.as_vec3();
 
@@ -115,13 +117,17 @@ fn on_damage(
         damage: event.damage,
     });
 
-    // Apply knockback via Tnua if available
+    // Apply knockback
     if let Some(mut controller) = controller {
-        // Apply velocity directly since TnuaBuiltinKnockback API changed
+        // Player uses Tnua
         controller.basis(TnuaBuiltinWalk {
             desired_velocity: event.knockback_direction * event.knockback_force,
             ..default()
         });
+    } else {
+        // Enemies use direct velocity
+        let velocity = event.knockback_direction * event.knockback_force;
+        commands.entity(event.target).insert(LinearVelocity(velocity));
     }
 
     if died {

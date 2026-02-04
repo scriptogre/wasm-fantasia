@@ -56,7 +56,6 @@ impl Plugin for NetworkingPlugin {
                 player::interpolate_positions.run_if(resource_exists::<SpacetimeDbConnection>),
                 process_outbound_lag.run_if(resource_exists::<SpacetimeDbConnection>),
                 player::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
-                adjust_lag_settings,
             ));
     }
 }
@@ -205,57 +204,3 @@ fn process_outbound_lag(
     });
 }
 
-/// System to adjust lag simulator settings with keyboard
-pub fn adjust_lag_settings(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut lag: ResMut<LagSimulator>,
-) {
-    const DELAY_STEP: u64 = 25; // 25ms increments
-
-    // F1/F2: Decrease/Increase outbound delay
-    if keys.just_pressed(KeyCode::F1) {
-        lag.outbound_delay_ms = lag.outbound_delay_ms.saturating_sub(DELAY_STEP);
-        info!("Outbound delay: {}ms", lag.outbound_delay_ms);
-    }
-    if keys.just_pressed(KeyCode::F2) {
-        lag.outbound_delay_ms += DELAY_STEP;
-        info!("Outbound delay: {}ms", lag.outbound_delay_ms);
-    }
-
-    // F3/F4: Decrease/Increase inbound delay
-    if keys.just_pressed(KeyCode::F3) {
-        lag.inbound_delay_ms = lag.inbound_delay_ms.saturating_sub(DELAY_STEP);
-        info!("Inbound delay: {}ms", lag.inbound_delay_ms);
-    }
-    if keys.just_pressed(KeyCode::F4) {
-        lag.inbound_delay_ms += DELAY_STEP;
-        info!("Inbound delay: {}ms", lag.inbound_delay_ms);
-    }
-
-    // F5: Toggle packet loss (10% when enabled)
-    if keys.just_pressed(KeyCode::F5) {
-        if lag.packet_loss_chance == 0.0 {
-            lag.packet_loss_chance = 0.1;
-            info!("Packet loss: ON (10%)");
-        } else {
-            lag.packet_loss_chance = 0.0;
-            info!("Packet loss: OFF");
-        }
-    }
-
-    // F6: Reset all lag settings
-    if keys.just_pressed(KeyCode::F6) {
-        *lag = LagSimulator::default();
-        info!("Lag simulator: RESET");
-    }
-
-    // Print current settings on F7
-    if keys.just_pressed(KeyCode::F7) {
-        info!(
-            "Lag Settings - Outbound: {}ms, Inbound: {}ms, Packet Loss: {:.0}%",
-            lag.outbound_delay_ms,
-            lag.inbound_delay_ms,
-            lag.packet_loss_chance * 100.0
-        );
-    }
-}
