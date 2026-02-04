@@ -5,15 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 **Native Development**
-- `make run` or `cargo run` - Run native dev build
-- `make build` - Build native release
-- `make lint` - Run clippy, fmt check, and machete (unused deps)
-- `make hot` or `dx serve --hot-patch` - Run with hotpatching (requires BEVY_ASSET_ROOT="." on Linux/macOS)
+- `just` - Run native dev build with dev_native features
+- `just build` - Build native release
+- `just check` - Pre-commit checks: clippy, fmt, machete, web compilation check
 
-**Web Development**
-- `make run-web` or `bevy run web --headers="Cross-Origin-Opener-Policy:same-origin" --headers="Cross-Origin-Embedder-Policy:credentialless"` - Run web dev with SharedArrayBuffer support (required for audio)
-- `make build-web` - Build web release bundle
-- `make check-web` - Quick check web compilation without full build
+**Multiplayer**
+- `just mp` - Start SpacetimeDB server, deploy module, launch two game clients
 
 **Testing**
 - `cargo test` - Run all tests (currently minimal)
@@ -48,12 +45,18 @@ This is a Bevy 0.17 3D RPG game template targeting native and WebAssembly platfo
 - `control.rs` - Tnua movement system with walk, sprint, crouch, jump, dash observers. Updates StepTimer based on actual velocity
 - `animation.rs` - Animation state machine syncing with Tnua state
 - `sound.rs` - Footstep sound playback (native only)
-- Spawned with: TnuaController, LockedAxes::ROTATION_LOCKED (Y-unlocked), RigidBody::Dynamic, Capsule collider, ThirdPersonCameraTarget/TopDownCameraTarget
+- Spawned with: TnuaController, LockedAxes::ROTATION_LOCKED (Y-unlocked), RigidBody::Dynamic, Capsule collider, ThirdPersonCameraTarget, combat components (Health, AttackState, Combatant, PlayerCombatant)
 
-**`src/camera/`** - Camera modes via feature flags:
-- `third_person.rs` - Uses bevy_third_person_camera plugin
-- `top_down.rs` - Uses bevy_top_down_camera plugin
+**`src/combat/`** - Combat system:
+- `components.rs` - Health, AttackState, Combatant markers, DamageEvent/DeathEvent/HitEvent
+- `systems.rs` - Attack input handling, spatial query hit detection, damage/knockback application
+- `enemy.rs` - Test enemy spawning
+- `hit_feedback.rs` - Juice effects: hit stop (freeze frame), screen shake, white flash on hit
+
+**`src/camera/`** - Third-person orbit camera (Metin2-style):
+- `third_person.rs` - Uses bevy_third_person_camera with elevated pitch (~50°) for combat visibility
 - Camera has: SceneCamera marker, Hdr, DeferredPrepass, TemporalAntiAliasing, Fxaa
+- Mouse orbits around player, scroll to zoom
 
 **`src/scene/`** - Environment loading:
 - Uses bevy_skein for Blender->Bevy workflow (components added in Blender)
@@ -98,7 +101,7 @@ Uses Quaternius Universal Animation Library. AnimationState enum is synchronized
 
 - `web` - Enables wasm32 target
 - `audio` - Enables bevy_seedling audio (native only)
-- `third_person` / `top_down` - Camera modes (default: third_person)
+- `third_person` - Orbit camera (default, required)
 - `dev_native` - Dev tools, inspector, asset hot-reloading (native)
 
 ### Key Patterns

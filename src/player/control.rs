@@ -37,10 +37,10 @@ fn movement(
         let cam_transform = camera.single()?;
         let direction = cam_transform.movement_direction(*navigate);
 
-        let float_height = 0.5;
+        let float_height = 0.15; // Lower to reduce hovering
         controller.basis(TnuaBuiltinWalk {
             float_height,
-            cling_distance: float_height + 0.01, // Slightly higher than float_height for a bit of "give".
+            cling_distance: float_height + 0.05,
             spring_strength: 500.0,              // Stronger spring for a more grounded feel.
             spring_dampening: 1.0, // Slightly reduced dampening for a more responsive spring.
             acceleration: 80.0,    // Increased acceleration for snappier movement starts and stops.
@@ -171,10 +171,6 @@ fn handle_dash(
     Ok(())
 }
 
-// fn handle_attack(on: On<Start<Attack>>, mut commands: Commands) {
-//     let entity = on.target();
-//     // TODO: Hit
-// }
 
 pub fn crouch_in(
     on: On<Start<Crouch>>,

@@ -12,6 +12,7 @@ use winit::window::Icon;
 pub mod asset_loading;
 pub mod audio;
 pub mod camera;
+pub mod combat;
 pub mod game;
 pub mod models;
 #[cfg(not(target_arch = "wasm32"))]

@@ -42,4 +42,5 @@ pub enum AnimationState {
     WallSlide,
     WallJump,
     KnockBack,
+    Attack,
 }

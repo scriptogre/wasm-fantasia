@@ -1,4 +1,5 @@
 use super::*;
+use crate::combat::AttackState;
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective, builtins::*};
 
 mod anim_knobs {
@@ -29,15 +30,18 @@ pub fn prepare_animations(
     let root_node = graph.root;
 
     // Create flat animation graph
+    info!("Loading {} animations:", gltf.named_animations.len());
     for (name, clip) in gltf.named_animations.iter() {
+        info!("  - {}", name);
         let node_index = graph.add_clip(clip.clone(), 1.0, root_node);
         player.animations.insert(name.to_string(), node_index);
     }
 
     // TODO: check if it still works on the second gamepad
-    commands
-        .entity(animation_player)
-        .insert(AnimationGraphHandle(animation_graphs.add(graph)));
+    commands.entity(animation_player).insert((
+        AnimationGraphHandle(animation_graphs.add(graph)),
+        AnimationTransitions::new(),
+    ));
 }
 
 /// Tnua takes the heavy lifting with blending animations, but it leads to most of the animation
@@ -53,17 +57,65 @@ pub fn animating(
         &TnuaController,
         &mut Player,
         &mut TnuaAnimatingState<AnimationState>,
+        Option<&AttackState>,
     )>,
-    mut animation_player: Query<&mut AnimationPlayer>,
+    mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
     // An actual game should match the animation player and the controller. Here we cheat for
     // simplicity and use the only controller and only player.
-    let Ok((controller, mut player, mut animating_state)) = player_q.single_mut() else {
+    let Ok((controller, mut player, mut animating_state, attack_state)) = player_q.single_mut()
+    else {
         return;
     };
-    let Ok(mut animation_player) = animation_player.single_mut() else {
+    let Ok((mut animation_player, mut transitions)) = animation_query.single_mut() else {
         return;
     };
+
+    // Blend duration for smooth transitions
+    const BLEND_DURATION: Duration = Duration::from_millis(150);
+
+    // Check if player is attacking - override Tnua animation
+    if let Some(attack) = attack_state {
+        if attack.attacking {
+            player.animation_state = AnimationState::Attack;
+            let animating_directive = animating_state.update_by_discriminant(AnimationState::Attack);
+
+            match animating_directive {
+                TnuaAnimatingStateDirective::Alter { .. } => {
+                    // 2-hit punch combo: jab -> cross
+                    let anim_name = if attack.attack_count % 2 == 0 {
+                        "Punch_Jab"
+                    } else {
+                        "Punch_Cross"
+                    };
+                    if let Some(index) = player.animations.get(anim_name) {
+                        // Start slow (wind-up)
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(1.5);
+                    }
+                }
+                TnuaAnimatingStateDirective::Maintain { .. } => {
+                    // Accelerate animation: slow wind-up -> fast strike
+                    // Frame 0-5: wind-up (1.5x), Frame 5-15: accelerate (up to 5x)
+                    let frame = attack.attack_frame;
+                    let speed = if frame < 5 {
+                        1.5 // Slow wind-up
+                    } else if frame < 15 {
+                        // Accelerate from 1.5 to 5.0
+                        1.5 + (frame - 5) as f32 * 0.35
+                    } else {
+                        5.0 // Fast follow-through
+                    };
+
+                    for (_, anim) in animation_player.playing_animations_mut() {
+                        anim.set_speed(speed);
+                    }
+                }
+            }
+            return;
+        }
+    }
 
     // First check Tnua animation directive
     // Here we use the data from TnuaController to determine what the character is currently doing,
@@ -198,84 +250,117 @@ pub fn animating(
             old_state: _,
             state,
         } => {
-            // Here the animations are actually being ran with their respective speed
-            animation_player.stop_all();
+            // Use transitions for smooth blending between animations
             match state {
                 AnimationState::StandIdle => {
                     if let Some(index) = player.animations.get("Idle_Loop") {
-                        animation_player.start(*index).set_speed(1.0).repeat();
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(1.0)
+                            .repeat();
                     }
                 }
                 AnimationState::Run(speed) => {
                     if let Some(index) = player.animations.get("Jog_Fwd_Loop") {
-                        animation_player.start(*index).set_speed(*speed).repeat();
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(*speed)
+                            .repeat();
                     }
                 }
                 AnimationState::Sprint(speed) => {
                     if let Some(index) = player.animations.get("Sprint_Loop") {
-                        animation_player
-                            .start(*index)
-                            .set_speed(*speed * 3.0) // sprint animation to sprint factor ratio
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(*speed * 3.0)
                             .repeat();
                     }
                 }
                 AnimationState::JumpStart => {
                     if let Some(index) = player.animations.get("Jump_Start") {
-                        animation_player.start(*index).set_speed(0.01);
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(0.01);
                     }
                 }
                 AnimationState::JumpLand => {
                     if let Some(index) = player.animations.get("Jump_Land") {
-                        animation_player.start(*index).set_speed(0.01);
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(0.01);
                     }
                 }
                 AnimationState::JumpLoop => {
                     if let Some(index) = player.animations.get("Jump_Loop") {
-                        animation_player.start(*index).set_speed(0.5).repeat();
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(0.5)
+                            .repeat();
                     }
                 }
                 AnimationState::WallJump => {
                     if let Some(index) = player.animations.get("Jump_Start") {
-                        animation_player.start(*index).set_speed(2.0);
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(2.0);
                     }
                 }
                 AnimationState::WallSlide => {
                     if let Some(index) = player.animations.get("Jump_Loop") {
-                        animation_player.start(*index).set_speed(1.0).repeat();
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(1.0)
+                            .repeat();
                     }
                 }
                 AnimationState::Fall => {
                     if let Some(index) = player.animations.get("Jump_Loop") {
-                        animation_player.start(*index).set_speed(1.0).repeat();
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(1.0)
+                            .repeat();
                     }
                 }
                 AnimationState::Crouch(speed) => {
                     if let Some(index) = player.animations.get("Crouch_Fwd_Loop") {
-                        animation_player
-                            .start(*index)
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
                             .set_speed(*speed * anim_knobs::CROUCH_ANIMATION_SPEED)
                             .repeat();
                     }
                 }
                 AnimationState::CrouchIdle => {
                     if let Some(index) = player.animations.get("Crouch_Idle_Loop") {
-                        animation_player.start(*index).set_speed(1.0).repeat();
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(1.0)
+                            .repeat();
                     }
                 }
                 AnimationState::Dash => {
                     if let Some(index) = player.animations.get("Roll") {
-                        animation_player.start(*index).set_speed(3.0);
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(3.0);
                     }
                 }
                 AnimationState::KnockBack => {
                     if let Some(index) = player.animations.get("Hit_Chest") {
-                        animation_player.start(*index).set_speed(1.0);
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(1.0);
                     }
                 }
                 AnimationState::Climb(speed) => {
                     if let Some(index) = player.animations.get("Jump_Loop") {
-                        animation_player.start(*index).set_speed(*speed).repeat();
+                        transitions
+                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .set_speed(*speed)
+                            .repeat();
                     }
+                }
+                AnimationState::Attack => {
+                    // Handled in early return above
                 }
             }
         }

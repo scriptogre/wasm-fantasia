@@ -1,3 +1,4 @@
+use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
@@ -97,6 +98,13 @@ pub fn spawn_player(
                 JumpTimer(Timer::from_seconds(cfg.timers.jump, TimerMode::Repeating)),
                 StepTimer(Timer::from_seconds(cfg.timers.step, TimerMode::Repeating)),
                 InheritedVisibility::default(), // silence the warning because of adding SceneRoot as a child
+            ),
+            // combat components
+            (
+                Health::new(100.0),
+                AttackState::new(0.15), // Fast attack chaining
+                Combatant,
+                PlayerCombatant,
             ),
         ))
         // spawn character mesh as child to adjust mesh position relative to the player origin

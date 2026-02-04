@@ -58,6 +58,10 @@ pub struct Mute;
 pub struct Escape;
 
 #[derive(InputAction)]
+#[action_output(bool)]
+pub struct SpawnEnemy;
+
+#[derive(InputAction)]
 #[action_output(Vec2)]
 struct NavigateModal;
 
@@ -132,6 +136,10 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
             },
             bindings![KeyCode::Escape, GamepadButton::Select],
         ),
+        (
+            Action::<SpawnEnemy>::new(),
+            bindings![KeyCode::KeyE],
+        ),
     ]));
 }
 
@@ -158,7 +166,7 @@ fn add_modal_ctx(add: On<Add, ModalCtx>, mut commands: Commands) {
             ),
         (
             Action::<Select>::new(),
-            bindings![KeyCode::Enter, GamepadButton::South, MouseButton::Left],
+            bindings![KeyCode::Enter, GamepadButton::South],
         ),
         (
             Action::<RightTab>::new(),

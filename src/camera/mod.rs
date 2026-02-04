@@ -11,8 +11,9 @@ mod third_person;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(DefaultOpaqueRendererMethod::deferred())
-        .add_systems(Startup, spawn_camera)
-        .add_systems(OnEnter(Screen::Title), add_skybox_to_camera);
+        .add_systems(Startup, spawn_camera);
+    // Skybox disabled for Animus-style clean look
+    // .add_systems(OnEnter(Screen::Title), add_skybox_to_camera);
 
     #[cfg(feature = "third_person")]
     app.add_plugins(third_person::plugin);
