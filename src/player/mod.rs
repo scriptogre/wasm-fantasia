@@ -1,4 +1,6 @@
 use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
+use crate::rule_presets::{self, CritConfig, StackingConfig};
+use crate::rules::{Effect, OnKillRules, Rule};
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
@@ -82,6 +84,7 @@ pub fn spawn_player(
                 LockedAxes::ROTATION_LOCKED.unlock_rotation_y(),
                 TnuaAnimatingState::<AnimationState>::default(),
                 TnuaSimpleAirActionsCounter::default(),
+                animation::DashAnimationState::default(),
                 // A sensor shape is not strictly necessary, but without it we'll get weird results.
                 TnuaAvian3dSensorShape(collider.clone()),
             ),
@@ -104,6 +107,13 @@ pub fn spawn_player(
                 Combatant,
                 PlayerCombatant,
             ),
+            // rules system - using presets
+            rule_presets::crit(CritConfig::default()),
+            rule_presets::stacking(StackingConfig::default()),
+            // On kill: log for now (not part of a preset yet)
+            OnKillRules(vec![
+                Rule::new().then(Effect::Log("Enemy killed!".into())),
+            ]),
         ))
         // spawn character mesh as child to adjust mesh position relative to the player origin
         .with_children(|parent| {

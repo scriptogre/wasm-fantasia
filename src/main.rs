@@ -19,6 +19,8 @@ pub mod models;
 pub mod networking;
 pub mod player;
 pub mod postfx;
+pub mod rule_presets;
+pub mod rules;
 pub mod scene;
 pub mod screens;
 pub mod ui;
