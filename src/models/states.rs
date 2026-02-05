@@ -21,8 +21,8 @@ impl Default for GameState {
         Self {
             last_screen: Screen::Title,
             current_mood: Mood::Exploration,
-            diagnostics: true,
-            debug_ui: true,
+            diagnostics: false, // Off by default - heavy on WASM
+            debug_ui: false,    // Off by default
             paused: false,
             muted: false,
         }

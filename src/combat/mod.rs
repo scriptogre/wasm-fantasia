@@ -5,7 +5,6 @@ use avian3d::prelude::Collider;
 mod components;
 mod enemy;
 mod hit_feedback;
-#[cfg(not(target_arch = "wasm32"))]
 mod sound;
 mod systems;
 mod targeting;
@@ -21,7 +20,6 @@ pub fn plugin(app: &mut App) {
         hit_feedback::plugin,
         systems::plugin,
         targeting::plugin,
-        #[cfg(not(target_arch = "wasm32"))]
         sound::plugin,
     ));
 }

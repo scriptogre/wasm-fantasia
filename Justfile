@@ -46,3 +46,19 @@ check:
     cargo fmt --all -- --check
     cargo machete
     cargo check --profile ci --no-default-features --features web --target wasm32-unknown-unknown
+
+# Run WASM dev server
+web:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
+    command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
+    rustup run nightly bevy run --yes --no-default-features --features web web -U multi-threading --open
+
+# Build WASM release
+web-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
+    command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
+    rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle

@@ -2029,7 +2029,7 @@ dependencies = [
  "bevy_yarnspinner",
  "bevy_yarnspinner_example_dialogue_view",
  "easy-ext",
- "firewheel 0.9.2",
+ "firewheel",
  "firewheel-web-audio",
  "getrandom 0.3.4",
  "image",
@@ -2040,6 +2040,7 @@ dependencies = [
  "spacetimedb-sdk",
  "thiserror 2.0.17",
  "tracing",
+ "wasm-bindgen",
  "winit",
 ]
 
@@ -2537,8 +2538,9 @@ dependencies = [
  "bevy_time 0.17.3",
  "bevy_transform 0.17.3",
  "ebur128",
- "firewheel 0.9.2",
+ "firewheel",
  "firewheel-ircam-hrtf",
+ "firewheel-web-audio",
  "portable-atomic",
  "rand 0.9.2",
  "smallvec",
@@ -4655,67 +4657,30 @@ checksum = "3a3076410a55c90011c298b04d0cfa770b00fa04e1e3c97d3f6c9de105a03844"
 
 [[package]]
 name = "firewheel"
-version = "0.8.0-rc.1"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c30e4851b2b07981e34b8618ca80582ac84690dcb3e0fb887c0c621f6ec1fc4"
+checksum = "1146bdd48bf4c9a9d569aec8adc6e02181cab3459a3ab68fd13a7c4c446fcc66"
 dependencies = [
- "firewheel-core 0.8.0-rc.1",
- "firewheel-graph 0.8.0-rc.1",
- "firewheel-nodes 0.8.0-rc.1",
- "firewheel-pool 0.8.0-rc.1",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "firewheel"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4a3247a4004d294962675375b2f539fb31990563261a385e7ef1353c1addd60"
-dependencies = [
- "firewheel-core 0.9.2",
+ "firewheel-core",
  "firewheel-cpal",
- "firewheel-graph 0.9.2",
- "firewheel-nodes 0.9.2",
- "firewheel-pool 0.9.2",
+ "firewheel-graph",
+ "firewheel-nodes",
+ "firewheel-pool",
  "thiserror 2.0.17",
 ]
 
 [[package]]
 name = "firewheel-core"
-version = "0.8.0-rc.1"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57060f95f83e190a005ca880261759a6f5ea3581d980d2ca4f4e45ee630a01d8"
+checksum = "eb6648ce22d15743f658c2d1e416f654578ac94cb654bf526d317e8b98b1dc9d"
 dependencies = [
  "arrayvec",
  "bevy_ecs 0.17.3",
  "bevy_platform 0.17.3",
  "bevy_reflect 0.17.3",
  "bitflags 2.10.0",
- "firewheel-macros 0.8.0-rc.1",
- "glam 0.29.3",
- "glam 0.30.9",
- "log",
- "num-traits",
- "portable-atomic",
- "ringbuf",
- "smallvec",
- "thiserror 2.0.17",
- "thunderdome",
- "wmidi",
-]
-
-[[package]]
-name = "firewheel-core"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d57ae9ba24554846916e77affb2c9efea35f6d7f39ae2f56329db309f8396a9"
-dependencies = [
- "arrayvec",
- "bevy_ecs 0.17.3",
- "bevy_platform 0.17.3",
- "bevy_reflect 0.17.3",
- "bitflags 2.10.0",
- "firewheel-macros 0.9.2",
+ "firewheel-macros",
  "fixed-resample",
  "glam 0.29.3",
  "glam 0.30.9",
@@ -4733,15 +4698,15 @@ dependencies = [
 
 [[package]]
 name = "firewheel-cpal"
-version = "0.9.2"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f561251f37171d143922c3b8e45c102f9d79fd9ce4bd6faaa62550af1c5b2b1d"
+checksum = "fba656f53192cc704a3149485741bde9dae7f7bb5144dd456e9f315bf707fc56"
 dependencies = [
  "bevy_platform 0.17.3",
  "cpal 0.16.0",
  "fast-interleave",
- "firewheel-core 0.9.2",
- "firewheel-graph 0.9.2",
+ "firewheel-core",
+ "firewheel-graph",
  "fixed-resample",
  "log",
  "ringbuf",
@@ -4750,31 +4715,14 @@ dependencies = [
 
 [[package]]
 name = "firewheel-graph"
-version = "0.8.0-rc.1"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a1747d80ceb96f8d28c6970765fe5610af5eac15c36ba064b1bc455d6ac4bcb"
-dependencies = [
- "arrayvec",
- "bevy_platform 0.17.3",
- "firewheel-core 0.8.0-rc.1",
- "log",
- "ringbuf",
- "smallvec",
- "thiserror 2.0.17",
- "thunderdome",
- "triple_buffer",
-]
-
-[[package]]
-name = "firewheel-graph"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7730621467abd9aa6a945c6aa11447d5334d9427f0e51699c391e2648b8bc0c8"
+checksum = "ca6572d3d543642920fe531d3394c7a9b47d58b90354b05718ae8881f995f53d"
 dependencies = [
  "arrayvec",
  "bevy_platform 0.17.3",
  "bevy_reflect 0.17.3",
- "firewheel-core 0.9.2",
+ "firewheel-core",
  "log",
  "num-traits",
  "ringbuf",
@@ -4792,29 +4740,16 @@ checksum = "16ef3ba4e1f227a7247ddc94f5850324010ecf7ecf59ee3af5a2c9fcd326b744"
 dependencies = [
  "bevy_ecs 0.17.3",
  "bevy_reflect 0.17.3",
- "firewheel 0.9.2",
+ "firewheel",
  "glam 0.30.9",
  "hrtf",
 ]
 
 [[package]]
 name = "firewheel-macros"
-version = "0.8.0-rc.1"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ae02e3f1eeab5320d636ca30080a51eabdd7b2faaadea6b01a6bbb80decc030"
-dependencies = [
- "bevy_macro_utils 0.17.3",
- "proc-macro2",
- "quote",
- "syn",
- "toml_edit 0.23.10+spec-1.0.0",
-]
-
-[[package]]
-name = "firewheel-macros"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34833b22730fd510e34b07df943ce4e1495bc4f1d738a959cb31c0431f938b46"
+checksum = "4267f39e5142c59aea2dc1e619e6ff684137ce48417cd7889544894e5237048c"
 dependencies = [
  "bevy_macro_utils 0.17.3",
  "proc-macro2",
@@ -4825,27 +4760,14 @@ dependencies = [
 
 [[package]]
 name = "firewheel-nodes"
-version = "0.8.0-rc.1"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56ae27044fb15a43600e6098c6e00d5f46f3b9354656b0531b135f3ac3f79e56"
+checksum = "8b41622146fb72246d8998ec6b69c30fdd99e08f0a13d61d947dee2ed5a027f4"
 dependencies = [
  "bevy_ecs 0.17.3",
  "bevy_platform 0.17.3",
  "bevy_reflect 0.17.3",
- "firewheel-core 0.8.0-rc.1",
- "num-traits",
-]
-
-[[package]]
-name = "firewheel-nodes"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0513d8c83c24108b8dd8e28f572d5c90a87d085ca81929adb0cff2a62eff0863"
-dependencies = [
- "bevy_ecs 0.17.3",
- "bevy_platform 0.17.3",
- "bevy_reflect 0.17.3",
- "firewheel-core 0.9.2",
+ "firewheel-core",
  "fixed-resample",
  "num-traits",
  "smallvec",
@@ -4853,28 +4775,14 @@ dependencies = [
 
 [[package]]
 name = "firewheel-pool"
-version = "0.8.0-rc.1"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "183e43b4d20597b1a7dd99f797455f83822aa9d01e88703d5fa31e91dcdd9f4c"
-dependencies = [
- "firewheel-core 0.8.0-rc.1",
- "firewheel-graph 0.8.0-rc.1",
- "firewheel-nodes 0.8.0-rc.1",
- "smallvec",
- "thiserror 2.0.17",
- "thunderdome",
-]
-
-[[package]]
-name = "firewheel-pool"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57b3f2122f632fcaff37d9c42e3b33d050199c180d8c13161f9f808a47b009f9"
+checksum = "659b1b36025a68dc973ceb048a524771dd7b0a1561e71f7e7ab790fe5ca6a8da"
 dependencies = [
  "bevy_platform 0.17.3",
- "firewheel-core 0.9.2",
- "firewheel-graph 0.9.2",
- "firewheel-nodes 0.9.2",
+ "firewheel-core",
+ "firewheel-graph",
+ "firewheel-nodes",
  "smallvec",
  "thiserror 2.0.17",
  "thunderdome",
@@ -4882,10 +4790,10 @@ dependencies = [
 
 [[package]]
 name = "firewheel-web-audio"
-version = "0.3.0-rc.2"
-source = "git+https://github.com/CorvusPrudens/firewheel-web-audio?rev=65888f3#65888f3d47c1460d2fd6dba3f57ab49838e01b9e"
+version = "0.3.0"
+source = "git+https://github.com/CorvusPrudens/firewheel-web-audio?rev=ad810af#ad810afc78983916f3e31c4c8d8b0b15f52f1a3a"
 dependencies = [
- "firewheel 0.8.0-rc.1",
+ "firewheel",
  "js-sys",
  "log",
  "wasm-bindgen",
@@ -6133,9 +6041,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.83"
+version = "0.3.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "464a3709c7f55f1f721e5389aa6ea4e3bc6aba669353300af094b29ffbdde1d8"
+checksum = "8c942ebf8e95485ca0d52d97da7c5a2c387d0e7f0ba4c35e93bfcaee045955b3"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
@@ -9805,9 +9713,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.106"
+version = "0.2.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d759f433fa64a2d763d1340820e46e111a7a5ab75f993d1852d70b03dbb80fd"
+checksum = "64024a30ec1e37399cf85a7ffefebdb72205ca1c972291c51512360d90bd8566"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -9818,11 +9726,12 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.56"
+version = "0.4.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "836d9622d604feee9e5de25ac10e3ea5f2d65b41eac0d9ce72eb5deae707ce7c"
+checksum = "70a6e77fd0ae8029c9ea0063f87c46fde723e7d887703d74ad2616d792e51e6f"
 dependencies = [
  "cfg-if",
+ "futures-util",
  "js-sys",
  "once_cell",
  "wasm-bindgen",
@@ -9831,9 +9740,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.106"
+version = "0.2.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48cb0d2638f8baedbc542ed444afc0644a29166f1595371af4fecf8ce1e7eeb3"
+checksum = "008b239d9c740232e71bd39e8ef6429d27097518b6b30bdf9086833bd5b6d608"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -9841,9 +9750,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.106"
+version = "0.2.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cefb59d5cd5f92d9dcf80e4683949f15ca4b511f4ac0a6e14d4e1ac60c6ecd40"
+checksum = "5256bae2d58f54820e6490f9839c49780dff84c65aeab9e772f15d5f0e913a55"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -9854,18 +9763,18 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.106"
+version = "0.2.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc538057e648b67f72a982e708d485b2efa771e1ac05fec311f9f63e5800db4"
+checksum = "1f01b580c9ac74c8d8f0c0e4afb04eeef2acf145458e52c03845ee9cd23e3d12"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "web-sys"
-version = "0.3.83"
+version = "0.3.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b32828d774c412041098d182a8b38b16ea816958e07cf40eec2bc080ae137ac"
+checksum = "312e32e551d92129218ea9a2452120f4aabc03529ef03e4d0d82fb2780608598"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

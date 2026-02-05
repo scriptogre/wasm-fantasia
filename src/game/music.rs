@@ -1,5 +1,4 @@
 //! An abstraction for changing music of the game depending on some triggers
-#![cfg(not(target_arch = "wasm32"))]
 
 use crate::*;
 use avian3d::prelude::Collisions;

@@ -60,19 +60,9 @@ pub fn add_skybox_to_camera(
         // Most usages of this feature will not need to adjust this.
         AtmosphereSettings {
             scene_units_to_m: 1.0,
-            aerial_view_lut_max_distance: 40_000.0, //  40 km for a vast scene
-
-            // Higher resolution LUTs for smoother gradients and details
-            transmittance_lut_size: UVec2::new(512, 256), // Double resolution for smoother light transmission
-            sky_view_lut_size: UVec2::new(800, 400),      // Higher resolution for sky appearance
-            aerial_view_lut_size: UVec3::new(64, 64, 64), // More detailed aerial perspective
-
-            // Increased sample counts for better accuracy and less artifacts
-            transmittance_lut_samples: 60, // More samples for light transmission accuracy
-            multiscattering_lut_dirs: 128, // Double directions for multiscattering
-            multiscattering_lut_samples: 30, // More samples for multiscattering accuracy
-            sky_view_lut_samples: 24,      // More samples for sky appearance
-            aerial_view_lut_samples: 15,   // More samples for aerial view depth
+            aerial_view_lut_max_distance: 40_000.0,
+            // Use reasonable LUT sizes (defaults are fine for most cases)
+            // Web builds especially need smaller textures to avoid OOM
             ..Default::default()
         },
         Exposure::OVERCAST,

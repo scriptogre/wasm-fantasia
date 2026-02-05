@@ -23,10 +23,7 @@ pub mod scene;
 pub mod screens;
 pub mod ui;
 
-#[cfg(not(target_arch = "wasm32"))]
-use asset_loading::AudioSources;
-use asset_loading::{Models, ResourceHandles, Textures};
-#[cfg(not(target_arch = "wasm32"))]
+use asset_loading::{AudioSources, Models, ResourceHandles, Textures};
 use audio::*;
 use models::*;
 use ui::*;

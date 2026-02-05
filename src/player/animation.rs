@@ -11,6 +11,23 @@ mod anim_knobs {
 const PUNCH_HIT_TIME: f32 = 0.3;
 const HOOK_HIT_TIME: f32 = 0.35;
 
+/// Animations we actually use - skip loading others to save memory (especially on WASM)
+const USED_ANIMATIONS: &[&str] = &[
+    "Idle_Loop",
+    "Jog_Fwd_Loop",
+    "Sprint_Loop",
+    "Jump_Start",
+    "Jump_Land",
+    "Jump_Loop",
+    "Crouch_Fwd_Loop",
+    "Crouch_Idle_Loop",
+    "Roll",
+    "Hit_Chest",
+    "Punch_Jab",
+    "Punch_Cross",
+    "Melee_Hook",
+];
+
 pub fn prepare_animations(
     _: On<SceneInstanceReady>,
     models: Res<Models>,
@@ -34,8 +51,13 @@ pub fn prepare_animations(
     let mut graph = AnimationGraph::new();
     let root_node = graph.root;
 
-    // Create flat animation graph
+    // Create flat animation graph (only load animations we actually use)
     for (name, clip_handle) in gltf.named_animations.iter() {
+        // Skip animations we don't use - saves memory especially on WASM
+        if !USED_ANIMATIONS.contains(&name.as_ref()) {
+            continue;
+        }
+
         // Clone the clip so we can add events to punch animations
         let Some(original_clip) = animation_clips.get(clip_handle) else {
             continue;

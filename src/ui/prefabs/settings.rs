@@ -2,7 +2,6 @@ use super::*;
 #[cfg(feature = "dev_native")]
 use bevy::ui::Display as NodeDisplay;
 use bevy::window::{PresentMode, PrimaryWindow};
-#[cfg(not(target_arch = "wasm32"))]
 use bevy_seedling::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
@@ -81,7 +80,6 @@ fn update_tab_content(
                         commands.entity(child).despawn();
                     }
                     match tab {
-                        #[cfg(not(target_arch = "wasm32"))]
                         UiTab::Audio => {
                             commands.spawn(audio_grid()).insert(ChildOf(e));
                         }
@@ -92,11 +90,6 @@ fn update_tab_content(
                             commands
                                 .spawn(keybind_editor(&settings.input_map))
                                 .insert(ChildOf(e));
-                        }
-                        #[cfg(target_arch = "wasm32")]
-                        UiTab::Audio => {
-                            // Audio not available on web
-                            commands.spawn(label("Audio controls are not available on web")).insert(ChildOf(e));
                         }
                     }
                 } else {
@@ -146,7 +139,6 @@ fn update_fov_label(settings: Res<Settings>, mut label: Single<&mut Text, With<F
 }
 
 // GENERAL
-#[cfg(not(target_arch = "wasm32"))]
 fn general_lower(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
@@ -158,7 +150,6 @@ fn general_lower(
     general.volume = Volume::Linear(new_volume);
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn general_raise(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
@@ -180,7 +171,6 @@ fn update_general_volume_label(
 }
 
 // MUSIC
-#[cfg(not(target_arch = "wasm32"))]
 fn music_lower(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
@@ -192,7 +182,6 @@ fn music_lower(
     music.volume = settings.music();
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn music_raise(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
@@ -214,7 +203,6 @@ fn update_music_volume_label(
 }
 
 // SFX
-#[cfg(not(target_arch = "wasm32"))]
 fn sfx_lower(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
@@ -226,7 +214,6 @@ fn sfx_lower(
     sfx.volume = settings.sfx();
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn sfx_raise(
     _: On<Pointer<Click>>,
     cfg: ResMut<Config>,
@@ -330,7 +317,6 @@ fn click_toggle_settings(
 
 // ============================ UI ============================
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn settings_ui() -> impl Bundle {
     (
         ui_root("Settings Screen"),
@@ -347,29 +333,6 @@ pub fn settings_ui() -> impl Bundle {
             children![
                 tab_bar(),
                 (TabContent, Node::default(), children![audio_grid()]),
-                bottom_row()
-            ]
-        )],
-    )
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn settings_ui() -> impl Bundle {
-    (
-        ui_root("Settings Screen"),
-        BackgroundColor(colors::TRANSLUCENT),
-        children![(
-            Node {
-                width: Percent(80.0),
-                height: Percent(80.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            children![
-                tab_bar(),
-                (TabContent, Node::default(), children![label("Settings")]),
                 bottom_row()
             ]
         )],
@@ -466,7 +429,6 @@ fn video_grid() -> impl Bundle {
     )
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn audio_grid() -> impl Bundle {
     (
         Name::new("Settings Grid"),

@@ -1,15 +1,13 @@
 //! The screen state for the main gameplay.
 use super::*;
-#[cfg(not(target_arch = "wasm32"))]
 use bevy_seedling::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(Modals(Vec::default()))
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
         .add_observer(toggle_pause)
-        .add_observer(trigger_menu_toggle_on_esc);
-    #[cfg(not(target_arch = "wasm32"))]
-    app.add_observer(toggle_mute);
+        .add_observer(trigger_menu_toggle_on_esc)
+        .add_observer(toggle_mute);
 }
 
 markers!(PauseIcon, MuteIcon, GameplayUi);
@@ -62,7 +60,6 @@ fn toggle_pause(
     info!("paused: {}", state.paused);
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn toggle_mute(
     _: On<ToggleMute>,
     settings: ResMut<Settings>,

@@ -1,13 +1,10 @@
 use crate::*;
 use bevy::{asset::Asset, gltf::GltfLoaderSettings};
-#[cfg(not(target_arch = "wasm32"))]
 use bevy_seedling::sample::AudioSample;
+use bevy_shuffle_bag::ShuffleBag;
 
 mod ron;
 mod tracking;
-
-#[cfg(not(target_arch = "wasm32"))]
-use bevy_shuffle_bag::ShuffleBag;
 pub use ron::*;
 pub use tracking::*;
 
@@ -20,10 +17,8 @@ pub fn plugin(app: &mut App) {
         .load_resource_from_path::<CreditsPreset>("credits.ron")
         .load_resource::<Textures>()
         // .load_resource::<Fonts>()
-        .load_resource::<Models>();
-
-    #[cfg(not(target_arch = "wasm32"))]
-    app.load_resource::<AudioSources>();
+        .load_resource::<Models>()
+        .load_resource::<AudioSources>();
 }
 
 // #[derive(Asset, Clone, Reflect, Resource)]
@@ -73,12 +68,18 @@ pub struct Models {
     pub scene: Handle<Gltf>,
 }
 
+// Use smaller model on web (stripped animations + Draco compressed)
+#[cfg(target_arch = "wasm32")]
+const PLAYER_MODEL: &str = "models/player-web.glb";
+#[cfg(not(target_arch = "wasm32"))]
+const PLAYER_MODEL: &str = "models/player.glb";
+
 impl FromWorld for Models {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
             player: assets.load_with_settings(
-                "models/player.glb",
+                PLAYER_MODEL,
                 |settings: &mut GltfLoaderSettings| {
                     settings.use_model_forward_direction = Some(true);
                 },
@@ -88,7 +89,6 @@ impl FromWorld for Models {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Asset, Clone, Reflect, Resource)]
 #[reflect(Resource)]
 pub struct AudioSources {
@@ -109,7 +109,6 @@ pub struct AudioSources {
     pub combat: ShuffleBag<Handle<AudioSample>>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl AudioSources {
     pub const BTN_HOVER: &'static str = "audio/sfx/btn-hover.ogg";
     pub const BTN_PRESS: &'static str = "audio/sfx/btn-press.ogg";
@@ -125,7 +124,6 @@ impl AudioSources {
     pub const GAMEPLAY: &'static str = "audio/music/embrace-the-fight.ogg";
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl FromWorld for AudioSources {
     fn from_world(world: &mut World) -> Self {
         let mut rng = rand::rng();

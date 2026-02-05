@@ -12,7 +12,6 @@ use std::time::Duration;
 
 mod animation;
 mod control;
-#[cfg(not(target_arch = "wasm32"))]
 mod sound;
 
 pub use animation::*;
@@ -24,7 +23,6 @@ pub fn plugin(app: &mut App) {
         TnuaControllerPlugin::new(FixedUpdate),
         TnuaAvian3dPlugin::new(FixedUpdate),
         control::plugin,
-        #[cfg(not(target_arch = "wasm32"))]
         sound::plugin,
     ));
 

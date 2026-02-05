@@ -121,7 +121,12 @@
 # debug = 1
 
 [target.wasm32-unknown-unknown]
-rustflags = ["-C", "target-feature=+atomics,+bulk-memory,+mutable-globals"]
+rustflags = [
+    "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+    # Increase WASM memory for larger assets (512MB initial, 4GB max)
+    "-C", "link-arg=--initial-memory=536870912",
+    "-C", "link-arg=--max-memory=4294967296",
+]
 
 # For this you'll need a nightly version of the compiler
 [unstable]

@@ -1,125 +1,47 @@
-//! Simple setup for a game: main bus, music and sfx channels
-//!
-//! The `Music` pool, `Sfx` pool, and `DefaultPool` are all routed to the `MainBus` node.
-//! Since each pool has a `VolumeNode`, we can control them all individually. And,
-//! since they're all routed to the `MainBus`, we can also set the volume of all three
-//! at once.
-//!
-//! You can see this in action in the knob observers: to set the master volume,
-//! we adjust the `MainPool` node, and to set the individual volumes, we adjust the
-//! pool nodes.
-//!
-//! # Example
-//! ```rust,no_run
-//! use bevy_seedling::{
-//!     configuration::{MusicPool, SfxBus},
-//!     pool::SamplerPool,
-//!     prelude::*,
-//! };
-//! #[derive(Resource, Debug, Clone, Serialize, Deserialize, Reflect)]
-//! pub struct Sound {
-//!     pub general: f32,
-//!     pub music: f32,
-//!     pub sfx: f32,
-//! }
-//!
-//! fn lower_general(
-//!     mut sound: ResMut<Sound>,
-//!     mut general: Single<&mut VolumeNode, With<MainBus>>,
-//! ) {
-//!     let new_volume = (sound.general - 0.1).max(3.0);
-//!     sound.general = new_volume;
-//!     general.volume = Volume::Linear(new_volume);
-//! }
-//!
-//! fn play_music(
-//!     _: On<Pointer<Click>>,
-//!     playing: Query<(), (With<MusicPool>, With<SamplePlayer>)>,
-//!     mut commands: Commands,
-//!     server: Res<AssetServer>,
-//! ) {
-//!     // We'll only play music if it's not already playing.
-//!     if playing.iter().len() > 0 {
-//!         return;
-//!     }
-//!
-//!     commands.spawn((
-//!         // Including the `MusicPool` marker queues this sample in the `MusicPool`.
-//!         MusicPool,
-//!         SamplePlayer::new(source).with_volume(Volume::Decibels(-6.0)),
-//!     ));
-//! }
-//!
-//! fn play_sfx(_: On<Pointer<Click>>, mut commands: Commands, server: Res<AssetServer>) {
-//!     let source = server.load("caw.ogg");
-//!     // The default pool is routed to the `SfxBus`, so we don't
-//!     // need to include any special markers for sound effects.
-//!     commands.spawn(SamplePlayer::new(source));
-//! }
-//! ```
-//!
+//! Audio setup with main bus, music and sfx channels.
+//! Works on both native (cpal backend) and web (WebAudio backend).
+
 use crate::*;
+use bevy_seedling::prelude::*;
 use std::collections::HashMap;
 
-#[cfg(not(target_arch = "wasm32"))]
-use bevy_seedling::prelude::*;
-
-#[cfg(not(target_arch = "wasm32"))]
 mod fade;
 
-#[cfg(not(target_arch = "wasm32"))]
 pub use fade::*;
 
 /// Utility for converting a simple `[0.0, 1.0]` range to [`Volume`].
-#[cfg(not(target_arch = "wasm32"))]
 pub const CONVERTER: PerceptualVolume = PerceptualVolume::new();
 
 pub fn plugin(app: &mut App) {
-    // TODO: Web audio disabled due to firewheel version conflict
-    // Uncomment when firewheel-web-audio is updated to firewheel 0.9
-    // #[cfg(target_arch = "wasm32")]
-    // app.add_plugins(
-    //     bevy_seedling::SeedlingPlugin::<firewheel_web_audio::WebAudioBackend> {
-    //         config: Default::default(),
-    //         graph_config: Default::default(),
-    //         stream_config: Default::default(),
-    //     },
-    // );
+    #[cfg(target_arch = "wasm32")]
+    app.add_plugins(SeedlingPlugin::new_web_audio());
 
     #[cfg(not(target_arch = "wasm32"))]
     app.add_plugins(SeedlingPlugin::default());
 
-    // Common setup for both platforms
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        app.init_resource::<MusicPlaybacks>()
-            .add_systems(Startup, setup)
-            .add_observer(MusicPlaybacks::track_entity)
-            .add_observer(MusicPlaybacks::clear_entity_on_finish)
-            .add_plugins(fade::plugin);
-    }
+    app.init_resource::<MusicPlaybacks>()
+        .add_systems(Startup, setup)
+        .add_observer(MusicPlaybacks::track_entity)
+        .add_observer(MusicPlaybacks::clear_entity_on_finish)
+        .add_plugins(fade::plugin);
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn setup(mut master: Single<&mut VolumeNode, With<MainBus>>, settings: Res<Settings>) {
     master.volume = CONVERTER.perceptual_to_volume(settings.general().linear());
 }
 
 /// Map of entities that are currently playing music for a specific mood
 /// Use them to keep track of [`PlaybackSettings`] and play/pause instead of spawning new ones
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Resource, Reflect, Debug, Clone, Default, Deref, DerefMut)]
 #[reflect(Resource)]
 pub struct MusicPlaybacks(HashMap<Mood, Entity>);
 
-#[cfg(not(target_arch = "wasm32"))]
 impl FromIterator<(Mood, Entity)> for MusicPlaybacks {
     fn from_iter<T: IntoIterator<Item = (Mood, Entity)>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl MusicPlaybacks {
     fn track_entity(
         on: On<Add, (Mood, SamplePlayer)>,
