@@ -26,7 +26,8 @@ markers!(
     FovLabel,
     TabBar,
     TabContent,
-    PerfUi
+    PerfUi,
+    ScreenShakeLabel
 );
 #[cfg(feature = "dev_native")]
 markers!(DiagnosticsLabel, DebugUiLabel);
@@ -63,6 +64,7 @@ pub fn save_settings(
 // TAB CHANGING
 fn update_tab_content(
     settings: Res<Settings>,
+    game_state: Res<GameState>,
     active_tab: Res<ActiveTab>,
     tab_bar: Query<&Children, With<TabBar>>,
     mut tab_content: Query<(Entity, &Children), With<TabContent>>,
@@ -84,7 +86,7 @@ fn update_tab_content(
                             commands.spawn(audio_grid()).insert(ChildOf(e));
                         }
                         UiTab::Video => {
-                            commands.spawn(video_grid()).insert(ChildOf(e));
+                            commands.spawn(video_grid(&game_state)).insert(ChildOf(e));
                         }
                         UiTab::Keybindings => {
                             commands
@@ -258,47 +260,81 @@ fn click_toggle_vsync(
     Ok(())
 }
 
+/// Helper to find and update Text in button descendants
+fn update_button_text(
+    root: Entity,
+    new_text: &str,
+    children_q: &Query<&Children>,
+    text_q: &mut Query<&mut Text>,
+) {
+    // Try direct first (in case root has Text)
+    if let Ok(mut text) = text_q.get_mut(root) {
+        text.0 = new_text.to_owned();
+        return;
+    }
+    // Traverse children
+    if let Ok(children) = children_q.get(root) {
+        for child in children.iter() {
+            update_button_text(child, new_text, children_q, text_q);
+        }
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn click_toggle_diagnostics(
     _: On<Pointer<Click>>,
     mut state: ResMut<GameState>,
     mut perf_ui: Query<&mut Node, With<PerfUi>>,
-    mut label: Query<&mut Text, With<DiagnosticsLabel>>,
+    buttons: Query<Entity, With<DiagnosticsLabel>>,
+    children_q: Query<&Children>,
+    mut text_q: Query<&mut Text>,
 ) {
-    if let Ok(mut perf_ui) = perf_ui.single_mut() {
-        state.diagnostics = !state.diagnostics;
-        let s = if perf_ui.display == NodeDisplay::None {
-            perf_ui.display = NodeDisplay::Flex;
-            "on"
-        } else {
-            perf_ui.display = NodeDisplay::None;
-            "off"
-        };
+    state.diagnostics = !state.diagnostics;
+    let label = if state.diagnostics { "on" } else { "off" };
 
-        if let Ok(mut label) = label.single_mut() {
-            label.0 = s.to_owned();
-        }
+    if let Ok(mut perf_ui) = perf_ui.single_mut() {
+        perf_ui.display = if state.diagnostics {
+            NodeDisplay::Flex
+        } else {
+            NodeDisplay::None
+        };
+    }
+
+    for button in buttons.iter() {
+        update_button_text(button, label, &children_q, &mut text_q);
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn click_toggle_debug_ui(
     _: On<Pointer<Click>>,
-    children: Query<&Children>,
     mut commands: Commands,
     mut state: ResMut<GameState>,
-    mut label: Query<Entity, With<DebugUiLabel>>,
+    buttons: Query<Entity, With<DebugUiLabel>>,
+    children_q: Query<&Children>,
+    mut text_q: Query<&mut Text>,
 ) {
     state.debug_ui = !state.debug_ui;
+    commands.trigger(ToggleDebugUi);
+    let label = if state.debug_ui { "on" } else { "off" };
 
-    if let Ok(mut label) = label.single_mut() {
-        commands.trigger(ToggleDebugUi);
-        let s = if state.debug_ui { "on" } else { "off" };
-        label.replace_recursive(
-            children,
-            commands,
-            (btn(s, click_toggle_debug_ui), DebugUiLabel),
-        );
+    for button in buttons.iter() {
+        update_button_text(button, label, &children_q, &mut text_q);
+    }
+}
+
+fn click_toggle_screen_shake(
+    _: On<Pointer<Click>>,
+    mut state: ResMut<GameState>,
+    buttons: Query<Entity, With<ScreenShakeLabel>>,
+    children_q: Query<&Children>,
+    mut text_q: Query<&mut Text>,
+) {
+    state.screen_shake = !state.screen_shake;
+    let label = if state.screen_shake { "on" } else { "off" };
+
+    for button in buttons.iter() {
+        update_button_text(button, label, &children_q, &mut text_q);
     }
 }
 
@@ -396,7 +432,14 @@ fn bottom_row() -> impl Bundle {
     )
 }
 
-fn video_grid() -> impl Bundle {
+fn video_grid(state: &GameState) -> impl Bundle {
+    let screen_shake_label = if state.screen_shake { "on" } else { "off" };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let diagnostics_label = if state.diagnostics { "on" } else { "off" };
+    #[cfg(not(target_arch = "wasm32"))]
+    let debug_ui_label = if state.debug_ui { "on" } else { "off" };
+
     (
         Name::new("Settings Video Grid"),
         Node {
@@ -414,6 +457,11 @@ fn video_grid() -> impl Bundle {
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
             label("VSync"),
             (btn("on", click_toggle_vsync), VsyncLabel),
+            label("Screen Shake"),
+            (
+                btn(screen_shake_label, click_toggle_screen_shake),
+                ScreenShakeLabel
+            ),
         ],
         #[cfg(not(target_arch = "wasm32"))]
         children![
@@ -421,10 +469,18 @@ fn video_grid() -> impl Bundle {
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
             label("VSync"),
             (btn("on", click_toggle_vsync), VsyncLabel),
+            label("Screen Shake"),
+            (
+                btn(screen_shake_label, click_toggle_screen_shake),
+                ScreenShakeLabel
+            ),
             label("diagnostics"),
-            (btn("on", click_toggle_diagnostics), DiagnosticsLabel),
+            (
+                btn(diagnostics_label, click_toggle_diagnostics),
+                DiagnosticsLabel
+            ),
             label("debug ui"),
-            (btn("off", click_toggle_debug_ui), DebugUiLabel),
+            (btn(debug_ui_label, click_toggle_debug_ui), DebugUiLabel),
         ],
     )
 }

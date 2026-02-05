@@ -78,12 +78,9 @@ impl FromWorld for Models {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            player: assets.load_with_settings(
-                PLAYER_MODEL,
-                |settings: &mut GltfLoaderSettings| {
-                    settings.use_model_forward_direction = Some(true);
-                },
-            ),
+            player: assets.load_with_settings(PLAYER_MODEL, |settings: &mut GltfLoaderSettings| {
+                settings.use_model_forward_direction = Some(true);
+            }),
             scene: assets.load("models/scene.glb"),
         }
     }

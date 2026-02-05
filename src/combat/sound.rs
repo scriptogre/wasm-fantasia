@@ -1,6 +1,6 @@
 use crate::asset_loading::AudioSources;
-use crate::models::{GameState, Settings};
 use crate::combat::HitEvent;
+use crate::models::{GameState, Settings};
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
 use rand::Rng;

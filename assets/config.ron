@@ -13,11 +13,10 @@
         fov: 60,
         zoom: (2.0, 10),  // Initial zoom is midpoint (6.0)
         movement: (
-            speed: 10,
-            sprint_factor: 1.5,
+            speed: 8,
             crouch_factor: 0.2,
             actions_in_air: 3,
-            dash_distance: 10,
+            dash_distance: 3,
             idle_to_run_threshold: 0.01,
         ),
         hitbox:(

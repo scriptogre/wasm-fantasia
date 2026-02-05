@@ -16,16 +16,16 @@ pub mod player_type;
 pub mod send_input_reducer;
 pub mod update_position_reducer;
 
-pub use game_tick_reducer::{game_tick, set_flags_for_game_tick, GameTickCallbackId};
-pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
-pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
+pub use game_tick_reducer::{GameTickCallbackId, game_tick, set_flags_for_game_tick};
+pub use join_game_reducer::{JoinGameCallbackId, join_game, set_flags_for_join_game};
+pub use leave_game_reducer::{LeaveGameCallbackId, leave_game, set_flags_for_leave_game};
 pub use player_input_table::*;
 pub use player_input_type::PlayerInput;
 pub use player_table::*;
 pub use player_type::Player;
-pub use send_input_reducer::{send_input, set_flags_for_send_input, SendInputCallbackId};
+pub use send_input_reducer::{SendInputCallbackId, send_input, set_flags_for_send_input};
 pub use update_position_reducer::{
-    set_flags_for_update_position, update_position, UpdatePositionCallbackId,
+    UpdatePositionCallbackId, set_flags_for_update_position, update_position,
 };
 
 #[derive(Clone, PartialEq, Debug)]
@@ -466,21 +466,21 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
 /// either a [`DbConnection`] or an [`EventContext`] and operate on either.
 pub trait RemoteDbContext:
     __sdk::DbContext<
-    DbView = RemoteTables,
-    Reducers = RemoteReducers,
-    SetReducerFlags = SetReducerFlags,
-    SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
->
+        DbView = RemoteTables,
+        Reducers = RemoteReducers,
+        SetReducerFlags = SetReducerFlags,
+        SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
+    >
 {
 }
 impl<
-        Ctx: __sdk::DbContext<
+    Ctx: __sdk::DbContext<
             DbView = RemoteTables,
             Reducers = RemoteReducers,
             SetReducerFlags = SetReducerFlags,
             SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
         >,
-    > RemoteDbContext for Ctx
+> RemoteDbContext for Ctx
 {
 }
 

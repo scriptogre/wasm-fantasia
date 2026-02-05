@@ -66,8 +66,8 @@ pub trait send_input {
     fn on_send_input(
         &self,
         callback: impl FnMut(&super::ReducerEventContext, &u32, &f32, &f32, &bool, &bool, &bool, &f32)
-            + Send
-            + 'static,
+        + Send
+        + 'static,
     ) -> SendInputCallbackId;
     /// Cancel a callback previously registered by [`Self::on_send_input`],
     /// causing it not to run in the future.
@@ -100,9 +100,17 @@ impl send_input for super::RemoteReducers {
     }
     fn on_send_input(
         &self,
-        mut callback: impl FnMut(&super::ReducerEventContext, &u32, &f32, &f32, &bool, &bool, &bool, &f32)
-            + Send
-            + 'static,
+        mut callback: impl FnMut(
+            &super::ReducerEventContext,
+            &u32,
+            &f32,
+            &f32,
+            &bool,
+            &bool,
+            &bool,
+            &f32,
+        ) + Send
+        + 'static,
     ) -> SendInputCallbackId {
         SendInputCallbackId(self.imp.on_reducer(
             "send_input",

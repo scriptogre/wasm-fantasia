@@ -4,15 +4,15 @@ use super::*;
 /// Font asset paths
 pub mod fonts {
     /// Default regular font path
-    pub const REGULAR: &str = "embedded://bevy_new_3d_rpg/assets/fonts/FiraSans-Regular.ttf";
+    pub const REGULAR: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-Regular.ttf";
     /// Regular italic font path
-    pub const ITALIC: &str = "embedded://bevy_new_3d_rpg/assets/fonts/FiraSans-Italic.ttf";
+    pub const ITALIC: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-Italic.ttf";
     /// Bold font path
-    pub const BOLD: &str = "embedded://bevy_new_3d_rpg/assets/fonts/FiraSans-Bold.ttf";
+    pub const BOLD: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-Bold.ttf";
     /// Bold italic font path
-    pub const BOLD_ITALIC: &str = "embedded://bevy_new_3d_rpg/assets/fonts/FiraSans-BoldItalic.ttf";
+    pub const BOLD_ITALIC: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-BoldItalic.ttf";
     /// Monospace font path
-    pub const MONO: &str = "embedded://bevt_new_3d_rpg/assets/fonts/FiraMono-Medium.ttf";
+    pub const MONO: &str = "embedded://wasm_fantasia/assets/fonts/FiraMono-Medium.ttf";
 }
 
 /// Size constants

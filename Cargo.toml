@@ -1,11 +1,11 @@
 [package]
-name = "bevy_new_3d_rpg"
+name = "wasm_fantasia"
 edition = "2024"
 version = "0.1.5"
 authors = ["Oleks Pickle <22867443+olekspickle@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
 exclude = ["assets"]
-repository = "https://github.com/olekspickle/bevy_new_3d_rpg"
+repository = "https://github.com/olekspickle/wasm_fantasia"
 description = "Simple but comprehensive 3D RPG game template with gamepad support"
 keywords = ["bevy", "game", "template", "devkit", "third person", "topdown", "gamedev"]
 
@@ -28,6 +28,7 @@ dev_native = [
     "multiplayer",                  # Multiplayer enabled for native builds
     "custom_cursor",
     "bevy-inspector-egui",
+    "bevy_hanabi",                  # GPU particle effects (native only)
     "bevy/embedded_watcher",        # Enable embedded asset hot reloading for native dev builds.
     "bevy/file_watcher",            # Enable asset hot reloading for native dev builds.
 ]
@@ -104,6 +105,7 @@ firewheel = { version = "^0.9", optional = true }
 
 
 bevy_third_person_camera = { version = "^0.3", optional = true }                            # 3rd person camera
+bevy_hanabi = { version = "0.17", default-features = false, features = ["3d"], optional = true }  # GPU particles
 bevy_spacetimedb = { version = "1.0", optional = true }                                      # multiplayer networking (Bevy integration)
 spacetimedb-sdk = { version = "1.0", optional = true }                                       # SpacetimeDB client SDK
 

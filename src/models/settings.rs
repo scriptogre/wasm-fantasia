@@ -53,7 +53,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             sound: SoundPreset::default(),
-            fov: 45.0, // bevy default
+            fov: 65.0, // wider for horde combat visibility
             input_map: InputSettings::default(),
         }
     }

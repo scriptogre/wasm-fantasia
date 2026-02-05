@@ -60,8 +60,8 @@ pub trait update_position {
     fn on_update_position(
         &self,
         callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &String)
-            + Send
-            + 'static,
+        + Send
+        + 'static,
     ) -> UpdatePositionCallbackId;
     /// Cancel a callback previously registered by [`Self::on_update_position`],
     /// causing it not to run in the future.
@@ -91,8 +91,8 @@ impl update_position for super::RemoteReducers {
     fn on_update_position(
         &self,
         mut callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &String)
-            + Send
-            + 'static,
+        + Send
+        + 'static,
     ) -> UpdatePositionCallbackId {
         UpdatePositionCallbackId(self.imp.on_reducer(
             "update_position",

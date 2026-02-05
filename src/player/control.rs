@@ -13,11 +13,8 @@ pub fn plugin(app: &mut App) {
             .in_set(TnuaUserControlsSystems)
             .run_if(in_state(Screen::Gameplay)),
     )
-    .add_observer(handle_sprint_in)
-    .add_observer(handle_sprint_out)
     .add_observer(handle_jump)
     .add_observer(handle_dash)
-    // .add_observer(handle_attack)
     .add_observer(crouch_in)
     .add_observer(crouch_out);
 }
@@ -41,14 +38,14 @@ fn movement(
         controller.basis(TnuaBuiltinWalk {
             float_height,
             cling_distance: float_height + 0.05,
-            spring_strength: 500.0,              // Stronger spring for a more grounded feel.
-            spring_dampening: 1.0, // Slightly reduced dampening for a more responsive spring.
-            acceleration: 80.0,    // Increased acceleration for snappier movement starts and stops.
-            air_acceleration: 30.0, // Allow for some air control, but less than ground.
+            spring_strength: 500.0, // Stronger spring for a more grounded feel.
+            spring_dampening: 1.0,  // Slightly reduced dampening for a more responsive spring.
+            acceleration: 80.0, // Increased acceleration for snappier movement starts and stops.
+            air_acceleration: 50.0, // Good air control for jumping over enemies
             free_fall_extra_gravity: 70.0, // Slightly increased for a less floaty fall.
             tilt_offset_angvel: 7.0, // Increased for a slightly faster righting response.
             tilt_offset_angacl: 700.0, // Increased acceleration to reach the target righting speed.
-            turning_angvel: 12.0,  // Increased for more responsive turning.
+            turning_angvel: 12.0, // Increased for more responsive turning.
             desired_velocity: direction * player.speed,
             desired_forward: Dir3::new(direction).ok(),
             ..Default::default()
@@ -85,34 +82,6 @@ fn movement(
     Ok(())
 }
 
-fn handle_sprint_in(
-    on: On<Start<Sprint>>,
-    cfg: Res<Config>,
-    mut player_query: Query<&mut Player, With<PlayerCtx>>,
-) -> Result {
-    let entity = on.context;
-    if let Ok(mut player) = player_query.get_mut(entity) {
-        if player.speed <= cfg.player.movement.speed {
-            player.speed *= cfg.player.movement.sprint_factor;
-            info!("Sprint started for entity: {entity}");
-        }
-    }
-
-    Ok(())
-}
-
-fn handle_sprint_out(
-    on: On<Complete<Navigate>>,
-    cfg: Res<Config>,
-    mut player_query: Query<&mut Player, With<PlayerCtx>>,
-) {
-    if let Ok(mut player) = player_query.get_mut(on.context) {
-        if player.speed > cfg.player.movement.speed {
-            player.speed = cfg.player.movement.speed;
-        }
-    }
-}
-
 fn handle_jump(
     on: On<Fire<Jump>>,
     // cfg: Res<Config>,
@@ -131,13 +100,13 @@ fn handle_jump(
     // if jump_timer.tick(time.delta()).just_finished() {
     air_counter.update(controller.as_mut()); // Update air counter
     controller.action(TnuaBuiltinJump {
-        height: 3.5,
-        takeoff_extra_gravity: 50.0, // Increased for a snappier, more immediate lift-off.
-        fall_extra_gravity: 40.0,    // To make falling feel more impactful and less floaty.
-        shorten_extra_gravity: 80.0, // Increased to allow for very short hops when tapping the jump button.
-        peak_prevention_at_upward_velocity: 0.5, // Slightly lower to start applying peak prevention sooner.
-        peak_prevention_extra_gravity: 30.0, // Increased to reduce "floatiness" at the jump's apex.
-        reschedule_cooldown: Some(0.1), // Allows for a slight "jump buffering" if the button is pressed just before landing.
+        height: 5.0,                 // Higher to clear enemies
+        takeoff_extra_gravity: 40.0, // Slightly reduced for more hang time
+        fall_extra_gravity: 35.0,    // Slightly reduced for better air control
+        shorten_extra_gravity: 80.0, // Keep short hops possible
+        peak_prevention_at_upward_velocity: 0.5,
+        peak_prevention_extra_gravity: 25.0, // Reduced for more air time at apex
+        reschedule_cooldown: Some(0.1),
         disable_force_forward_after_peak: true,
         allow_in_air: true,
         ..Default::default()
@@ -152,15 +121,27 @@ fn handle_dash(
     cfg: Res<Config>,
     navigate: Single<&Action<Navigate>>,
     camera: Query<&Transform, With<SceneCamera>>,
-    mut player_query: Query<(&mut TnuaController, &TnuaSimpleAirActionsCounter)>,
+    mut player_query: Query<(
+        &mut TnuaController,
+        &TnuaSimpleAirActionsCounter,
+        Option<&mut AttackState>,
+    )>,
 ) -> Result {
-    let (mut controller, air_counter) = player_query.get_mut(on.context)?;
+    let (mut controller, air_counter, attack_state) = player_query.get_mut(on.context)?;
+
+    // Dash cancels any active attack
+    if let Some(mut attack) = attack_state {
+        if attack.attacking {
+            attack.attacking = false;
+        }
+    }
+
     let cam_transform = camera.single()?;
     let navigate = **navigate.into_inner();
     let direction = cam_transform.movement_direction(navigate);
 
     controller.action(TnuaBuiltinDash {
-        speed: 50.,
+        speed: 12., // Tuned for slide animation timing
         displacement: direction * cfg.player.movement.dash_distance,
         desired_forward: Dir3::new(direction).ok(),
         allow_in_air: air_counter.air_count_for(TnuaBuiltinDash::NAME)
@@ -170,7 +151,6 @@ fn handle_dash(
 
     Ok(())
 }
-
 
 pub fn crouch_in(
     on: On<Start<Crouch>>,

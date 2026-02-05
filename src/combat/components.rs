@@ -1,9 +1,7 @@
-use avian3d::prelude::PhysicsLayer;
-use bevy::{animation::AnimationEvent, prelude::*};
+use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.register_type::<Health>()
-        .register_type::<AttackState>();
+    app.register_type::<Health>().register_type::<AttackState>();
 }
 
 /// Health component for any entity that can take damage.
@@ -39,7 +37,17 @@ impl Default for Health {
     }
 }
 
+/// Attack timing constants (at 1.0x speed)
+pub mod attack_timing {
+    /// Base duration for punch animations (jab/cross)
+    pub const PUNCH_DURATION: f32 = 0.42;
+    /// Base duration for crit/hook animation (slower wind-up, bigger impact)
+    pub const HOOK_DURATION: f32 = 0.55;
+}
+
 /// Tracks attack state for entities that can attack.
+/// Uses time-based tracking so animation, VFX, and state stay in sync
+/// regardless of attack speed multiplier.
 #[derive(Component, Reflect, Debug, Clone, Default)]
 #[reflect(Component)]
 pub struct AttackState {
@@ -47,8 +55,12 @@ pub struct AttackState {
     pub cooldown: Timer,
     /// Whether we're currently in an attack animation.
     pub attacking: bool,
-    /// Frame within the attack (for animation speed control).
-    pub attack_frame: u32,
+    /// Scaled time elapsed in current attack (advances faster with speed_mult).
+    pub attack_time: f32,
+    /// Base duration for current attack (before speed scaling).
+    pub attack_duration: f32,
+    /// Time when hit should trigger (before speed scaling).
+    pub hit_time: f32,
     /// Counter for alternating attack animations.
     pub attack_count: u32,
     /// Whether the hit has been triggered for this attack.
@@ -57,12 +69,20 @@ pub struct AttackState {
     pub is_crit: bool,
 }
 
+/// When the hit happens in each attack animation (fraction of duration)
+pub mod hit_timing {
+    pub const PUNCH_HIT_FRACTION: f32 = 0.55; // Hit at 55% through punch
+    pub const HOOK_HIT_FRACTION: f32 = 0.50; // Hit at 50% through hook
+}
+
 impl AttackState {
     pub fn new(cooldown_secs: f32) -> Self {
         Self {
             cooldown: Timer::from_seconds(cooldown_secs, TimerMode::Once),
             attacking: false,
-            attack_frame: 0,
+            attack_time: 0.0,
+            attack_duration: attack_timing::PUNCH_DURATION,
+            hit_time: attack_timing::PUNCH_DURATION * hit_timing::PUNCH_HIT_FRACTION,
             attack_count: 0,
             hit_triggered: false,
             is_crit: false,
@@ -73,12 +93,29 @@ impl AttackState {
         self.cooldown.is_finished() && !self.attacking
     }
 
-    pub fn start_attack(&mut self) {
+    pub fn start_attack(&mut self, is_crit: bool) {
         self.attacking = true;
-        self.attack_frame = 0;
+        self.attack_time = 0.0;
+        if is_crit {
+            self.attack_duration = attack_timing::HOOK_DURATION;
+            self.hit_time = attack_timing::HOOK_DURATION * hit_timing::HOOK_HIT_FRACTION;
+        } else {
+            self.attack_duration = attack_timing::PUNCH_DURATION;
+            self.hit_time = attack_timing::PUNCH_DURATION * hit_timing::PUNCH_HIT_FRACTION;
+        };
         self.attack_count += 1;
         self.hit_triggered = false;
+        self.is_crit = is_crit;
         self.cooldown.reset();
+    }
+
+    /// Progress through attack (0.0 to 1.0)
+    pub fn progress(&self) -> f32 {
+        if self.attack_duration > 0.0 {
+            (self.attack_time / self.attack_duration).min(1.0)
+        } else {
+            1.0
+        }
     }
 }
 
@@ -92,16 +129,18 @@ pub struct Staggered {
 /// Event fired when an entity takes damage (use with commands.trigger()).
 #[derive(Event, Debug, Clone)]
 pub struct DamageEvent {
+    pub source: Entity,
     pub target: Entity,
     pub damage: f32,
-    pub knockback_direction: Vec3,
-    pub knockback_force: f32,
+    /// Combined force vector (radial + forward + vertical components)
+    pub force: Vec3,
     pub is_crit: bool,
 }
 
 /// Event fired when an entity dies (use with commands.trigger()).
 #[derive(Event, Debug, Clone)]
 pub struct DeathEvent {
+    pub killer: Entity,
     pub entity: Entity,
 }
 
@@ -120,16 +159,9 @@ pub struct PlayerCombatant;
 #[reflect(Component)]
 pub struct Enemy;
 
-/// Animation event fired when an attack connects.
-/// Added to attack animation clips at the frame where the hit lands.
-#[derive(AnimationEvent, Clone, Debug)]
-pub struct AttackConnect;
-
-/// Physics collision layers for combat entities.
-#[derive(PhysicsLayer, Clone, Copy, Debug, Default)]
-pub enum GameLayer {
-    #[default]
-    Ground,
-    Player,
-    Enemy,
+/// Event fired when an attack connects (hit frame reached).
+/// Triggered by tick_attack_state when attack_time reaches hit_time.
+#[derive(Event, Clone, Debug)]
+pub struct AttackConnect {
+    pub attacker: Entity,
 }

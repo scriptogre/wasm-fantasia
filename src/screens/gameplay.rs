@@ -2,6 +2,8 @@
 use super::*;
 use bevy_seedling::prelude::*;
 
+use crate::combat::{spawn_combat_stacks_display, spawn_player_health_bar};
+
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(Modals(Vec::default()))
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
@@ -38,6 +40,10 @@ fn spawn_gameplay_ui(mut cmds: Commands, textures: Res<Textures>, _settings: Res
             ),
         ],
     ));
+
+    // Player health bar and combat stacks
+    spawn_player_health_bar(&mut cmds);
+    spawn_combat_stacks_display(&mut cmds);
 }
 
 fn toggle_pause(

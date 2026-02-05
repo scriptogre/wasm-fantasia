@@ -42,16 +42,37 @@ This is a Bevy 0.17 3D RPG game template targeting native and WebAssembly platfo
 - Only native; WASM has dependency conflicts with Firewheel
 
 **`src/player/`** - Character control using Tnua + Avian3d physics:
-- `control.rs` - Tnua movement system with walk, sprint, crouch, jump, dash observers. Updates StepTimer based on actual velocity
-- `animation.rs` - Animation state machine syncing with Tnua state
+- `control.rs` - Tnua movement system with walk, sprint, crouch, jump, dash observers
+- `animation.rs` - Animation state machine syncing with Tnua state and attack state
 - `sound.rs` - Footstep sound playback (native only)
-- Spawned with: TnuaController, LockedAxes::ROTATION_LOCKED (Y-unlocked), RigidBody::Dynamic, Capsule collider, ThirdPersonCameraTarget, combat components (Health, AttackState, Combatant, PlayerCombatant)
+- Spawned with: TnuaController, RigidBody::Dynamic, Capsule collider, ThirdPersonCameraTarget, combat components, rule_presets (crit, stacking)
 
-**`src/combat/`** - Combat system:
+**`src/combat/`** - Combat system (modular architecture):
 - `components.rs` - Health, AttackState, Combatant markers, DamageEvent/DeathEvent/HitEvent
-- `systems.rs` - Attack input handling, spatial query hit detection, damage/knockback application
-- `enemy.rs` - Test enemy spawning
-- `hit_feedback.rs` - Juice effects: hit stop (freeze frame), screen shake, white flash on hit
+- `attack.rs` - Attack input handling, hit timing, AttackConnect event, spatial hit detection
+- `damage.rs` - Damage application, knockback forces, death handling
+- `targeting.rs` - Target locking system (LockedTarget component)
+- `separation.rs` - Entity separation to prevent overlap
+- `enemy.rs` - Test enemy spawning (E key)
+- `hit_feedback.rs` - Juice effects: hit stop, screen shake, impact VFX, damage numbers
+- `sound.rs` - Combat sound effects
+
+**`src/rules/`** - Data-driven behavior system (see Rules System section below):
+- `mod.rs` - Stats, Effects, Conditions, RuleVars, Op enum
+- `triggers.rs` - Trigger components (OnHitRules, OnPreHitRules, etc.), observers, timer systems
+
+**`src/rule_presets/`** - Reusable rule compositions:
+- `crit.rs` - Critical hit system (chance, damage mult, knockback mult)
+- `stacking.rs` - Stacking attack speed buff with inactivity decay
+
+**`src/networking/`** - SpacetimeDB multiplayer:
+- `mod.rs` - SpacetimeDB connection, config, plugin
+- `player.rs` - Networked player sync
+- `generated/` - Auto-generated SpacetimeDB bindings
+
+**`src/postfx/`** - ReShade-style post-processing:
+- Color grading with vibrance, contrast, shadows
+- Toggle with F2
 
 **`src/camera/`** - Third-person orbit camera (Metin2-style):
 - `third_person.rs` - Uses bevy_third_person_camera with elevated pitch (~50°) for combat visibility
@@ -124,3 +145,93 @@ Uses Quaternius Universal Animation Library. AnimationState enum is synchronized
 - Player rotation is locked on X/Z but free on Y (LockedAxes::ROTATION_LOCKED.unlock_rotation_y())
 - TNUA movement is in FixedUpdate schedule, not Update
 - Window icon uses WINIT_WINDOWS.with_borrow_mut directly due to Bevy bug #17667
+
+## Rules System (Data-Driven Behaviors)
+
+**Location**: `src/rules/` with presets in `src/rule_presets/`
+**Documentation**: `docs/implementation/RULES_SYSTEM.md` (evolving - treat as reference, not gospel)
+
+The rules system enables data-driven reactive behaviors without writing Rust code for each new mechanic. It follows a "lego block" philosophy.
+
+### Core Philosophy
+
+**Always prefer composing existing blocks over writing custom code.**
+
+When implementing new gameplay behaviors:
+
+1. **First**: Can this be done with existing Stats, Conditions, Effects, and Triggers?
+2. **If not**: What's the smallest new building block needed? Add it to the rules system.
+3. **Never**: Write one-off observers or systems that bypass the rules system for behavior that could be data-driven.
+
+### Building Blocks (Smallest to Largest)
+
+```
+Stats (data)     → Conditions (if)   → Effects (then)    → Rules (if-then)
+    ↓                   ↓                   ↓                   ↓
+Triggers (when)  → Rule Components   → Presets (bundles) → Entities
+```
+
+| Layer | Examples | When to Add |
+|-------|----------|-------------|
+| **Stats** | `Stacks`, `DeltaTime`, `HitDamage` | Need to track new per-entity value |
+| **Conditions** | `Gt`, `Lt`, `Lte`, `Chance` | Need new way to check stats |
+| **Effects** | `Set`, `Modify`, `ModifyFrom`, `Damage` | Need new way to change stats |
+| **Triggers** | `OnHitRules`, `OnTickRules`, `OnTimerRules` | Need new event to react to |
+| **Presets** | `crit()`, `stacking()` | Common patterns worth reusing |
+
+### Decomposition Process (How to Add New Mechanics)
+
+When a feature doesn't fit existing blocks, decompose it into primitives:
+
+**Example: "Inactivity Timer" (stacks reset after no hits)**
+
+1. **What is it?** A countdown that resets on hit, triggers decay when expired.
+
+2. **Break it down:**
+   - Storage: just a float value → `Stat::Inactivity`
+   - Decrement each frame: need frame delta → `Stat::DeltaTime` (system-provided)
+   - Use one stat's value in effect → `Effect::ModifyFrom { stat, op, from }`
+   - Check if expired: already have → `Condition::Lte(stat, 0.0)`
+
+3. **Compose with existing blocks:**
+   ```rust
+   OnHitRules: Set Inactivity to 2.5 (reset countdown)
+   OnTickRules: ModifyFrom { Inactivity, Subtract, DeltaTime } (decrement)
+   OnTickRules: if Inactivity <= 0 && Stacks > 0, Set Stacks to 0
+   ```
+
+4. **No magic needed.** Timer behavior emerges from composition.
+
+**Key questions when decomposing:**
+- What data does this need? → Stats
+- What changes the data? → Effects
+- What reads the data? → Conditions
+- When does it happen? → Triggers
+- Can existing blocks do this? If not, what's the minimal new block?
+
+### Anti-Patterns
+
+```rust
+// DON'T: Magic arrays marking certain stats as special
+const TIMER_STATS: &[Stat] = &[...];
+
+// DON'T: Separate storage for "different kinds" of the same thing
+struct RuleTimers(HashMap<Timer, f32>);  // Just use RuleVars
+
+// DON'T: Custom observers bypassing rules
+fn my_special_on_hit_observer(...) { /* directly modifies stuff */ }
+```
+
+### Documentation Status
+
+`docs/implementation/RULES_SYSTEM.md` documents the current state but is under active development. If you find a cleaner implementation approach:
+
+1. Implement it properly within the rules system architecture
+2. Update the documentation to match
+3. The code is the source of truth, not the docs
+
+### Key Files
+
+- `src/rules/mod.rs` - Stats, Effects, Conditions, RuleVars, Op
+- `src/rules/triggers.rs` - Trigger components (OnHitRules, etc.), observers, timer systems
+- `src/rule_presets/*.rs` - Composed presets (crit, stacking)

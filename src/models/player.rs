@@ -24,7 +24,7 @@ impl Default for Player {
     }
 }
 
-#[derive(Component, Reflect, Default, Clone)]
+#[derive(Component, Reflect, Default, Clone, Debug)]
 #[reflect(Component)]
 pub enum AnimationState {
     #[default]
@@ -38,7 +38,9 @@ pub enum AnimationState {
     Fall,
     Crouch(f32),
     CrouchIdle,
-    Dash,
+    SlideStart,
+    SlideLoop,
+    SlideExit,
     WallSlide,
     WallJump,
     KnockBack,

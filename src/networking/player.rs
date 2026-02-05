@@ -1,11 +1,14 @@
 //! Player-specific networking logic
 
-use bevy::prelude::*;
-use super::{SpacetimeDbConnection, PositionSyncTimer, LagSimulator, LagBuffers, PendingOutboundUpdate, BufferedInboundState};
 use super::generated::player_table::PlayerTableAccess;
-use spacetimedb_sdk::{Table, DbContext};
-use crate::models::Player as LocalPlayer;
+use super::{
+    BufferedInboundState, LagBuffers, LagSimulator, PendingOutboundUpdate, PositionSyncTimer,
+    SpacetimeDbConnection,
+};
 use crate::asset_loading::Models;
+use crate::models::Player as LocalPlayer;
+use bevy::prelude::*;
+use spacetimedb_sdk::{DbContext, Table};
 
 /// Component marking an entity as a remote player
 #[derive(Component, Clone, Debug)]
@@ -47,7 +50,10 @@ pub fn spawn_remote_players(
         }
 
         // Skip already spawned
-        if existing_players.iter().any(|rp| rp.identity == player.identity) {
+        if existing_players
+            .iter()
+            .any(|rp| rp.identity == player.identity)
+        {
             continue;
         }
 
@@ -60,7 +66,9 @@ pub fn spawn_remote_players(
 
         commands
             .spawn((
-                RemotePlayer { identity: player.identity },
+                RemotePlayer {
+                    identity: player.identity,
+                },
                 InterpolatedPosition {
                     target: Vec3::new(player.x, player.y, player.z),
                     target_rotation: player.rot_y,
@@ -101,10 +109,16 @@ pub fn buffer_inbound_updates(
             continue; // Drop this update
         }
 
-        buffers.inbound_buffer.insert(player.identity, BufferedInboundState {
-            x: player.x, y: player.y, z: player.z, rot_y: player.rot_y,
-            received_at: now,
-        });
+        buffers.inbound_buffer.insert(
+            player.identity,
+            BufferedInboundState {
+                x: player.x,
+                y: player.y,
+                z: player.z,
+                rot_y: player.rot_y,
+                received_at: now,
+            },
+        );
     }
 }
 
@@ -145,7 +159,8 @@ pub fn despawn_remote_players(
     query: Query<(Entity, &RemotePlayer)>,
 ) {
     for (entity, rp) in query.iter() {
-        let should_despawn = conn.conn
+        let should_despawn = conn
+            .conn
             .db
             .player()
             .identity()
@@ -204,14 +219,23 @@ pub fn send_local_position(
     if lag.outbound_delay_ms == 0 && lag.packet_loss_chance == 0.0 {
         // No lag - this will be sent immediately by process_outbound_lag
         buffers.outbound_queue.push(PendingOutboundUpdate {
-            x: pos.x, y: pos.y, z: pos.z, rot_y, anim_state,
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
+            rot_y,
+            anim_state,
             send_at: std::time::Instant::now(),
         });
     } else {
         // Queue with delay
-        let send_at = std::time::Instant::now() + std::time::Duration::from_millis(lag.outbound_delay_ms);
+        let send_at =
+            std::time::Instant::now() + std::time::Duration::from_millis(lag.outbound_delay_ms);
         buffers.outbound_queue.push(PendingOutboundUpdate {
-            x: pos.x, y: pos.y, z: pos.z, rot_y, anim_state,
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
+            rot_y,
+            anim_state,
             send_at,
         });
     }

@@ -35,10 +35,6 @@ pub struct Jump;
 
 #[derive(InputAction)]
 #[action_output(bool)]
-pub struct Sprint;
-
-#[derive(InputAction)]
-#[action_output(bool)]
 pub struct Dash;
 
 #[derive(InputAction)]
@@ -60,10 +56,6 @@ pub struct Escape;
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct SpawnEnemy;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct TargetLock;
 
 #[derive(InputAction)]
 #[action_output(Vec2)]
@@ -113,11 +105,7 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         ),
         (
             Action::<Dash>::new(),
-            bindings![KeyCode::AltLeft, GamepadButton::LeftTrigger],
-        ),
-        (
-            Action::<Sprint>::new(),
-            bindings![KeyCode::ShiftLeft, GamepadButton::LeftThumb],
+            bindings![KeyCode::ShiftLeft, GamepadButton::LeftTrigger],
         ),
         (
             Action::<Attack>::new(),
@@ -143,14 +131,6 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         (
             Action::<SpawnEnemy>::new(),
             bindings![KeyCode::KeyE],
-        ),
-        (
-            Action::<TargetLock>::new(),
-            ActionSettings {
-                require_reset: true,
-                ..Default::default()
-            },
-            bindings![KeyCode::Tab, GamepadButton::RightThumb],
         ),
     ]));
 }

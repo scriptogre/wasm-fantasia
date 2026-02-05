@@ -12,6 +12,7 @@ pub struct GameState {
 
     pub diagnostics: bool,
     pub debug_ui: bool,
+    pub screen_shake: bool,
     pub paused: bool,
     pub muted: bool,
 }
@@ -23,6 +24,7 @@ impl Default for GameState {
             current_mood: Mood::Exploration,
             diagnostics: false, // Off by default - heavy on WASM
             debug_ui: false,    // Off by default
+            screen_shake: true, // On by default
             paused: false,
             muted: false,
         }
@@ -41,10 +43,11 @@ impl GameState {
 /// Or <https://github.com/bevyengine/bevy/blob/main/examples/ecs/state.rs>
 #[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash, Reflect)]
 pub enum Screen {
-    // Bevy tribute <3
-    #[default]
+    // Bevy tribute <3 (skipped in dev mode)
+    #[cfg_attr(not(feature = "dev_native"), default)]
     Splash,
     // During the loading State the LoadingPlugin will load our assets
+    #[cfg_attr(feature = "dev_native", default)]
     Loading,
     Tutorial,
     Credits,

@@ -6,8 +6,8 @@ use spacetimedb_sdk::DbContext;
 pub mod generated;
 pub mod player;
 
-pub use player::*;
 pub use generated::{DbConnection, Player, Reducer};
+pub use player::*;
 
 use generated::join_game_reducer::join_game;
 use generated::leave_game_reducer::leave_game;
@@ -47,16 +47,19 @@ impl Plugin for NetworkingPlugin {
             .init_resource::<LagSimulator>()
             .init_resource::<LagBuffers>()
             .add_systems(PostStartup, connect_to_spacetimedb)
-            .add_systems(Update, (
-                handle_connection_events.run_if(resource_exists::<SpacetimeDbConnection>),
-                player::spawn_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
-                player::buffer_inbound_updates.run_if(resource_exists::<SpacetimeDbConnection>),
-                player::update_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
-                player::despawn_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
-                player::interpolate_positions.run_if(resource_exists::<SpacetimeDbConnection>),
-                process_outbound_lag.run_if(resource_exists::<SpacetimeDbConnection>),
-                player::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
-            ));
+            .add_systems(
+                Update,
+                (
+                    handle_connection_events.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::spawn_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::buffer_inbound_updates.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::update_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::despawn_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::interpolate_positions.run_if(resource_exists::<SpacetimeDbConnection>),
+                    process_outbound_lag.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
+                ),
+            );
     }
 }
 
@@ -137,7 +140,8 @@ fn connect_to_spacetimedb(config: Res<SpacetimeDbConfig>, mut commands: Commands
                 error!("Failed to call join_game: {:?}", e);
             }
             // Subscribe to all players
-            conn.subscription_builder().subscribe(["SELECT * FROM player"]);
+            conn.subscription_builder()
+                .subscribe(["SELECT * FROM player"]);
         })
         .on_connect_error(|_ctx, err| {
             error!("Failed to connect to SpacetimeDB: {:?}", err);
@@ -175,7 +179,11 @@ fn process_outbound_lag(
         // No lag simulation, send everything immediately
         for update in buffers.outbound_queue.drain(..) {
             if let Err(e) = conn.conn.reducers.update_position(
-                update.x, update.y, update.z, update.rot_y, update.anim_state
+                update.x,
+                update.y,
+                update.z,
+                update.rot_y,
+                update.anim_state,
             ) {
                 warn!("Failed to send position update: {:?}", e);
             }
@@ -193,7 +201,11 @@ fn process_outbound_lag(
             }
 
             if let Err(e) = conn.conn.reducers.update_position(
-                update.x, update.y, update.z, update.rot_y, update.anim_state.clone()
+                update.x,
+                update.y,
+                update.z,
+                update.rot_y,
+                update.anim_state.clone(),
             ) {
                 warn!("Failed to send position update: {:?}", e);
             }
@@ -203,4 +215,3 @@ fn process_outbound_lag(
         }
     });
 }
-

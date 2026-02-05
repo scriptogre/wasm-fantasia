@@ -1,15 +1,24 @@
 use super::*;
-use crate::combat::{AttackConnect, AttackState};
-use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective, builtins::*};
+use crate::combat::AttackState;
+use crate::rules::{RuleVars, Var};
+use bevy_tnua::{
+    TnuaAnimatingState, TnuaAnimatingStateDirective,
+    builtins::{TnuaBuiltinDashState, *},
+};
 
 mod anim_knobs {
     pub const GENERAL_SPEED: f32 = 0.1;
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
 }
 
-/// Time in seconds when attacks connect (tuned per animation)
-const PUNCH_HIT_TIME: f32 = 0.3;
-const HOOK_HIT_TIME: f32 = 0.35;
+/// Track dash animation phase timing (Tnua's states transition too fast)
+#[derive(Component, Default)]
+pub struct DashAnimationState {
+    pub active: bool,
+    pub timer: f32,
+}
+
+const SLIDE_START_DURATION: f32 = 0.05; // How long to play SlideStart before SlideLoop
 
 /// Animations we actually use - skip loading others to save memory (especially on WASM)
 const USED_ANIMATIONS: &[&str] = &[
@@ -21,7 +30,9 @@ const USED_ANIMATIONS: &[&str] = &[
     "Jump_Loop",
     "Crouch_Fwd_Loop",
     "Crouch_Idle_Loop",
-    "Roll",
+    "Slide_Start",
+    "Slide_Loop",
+    "Slide_Exit",
     "Hit_Chest",
     "Punch_Jab",
     "Punch_Cross",
@@ -62,18 +73,12 @@ pub fn prepare_animations(
         let Some(original_clip) = animation_clips.get(clip_handle) else {
             continue;
         };
-        let mut clip = original_clip.clone();
 
-        // Add AttackConnect event to all attack animations
-        if name.as_ref() == "Punch_Jab" || name.as_ref() == "Punch_Cross" {
-            clip.add_event(PUNCH_HIT_TIME, AttackConnect);
-        }
-        if name.as_ref() == "Melee_Hook" {
-            clip.add_event(HOOK_HIT_TIME, AttackConnect);
-        }
-
+        // Clone the clip handle (no event injection - gameplay drives timing via tick_attack_state)
+        let clip = original_clip.clone();
         let modified_handle = animation_clips.add(clip);
         let node_index = graph.add_clip(modified_handle, 1.0, root_node);
+        info!("Loaded animation: {}", name);
         player.animations.insert(name.to_string(), node_index);
     }
 
@@ -92,20 +97,29 @@ pub fn prepare_animations(
 /// all tnua related stuff and it should still work
 pub fn animating(
     cfg: Res<Config>,
+    time: Res<Time>,
     mut player_q: Query<(
         &TnuaController,
         &mut Player,
         &mut TnuaAnimatingState<AnimationState>,
         Option<&AttackState>,
+        Option<&RuleVars>,
+        &mut DashAnimationState,
     )>,
     mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
     // An actual game should match the animation player and the controller. Here we cheat for
     // simplicity and use the only controller and only player.
-    let Ok((controller, mut player, mut animating_state, attack_state)) = player_q.single_mut()
+    let Ok((controller, mut player, mut animating_state, attack_state, rule_vars, mut dash_anim)) =
+        player_q.single_mut()
     else {
         return;
     };
+
+    // Get attack speed multiplier from stacks (12% per stack)
+    const SPEED_PER_STACK: f32 = 0.12;
+    let stacks = rule_vars.map(|v| v.get(Var::Stacks)).unwrap_or(0.0);
+    let speed_mult = 1.0 + (stacks * SPEED_PER_STACK);
     let Ok((mut animation_player, mut transitions)) = animation_query.single_mut() else {
         return;
     };
@@ -117,40 +131,51 @@ pub fn animating(
     if let Some(attack) = attack_state {
         if attack.attacking {
             player.animation_state = AnimationState::Attack;
-            let animating_directive = animating_state.update_by_discriminant(AnimationState::Attack);
+            let animating_directive =
+                animating_state.update_by_discriminant(AnimationState::Attack);
 
-            // Alternate between jab and cross
-            let anim_name = if attack.attack_count % 2 == 0 {
+            // Select animation: hook for crits, alternate jab/cross for normal attacks
+            let anim_name = if attack.is_crit {
+                "Melee_Hook"
+            } else if attack.attack_count % 2 == 1 {
                 "Punch_Jab"
             } else {
                 "Punch_Cross"
             };
 
             // Play new animation on state change OR at start of new attack
-            let should_switch_anim = matches!(animating_directive, TnuaAnimatingStateDirective::Alter { .. })
-                || attack.attack_frame <= 1;
+            let should_switch_anim = matches!(
+                animating_directive,
+                TnuaAnimatingStateDirective::Alter { .. }
+            ) || attack.attack_time < 0.02;
 
             if should_switch_anim {
                 if let Some(index) = player.animations.get(anim_name) {
+                    // Start at base speed - wind-up should look normal
+                    // Hook is slightly slower for dramatic effect
+                    let start_speed = if attack.is_crit { 1.1 } else { 1.3 };
                     transitions
                         .play(&mut animation_player, *index, BLEND_DURATION)
-                        .set_speed(1.2);
+                        .set_speed(start_speed);
                 }
             } else {
-                // Speed curve for ongoing animation
-                let frame = attack.attack_frame;
-                let speed = if frame < 6 {
-                    1.2
-                } else if frame < 12 {
-                    1.2 + (frame - 6) as f32 * 0.22
-                } else if frame < 20 {
-                    2.0
+                // Speed curve: keep wind-up/impact readable, speed up recovery
+                // This ensures punches always reach full extension visually
+                let progress = attack.progress();
+
+                // Wind-up to impact (0-55%): minimal speed boost
+                // Recovery (55-100%): heavy speed boost from stacks
+                let base_speed = if attack.is_crit { 1.1 } else { 1.3 };
+                let anim_speed = if progress < 0.55 {
+                    // Wind-up and impact: slight boost only
+                    base_speed + (speed_mult - 1.0) * 0.25
                 } else {
-                    1.5
+                    // Recovery: full speed boost kicks in
+                    base_speed * speed_mult
                 };
 
                 for (_, anim) in animation_player.playing_animations_mut() {
-                    anim.set_speed(speed);
+                    anim.set_speed(anim_speed);
                 }
             }
             return;
@@ -230,12 +255,40 @@ pub fn animating(
             };
             AnimationState::Climb(0.3 * climbing_velocity.dot(Vec3::Y))
         }
-        // TODO: replace roll with actual dash
-        Some(TnuaBuiltinDash::NAME) => AnimationState::Dash,
-        Some(TnuaBuiltinWallSlide::NAME) => AnimationState::WallSlide,
-        Some("walljump") => AnimationState::WallJump,
+        Some(TnuaBuiltinDash::NAME) => {
+            let (_, dash_state) = controller
+                .concrete_action::<TnuaBuiltinDash>()
+                .expect("action name mismatch: Dash");
+
+            // Track dash timing ourselves since Tnua transitions too fast
+            if !dash_anim.active {
+                // Just started dashing
+                dash_anim.active = true;
+                dash_anim.timer = 0.0;
+            } else {
+                dash_anim.timer += time.delta_secs();
+            }
+
+            match dash_state {
+                TnuaBuiltinDashState::PreDash => AnimationState::SlideStart,
+                TnuaBuiltinDashState::During { .. } if dash_anim.timer < SLIDE_START_DURATION => {
+                    AnimationState::SlideStart
+                }
+                TnuaBuiltinDashState::During { .. } => AnimationState::SlideLoop,
+                TnuaBuiltinDashState::Braking { .. } => AnimationState::SlideExit,
+            }
+        }
+        Some(TnuaBuiltinWallSlide::NAME) => {
+            dash_anim.active = false; // Reset dash tracker
+            AnimationState::WallSlide
+        }
+        Some("walljump") => {
+            dash_anim.active = false;
+            AnimationState::WallJump
+        }
         Some(other) => panic!("Unknown action {other}"),
         None => {
+            dash_anim.active = false; // Reset dash tracker
             // If there is no action going on, we'll base the animation on the state of the basis.
             let Some((_, basis_state)) = controller.concrete_basis::<TnuaBuiltinWalk>() else {
                 return;
@@ -246,7 +299,8 @@ pub fn animating(
                 let basis_speed = basis_state.running_velocity.length();
                 if basis_speed > cfg.player.movement.idle_to_run_threshold {
                     let speed = anim_knobs::GENERAL_SPEED * basis_speed;
-                    if basis_speed > cfg.player.movement.speed {
+                    // Use sprint animation when at 90%+ of max speed
+                    if basis_speed >= cfg.player.movement.speed * 0.9 {
                         AnimationState::Sprint(speed)
                     } else {
                         AnimationState::Run(speed)
@@ -276,13 +330,15 @@ pub fn animating(
                     active_animation.set_speed(*speed);
                 }
             }
-            // Jumping and dashing can be chained, we want to start a new jump/dash animation
-            // when one jump/dash is chained to another.
-            AnimationState::JumpStart | AnimationState::Dash => {
+            // Jumping can be chained, we want to start a new jump animation
+            // when one jump is chained to another.
+            AnimationState::JumpStart => {
                 if controller.action_flow_status().just_starting().is_some() {
                     animation_player.seek_all_by(0.0);
                 }
             }
+            // Slide states - let them play through naturally
+            AnimationState::SlideStart | AnimationState::SlideLoop | AnimationState::SlideExit => {}
             // For other animations we don't have anything special to do - so we just let them continue.
             _ => {}
         },
@@ -377,11 +433,26 @@ pub fn animating(
                             .repeat();
                     }
                 }
-                AnimationState::Dash => {
-                    if let Some(index) = player.animations.get("Roll") {
+                AnimationState::SlideStart => {
+                    if let Some(index) = player.animations.get("Slide_Start") {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(3.0);
+                            .play(&mut animation_player, *index, Duration::from_millis(30))
+                            .set_speed(2.5); // Fast wind-up
+                    }
+                }
+                AnimationState::SlideLoop => {
+                    if let Some(index) = player.animations.get("Slide_Loop") {
+                        transitions
+                            .play(&mut animation_player, *index, Duration::from_millis(50))
+                            .set_speed(1.0)
+                            .repeat();
+                    }
+                }
+                AnimationState::SlideExit => {
+                    if let Some(index) = player.animations.get("Slide_Exit") {
+                        transitions
+                            .play(&mut animation_player, *index, Duration::from_millis(50))
+                            .set_speed(1.2);
                     }
                 }
                 AnimationState::KnockBack => {

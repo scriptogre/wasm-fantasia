@@ -53,7 +53,7 @@ permissions:
 
 env:
   # Must be the same as the main crate name for platform dependent builds
-  pkg_name: bevy_new_3d_rpg
+  pkg_name: wasm_fantasia
 
   # The itch.io project to deploy to in the format `user-name/project-name`.
   # There will be no deployment to itch.io if this is commented out.
