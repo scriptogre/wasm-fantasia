@@ -10,8 +10,8 @@
     ),
     player:(
         spawn_pos: (0.0, 1.5, 0.0),
-        fov: 60,
-        zoom: (2.0, 10),  // Initial zoom is midpoint (6.0)
+        fov: 75,
+        zoom: (4.0, 16.0),  // More zoomed out for better combat visibility
         movement: (
             speed: 8,
             crouch_factor: 0.2,

@@ -21,9 +21,9 @@ fn add_tpv_cam(
         return Ok(());
     }
 
-    // Set initial camera rotation to ~50 degrees pitch (looking down at player)
-    // This gives a Metin2-style elevated view while still allowing orbit control
-    let pitch = 50_f32.to_radians();
+    // Set initial camera rotation to ~45 degrees pitch (looking down at player)
+    // Balanced angle - good visibility without feeling too top-down
+    let pitch = 45_f32.to_radians();
     transform.rotation = Quat::from_rotation_x(-pitch);
 
     commands.entity(cam).insert((

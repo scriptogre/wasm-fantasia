@@ -20,12 +20,13 @@ fn on_damage(
 
     let died = health.take_damage(event.damage);
 
-    // Trigger hit feedback
+    // Trigger hit feedback with computed values from rules
     commands.trigger(HitEvent {
         source: event.source,
         target: event.target,
         damage: event.damage,
         is_crit: event.is_crit,
+        feedback: event.feedback.clone(),
     });
 
     // Apply force (knockback, launch, pull, etc.)

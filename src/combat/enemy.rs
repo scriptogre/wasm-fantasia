@@ -1,5 +1,6 @@
 use super::*;
 use crate::models::SpawnEnemy;
+use crate::rules::{Stat, Stats};
 use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
 use bevy_enhanced_input::prelude::Start;
 
@@ -54,6 +55,10 @@ fn spawn_enemy_in_front(
             Health::new(500.0),
             Enemy,
             Combatant,
+            // Stats for rules system
+            Stats::new()
+                .with(Stat::MaxHealth, 500.0)
+                .with(Stat::Health, 500.0),
             // Physics
             Collider::capsule(0.5, 1.0),
             RigidBody::Dynamic,

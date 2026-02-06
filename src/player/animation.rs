@@ -1,6 +1,6 @@
 use super::*;
 use crate::combat::AttackState;
-use crate::rules::{RuleVars, Var};
+use crate::rules::{Stat, Stats};
 use bevy_tnua::{
     TnuaAnimatingState, TnuaAnimatingStateDirective,
     builtins::{TnuaBuiltinDashState, *},
@@ -16,6 +16,13 @@ mod anim_knobs {
 pub struct DashAnimationState {
     pub active: bool,
     pub timer: f32,
+}
+
+/// Track which attack animation is playing to detect new attacks reliably
+#[derive(Component, Default)]
+pub struct AttackAnimationState {
+    /// Last attack count we started an animation for
+    pub last_attack_count: u32,
 }
 
 const SLIDE_START_DURATION: f32 = 0.05; // How long to play SlideStart before SlideLoop
@@ -103,23 +110,34 @@ pub fn animating(
         &mut Player,
         &mut TnuaAnimatingState<AnimationState>,
         Option<&AttackState>,
-        Option<&RuleVars>,
+        Option<&Stats>,
         &mut DashAnimationState,
+        &mut AttackAnimationState,
     )>,
     mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
     // An actual game should match the animation player and the controller. Here we cheat for
     // simplicity and use the only controller and only player.
-    let Ok((controller, mut player, mut animating_state, attack_state, rule_vars, mut dash_anim)) =
-        player_q.single_mut()
+    let Ok((
+        controller,
+        mut player,
+        mut animating_state,
+        attack_state,
+        stats,
+        mut dash_anim,
+        mut attack_anim,
+    )) = player_q.single_mut()
     else {
         return;
     };
 
-    // Get attack speed multiplier from stacks (12% per stack)
-    const SPEED_PER_STACK: f32 = 0.12;
-    let stacks = rule_vars.map(|v| v.get(Var::Stacks)).unwrap_or(0.0);
-    let speed_mult = 1.0 + (stacks * SPEED_PER_STACK);
+    // Get attack speed multiplier from rules (0.0 means "not set", treat as 1.0)
+    let speed_mult = stats
+        .map(|s| {
+            let speed = s.get(&Stat::AttackSpeed);
+            if speed == 0.0 { 1.0 } else { speed }
+        })
+        .unwrap_or(1.0);
     let Ok((mut animation_player, mut transitions)) = animation_query.single_mut() else {
         return;
     };
@@ -131,8 +149,8 @@ pub fn animating(
     if let Some(attack) = attack_state {
         if attack.attacking {
             player.animation_state = AnimationState::Attack;
-            let animating_directive =
-                animating_state.update_by_discriminant(AnimationState::Attack);
+            // Keep TnuaAnimatingState in sync (for when attack ends)
+            animating_state.update_by_discriminant(AnimationState::Attack);
 
             // Select animation: hook for crits, alternate jab/cross for normal attacks
             let anim_name = if attack.is_crit {
@@ -143,13 +161,13 @@ pub fn animating(
                 "Punch_Cross"
             };
 
-            // Play new animation on state change OR at start of new attack
-            let should_switch_anim = matches!(
-                animating_directive,
-                TnuaAnimatingStateDirective::Alter { .. }
-            ) || attack.attack_time < 0.02;
+            // Detect new attack by comparing attack_count (gameplay truth)
+            // This is reliable regardless of system ordering or TnuaAnimatingState bugs
+            let is_new_attack = attack.attack_count != attack_anim.last_attack_count;
 
-            if should_switch_anim {
+            if is_new_attack {
+                attack_anim.last_attack_count = attack.attack_count;
+
                 if let Some(index) = player.animations.get(anim_name) {
                     // Start at base speed - wind-up should look normal
                     // Hook is slightly slower for dramatic effect

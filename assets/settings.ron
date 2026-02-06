@@ -1,10 +1,10 @@
 (
     sound: (
         general: 1.0,
-        music: 0.5,
+        music: 0.0,
         sfx: 0.5,
     ),
-    fov: 99.37746,
+    fov: 65.0,
     input_map: (
         forward: (Keyboard(
             key: KeyW,

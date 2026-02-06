@@ -1,62 +1,99 @@
 use super::*;
-use crate::rules::{execute_rules, OnPreHitRules, RuleVars, Var};
-use bevy_enhanced_input::prelude::Start;
+use crate::player::control::InputBuffer;
+use crate::rule_presets::feedback;
+use crate::rules::{
+    execute_effects, execute_rules, Action, ActionVar, OnPreHitRules, RuleOutput, Stat, Stats,
+};
+use bevy_enhanced_input::prelude::Fire;
 use bevy_tnua::builtins::TnuaBuiltinDash;
 use bevy_tnua::prelude::*;
 
-/// Attack configuration - designed for hitting hordes
-/// VFX defines the visual, hitbox is larger so attacks feel responsive
-pub const VFX_RANGE: f32 = 2.0; // Visual range of the attack effect
-pub const VFX_ARC_DEGREES: f32 = 120.0; // Visual arc in degrees
-pub const ATTACK_RANGE: f32 = 3.6; // Hitbox extends beyond visuals (+20%)
-pub const ATTACK_ARC: f32 = 150.0; // Hitbox arc wider than visuals
-pub const ATTACK_DAMAGE: f32 = 25.0;
-pub const ATTACK_KNOCKBACK: f32 = 3.0;
+/// Visual constants for attack effects
+pub const VFX_RANGE: f32 = 2.0;
+pub const VFX_ARC_DEGREES: f32 = 120.0;
 
-/// Speed bonus per stack (12% faster per stack)
-const SPEED_PER_STACK: f32 = 0.12;
+/// Base values for combat - used to initialize Action context.
+/// Rules can modify these. All combatants should have Stats.
+mod base {
+    // Attack parameters
+    pub const DAMAGE: f32 = 25.0;
+    pub const KNOCKBACK: f32 = 3.0;
+    pub const RANGE: f32 = 3.6;
+    pub const ARC: f32 = 150.0;
+}
 
 pub fn plugin(app: &mut App) {
     app.add_observer(handle_attack)
         .add_observer(on_attack_connect)
-        .add_systems(Update, tick_attack_state.run_if(in_state(Screen::Gameplay)));
+        .add_systems(
+            Update,
+            (tick_attack_state, process_buffered_attack).run_if(in_state(Screen::Gameplay)),
+        );
 }
 
 fn handle_attack(
-    on: On<Start<Attack>>,
+    on: On<Fire<Attack>>,
+    mut buffer: ResMut<InputBuffer>,
     mut query: Query<(&mut AttackState, &TnuaController), With<PlayerCombatant>>,
 ) {
     let Ok((mut attack_state, controller)) = query.get_mut(on.context) else {
-        info!("handle_attack: no player found");
         return;
     };
 
-    // Block attacks during dash/slide
+    // Block attacks during dash/slide - buffer for after dash
+    if controller.action_name() == Some(TnuaBuiltinDash::NAME) {
+        buffer.buffer_attack();
+        return;
+    }
+
+    if attack_state.can_attack() {
+        attack_state.start_attack(false);
+    } else {
+        // Buffer the attack for when current attack finishes
+        buffer.buffer_attack();
+    }
+}
+
+/// Execute buffered attack when possible
+fn process_buffered_attack(
+    mut buffer: ResMut<InputBuffer>,
+    mut query: Query<(&mut AttackState, &TnuaController), With<PlayerCombatant>>,
+) {
+    if buffer.attack.is_none() {
+        return;
+    }
+
+    let Ok((mut attack_state, controller)) = query.single_mut() else {
+        return;
+    };
+
+    // Still dashing, keep buffer
     if controller.action_name() == Some(TnuaBuiltinDash::NAME) {
         return;
     }
 
     if attack_state.can_attack() {
-        info!("Starting attack #{}", attack_state.attack_count + 1);
+        buffer.attack = None;
         attack_state.start_attack(false);
-    } else {
-        info!(
-            "Can't attack: cooldown_finished={}, attacking={}",
-            attack_state.cooldown.is_finished(),
-            attack_state.attacking
-        );
     }
 }
 
 /// Tick attack state timers and trigger hits based on time (not animation events).
 fn tick_attack_state(
     time: Res<Time>,
-    mut query: Query<(Entity, &mut AttackState, Option<&RuleVars>)>,
+    mut query: Query<(Entity, &mut AttackState, Option<&Stats>)>,
     mut commands: Commands,
 ) {
-    for (entity, mut state, rule_vars) in query.iter_mut() {
-        let stacks = rule_vars.map(|v| v.get(Var::Stacks)).unwrap_or(0.0);
-        let speed_mult = 1.0 + (stacks * SPEED_PER_STACK);
+    for (entity, mut state, stats) in query.iter_mut() {
+        // AttackSpeed: 1.0 = normal, >1 = faster, <1 = slower
+        // Default to 1.0 if stat not set (0.0 means "not initialized", not "zero speed")
+        let speed_mult = stats
+            .map(|s| {
+                let speed = s.get(&Stat::AttackSpeed);
+                if speed == 0.0 { 1.0 } else { speed }
+            })
+            .unwrap_or(1.0)
+            .max(0.1); // Prevent negative speed
 
         let scaled_delta = time.delta().mul_f32(speed_mult);
         state.cooldown.tick(scaled_delta);
@@ -79,7 +116,7 @@ fn tick_attack_state(
 }
 
 /// Observer: triggered when attack hit time is reached.
-/// Executes OnPreHitRules to determine crit/damage, then applies to all enemies in range.
+/// Executes OnPreHitRules to compute damage, crit, force, and feedback values.
 fn on_attack_connect(
     trigger: On<AttackConnect>,
     mut attackers: Query<
@@ -87,7 +124,7 @@ fn on_attack_connect(
             &mut AttackState,
             &Transform,
             Option<&OnPreHitRules>,
-            Option<&mut RuleVars>,
+            Option<&mut Stats>,
         ),
         With<PlayerCombatant>,
     >,
@@ -95,47 +132,76 @@ fn on_attack_connect(
     mut commands: Commands,
 ) {
     let attacker_entity = trigger.event().attacker;
-    let Ok((mut attack_state, transform, pre_hit_rules, rule_vars)) =
+    let Ok((mut attack_state, transform, pre_hit_rules, stats)) =
         attackers.get_mut(attacker_entity)
     else {
         return;
     };
 
-    let half_arc_cos = (ATTACK_ARC / 2.0_f32).to_radians().cos();
+    // Read base values from Stats, fall back to base constants
+    let get_stat = |stat: &Stat, default: f32| -> f32 {
+        stats
+            .as_ref()
+            .map(|s| s.get(stat))
+            .filter(|&v| v > 0.0)
+            .unwrap_or(default)
+    };
 
-    // Execute OnPreHitRules to determine damage, crit, and force
-    let (damage, force_radial, force_forward, force_vertical, is_crit) =
-        if let (Some(rules), Some(mut vars)) = (pre_hit_rules, rule_vars) {
-            // Set base values (also resets IsCrit from previous hit)
-            vars.set(Var::HitDamage, ATTACK_DAMAGE);
-            vars.set(Var::HitForceRadial, ATTACK_KNOCKBACK);
-            vars.set(Var::HitForceForward, 0.0);
-            vars.set(Var::HitForceVertical, 0.0);
-            vars.set(Var::IsCrit, 0.0);
+    let base_damage = get_stat(&Stat::AttackDamage, base::DAMAGE);
+    let base_knockback = get_stat(&Stat::Knockback, base::KNOCKBACK);
+    let base_range = get_stat(&Stat::AttackRange, base::RANGE);
+    let base_arc = get_stat(&Stat::AttackArc, base::ARC);
 
-            // Execute rules (may modify damage, force, set crit)
-            execute_rules(&rules.0, &mut vars);
+    // Create action context with base combat values
+    let mut action = Action::new()
+        .with(ActionVar::Damage, base_damage)
+        .with(ActionVar::Knockback, base_knockback)
+        .with(ActionVar::Push, 0.0)
+        .with(ActionVar::Launch, 0.0);
 
-            // Read results
-            let dmg = vars.get(Var::HitDamage);
-            let radial = vars.get(Var::HitForceRadial);
-            let forward = vars.get(Var::HitForceForward);
-            let vertical = vars.get(Var::HitForceVertical);
-            let crit = vars.get(Var::IsCrit) > 0.5;
+    // Apply standard feedback preset (sets HitStopDuration, ShakeIntensity, etc.)
+    let mut dummy_stats = Stats::new();
+    let _ = execute_effects(&feedback::standard(), &mut dummy_stats, &mut action);
 
-            attack_state.is_crit = crit;
+    // Execute OnPreHitRules (may modify damage, trigger crit, etc.)
+    let rule_output = if let (Some(rules), Some(mut stats)) = (pre_hit_rules, stats) {
+        execute_rules(&rules.0, &mut stats, &mut action)
+    } else {
+        RuleOutput::new()
+    };
 
-            (dmg, radial, forward, vertical, crit)
-        } else {
-            (ATTACK_DAMAGE, ATTACK_KNOCKBACK, 0.0, 0.0, false)
-        };
+    // Check if crit was triggered by rules
+    let is_crit = rule_output.is_crit();
+
+    // Read computed values from action context
+    let damage = action.get(&ActionVar::Damage);
+    let force_radial = action.get(&ActionVar::Knockback);
+    let force_forward = action.get(&ActionVar::Push);
+    let force_vertical = action.get(&ActionVar::Launch);
+
+    // Build feedback from action context
+    let rumble_intensity = action.get(&ActionVar::RumbleIntensity);
+    let feedback = HitFeedback {
+        hit_stop_duration: action.get(&ActionVar::HitStopDuration),
+        shake_intensity: action.get(&ActionVar::ShakeIntensity),
+        flash_duration: action.get(&ActionVar::FlashDuration),
+        // Map single intensity to both motors (strong gets full, weak gets 60%)
+        rumble_strong: rumble_intensity,
+        rumble_weak: rumble_intensity * 0.6,
+        rumble_duration: action.get(&ActionVar::RumbleDuration),
+    };
+
+    attack_state.is_crit = is_crit;
 
     let attacker_pos = transform.translation;
     let forward = transform.forward().as_vec3();
+    let half_arc_cos = (base_arc / 2.0_f32).to_radians().cos();
+
+    // Crits get 30% more range
     let range = if is_crit {
-        ATTACK_RANGE * 1.3
+        base_range * 1.3
     } else {
-        ATTACK_RANGE
+        base_range
     };
 
     for (target_entity, target_tf) in targets.iter() {
@@ -164,6 +230,7 @@ fn on_attack_connect(
             damage,
             force,
             is_crit,
+            feedback: feedback.clone(),
         });
     }
 }

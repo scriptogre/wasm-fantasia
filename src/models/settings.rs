@@ -10,7 +10,14 @@ pub fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(Screen::Title),
         load_settings.run_if(resource_exists::<Config>.and(run_once)),
-    );
+    )
+    .add_systems(OnExit(Screen::Settings), auto_save_settings);
+}
+
+fn auto_save_settings(settings: Res<Settings>) {
+    if let Err(e) = settings.save() {
+        error!("Failed to auto-save settings: {e}");
+    }
 }
 
 #[derive(Resource, Reflect, Deserialize, Serialize, Debug, Clone)]

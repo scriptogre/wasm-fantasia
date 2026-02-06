@@ -1,11 +1,13 @@
+use std::time::Duration;
+
+use bevy::input::gamepad::{GamepadRumbleIntensity, GamepadRumbleRequest};
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
-use crate::combat::attack::{ATTACK_ARC, ATTACK_RANGE};
 use crate::combat::components::{DamageEvent, DeathEvent, Enemy, Health};
 use crate::combat::{AttackConnect, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::{GameState, Player, SceneCamera, Screen};
-use crate::rules::{RuleVars, Var};
+use crate::rules::{Stat, Stats};
 use crate::ui::colors::{GRASS_GREEN, GRAY_0, LIGHT_GRAY_1, RED, SAND_YELLOW};
 
 pub fn plugin(app: &mut App) {
@@ -19,6 +21,7 @@ pub fn plugin(app: &mut App) {
         .add_observer(on_debug_hitbox)
         .add_observer(on_enemy_damaged)
         .add_observer(on_enemy_death)
+        .add_observer(on_rumble)
         .add_systems(
             Startup,
             (
@@ -248,12 +251,16 @@ fn setup_debug_hitbox_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    // Debug hitbox uses default values (actual values read from Stats at runtime)
+    const DEBUG_RANGE: f32 = 3.6;
+    const DEBUG_ARC: f32 = 150.0;
+
     // Create arc mesh using actual hitbox values (larger than visual)
     let arc_mesh = create_arc_mesh(
-        ATTACK_RANGE,            // actual hitbox range
-        ATTACK_ARC.to_radians(), // actual hitbox arc
-        0.1,                     // thin height (wireframe-like)
-        24,                      // more segments for accuracy
+        DEBUG_RANGE,            // actual hitbox range
+        DEBUG_ARC.to_radians(), // actual hitbox arc
+        0.1,                    // thin height (wireframe-like)
+        24,                     // more segments for accuracy
     );
     let mesh = meshes.add(arc_mesh);
 
@@ -326,6 +333,8 @@ pub struct HitEvent {
     pub target: Entity,
     pub damage: f32,
     pub is_crit: bool,
+    /// Feedback configuration computed by rules.
+    pub feedback: super::HitFeedback,
 }
 
 // ============================================================================
@@ -339,41 +348,35 @@ pub struct HitStop {
 }
 
 impl HitStop {
-    pub const DURATION: f32 = 0.04; // Per-hit freeze
-    pub const MAX_DURATION: f32 = 0.08; // Cap total freeze (~5 frames at 60fps)
-    pub const CRIT_DURATION: f32 = 0.06; // Crits freeze slightly longer
-    pub const CRIT_MAX_DURATION: f32 = 0.08; // But not too much
+    pub const MAX_DURATION: f32 = 0.12; // Cap total accumulated freeze
 }
 
 fn on_hit_stop(
     on: On<HitEvent>,
     mut hit_stop: ResMut<HitStop>,
     mut time: ResMut<Time<Virtual>>,
-    player: Query<&RuleVars, With<Player>>,
+    player: Query<&Stats, With<Player>>,
 ) {
     let event = on.event();
+    let duration = event.feedback.hit_stop_duration;
 
-    // Reduce hit stop at high stacks - flow state shouldn't interrupt as much
-    // But crits always feel impactful
-    let stack_reduction = if event.is_crit {
-        0.0 // Crits ignore stack reduction
+    if duration <= 0.0 {
+        return;
+    }
+
+    // Reduce freeze at high attack speed (flow state)
+    let speed_reduction = if event.is_crit {
+        0.0 // Crits ignore speed reduction
     } else {
-        player
+        let attack_speed = player
             .single()
-            .map(|v| v.get(Var::Stacks) * 0.1)
-            .unwrap_or(0.0)
+            .map(|s| s.get(&Stat::AttackSpeed))
+            .unwrap_or(1.0);
+        ((attack_speed - 1.0) * 0.5).clamp(0.0, 0.8)
     };
 
-    let (base_duration, base_max) = if event.is_crit {
-        (HitStop::CRIT_DURATION, HitStop::CRIT_MAX_DURATION)
-    } else {
-        (HitStop::DURATION, HitStop::MAX_DURATION)
-    };
-
-    let duration = (base_duration * (1.0 - stack_reduction)).max(0.01);
-    let max_duration = (base_max * (1.0 - stack_reduction)).max(0.02);
-
-    hit_stop.remaining = (hit_stop.remaining + duration).min(max_duration);
+    let adjusted = (duration * (1.0 - speed_reduction)).max(0.01);
+    hit_stop.remaining = (hit_stop.remaining + adjusted).min(HitStop::MAX_DURATION);
     hit_stop.active = true;
     time.set_relative_speed(0.05);
 }
@@ -411,21 +414,44 @@ pub struct ScreenShake {
 }
 
 impl ScreenShake {
-    pub const DECAY: f32 = 2.5; // Faster decay
+    pub const DECAY: f32 = 2.5;
     pub const MAX_TRANSLATION: f32 = 0.25;
     pub const NOISE_SPEED: f32 = 25.0;
-    pub const HIT_TRAUMA: f32 = 0.25; // Normal hit
-    pub const CRIT_TRAUMA: f32 = 0.7; // Crits shake hard
     pub const EXPONENT: f32 = 2.0;
 }
 
 fn on_screen_shake(on: On<HitEvent>, mut shake: ResMut<ScreenShake>) {
-    let trauma = if on.event().is_crit {
-        ScreenShake::CRIT_TRAUMA
-    } else {
-        ScreenShake::HIT_TRAUMA
-    };
-    shake.trauma = (shake.trauma + trauma).min(1.0);
+    let intensity = on.event().feedback.shake_intensity;
+    shake.trauma = (shake.trauma + intensity).min(1.0);
+}
+
+// ============================================================================
+// GAMEPAD RUMBLE
+// Light pulse on hit, stronger on crit. Uses both motors for fuller feedback.
+// ============================================================================
+
+fn on_rumble(
+    on: On<HitEvent>,
+    gamepads: Query<Entity, With<Gamepad>>,
+    mut rumble: MessageWriter<GamepadRumbleRequest>,
+) {
+    let feedback = &on.event().feedback;
+
+    // Skip if no rumble configured
+    if feedback.rumble_strong <= 0.0 && feedback.rumble_weak <= 0.0 {
+        return;
+    }
+
+    for gamepad in gamepads.iter() {
+        rumble.write(GamepadRumbleRequest::Add {
+            gamepad,
+            duration: Duration::from_millis(feedback.rumble_duration as u64),
+            intensity: GamepadRumbleIntensity {
+                strong_motor: feedback.rumble_strong,
+                weak_motor: feedback.rumble_weak,
+            },
+        });
+    }
 }
 
 /// Restore camera to its original (unshaken) position at start of frame.
@@ -480,12 +506,12 @@ fn apply_camera_shake(
 #[derive(Component)]
 pub struct HitFlash {
     pub timer: f32,
+    pub duration: f32,
     pub original_color: Color,
 }
 
 impl HitFlash {
-    pub const DURATION: f32 = 0.08; // Quick flash
-    pub const FLASH_COLOR: Color = Color::srgb(1.0, 0.9, 0.8); // Bright white-ish
+    pub const FLASH_COLOR: Color = Color::srgb(1.0, 0.9, 0.8);
 }
 
 fn on_hit_flash(
@@ -495,6 +521,11 @@ fn on_hit_flash(
     mut commands: Commands,
 ) {
     let event = on.event();
+
+    // Skip if no flash configured
+    if event.feedback.flash_duration <= 0.0 {
+        return;
+    }
 
     let Ok((mat_handle, existing_flash)) = targets.get_mut(event.target) else {
         return;
@@ -516,6 +547,7 @@ fn on_hit_flash(
 
     commands.entity(event.target).insert(HitFlash {
         timer: 0.0,
+        duration: event.feedback.flash_duration,
         original_color,
     });
 }
@@ -529,7 +561,7 @@ fn tick_hit_flash(
     for (entity, mut flash, mat_handle) in flashing.iter_mut() {
         flash.timer += time.delta_secs();
 
-        if flash.timer >= HitFlash::DURATION {
+        if flash.timer >= flash.duration {
             // Restore original color
             if let Some(material) = materials.get_mut(mat_handle) {
                 material.base_color = flash.original_color;
@@ -1123,13 +1155,14 @@ pub fn spawn_combat_stacks_display(commands: &mut Commands) {
 }
 
 fn tick_combat_stacks_display(
-    player: Query<&RuleVars, With<Player>>,
+    player: Query<&Stats, With<Player>>,
     mut indicators: Query<(&StackIndicator, &mut BackgroundColor)>,
 ) {
-    let Ok(vars) = player.single() else {
+    let Ok(stats) = player.single() else {
         return;
     };
-    let stacks = vars.get(Var::Stacks) as u32;
+    // Read the stacking system's internal stat
+    let stacks = stats.get(&Stat::Custom("Stacks".into())) as u32;
 
     for (indicator, mut bg) in indicators.iter_mut() {
         if indicator.0 < stacks {

@@ -1,6 +1,6 @@
 use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
-use crate::rule_presets::{self, CritConfig, StackingConfig};
-use crate::rules::{Effect, OnKillRules, Rule};
+use crate::rule_presets::{self, StackingConfig};
+use crate::rules::{Effect, OnKillRules, Rule, Stat, Stats};
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
@@ -13,7 +13,7 @@ use bevy_tnua_avian3d::*;
 use std::time::Duration;
 
 mod animation;
-mod control;
+pub mod control;
 mod sound;
 
 pub use animation::*;
@@ -85,6 +85,7 @@ pub fn spawn_player(
                 TnuaAnimatingState::<AnimationState>::default(),
                 TnuaSimpleAirActionsCounter::default(),
                 animation::DashAnimationState::default(),
+                animation::AttackAnimationState::default(),
                 // A sensor shape is not strictly necessary, but without it we'll get weird results.
                 TnuaAvian3dSensorShape(collider.clone()),
             ),
@@ -107,8 +108,20 @@ pub fn spawn_player(
                 Combatant,
                 PlayerCombatant,
             ),
-            // rules system - using presets
-            rule_presets::crit(CritConfig::default()),
+            // rules system - base stats + presets
+            Stats::new()
+                // Core stats
+                .with(Stat::MaxHealth, 100.0)
+                .with(Stat::Health, 100.0)
+                // Attack parameters (read by on_attack_connect)
+                .with(Stat::AttackDamage, 25.0)
+                .with(Stat::Knockback, 3.0)
+                .with(Stat::AttackRange, 3.6)
+                .with(Stat::AttackArc, 150.0)
+                // Crit stats (used by crit preset)
+                .with(Stat::CritChance, 0.20)
+                .with(Stat::CritMultiplier, 2.5),
+            rule_presets::crit(),
             rule_presets::stacking(StackingConfig::default()),
             // On kill: log for now (not part of a preset yet)
             OnKillRules(vec![

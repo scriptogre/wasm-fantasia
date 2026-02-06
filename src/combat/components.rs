@@ -77,8 +77,12 @@ pub mod hit_timing {
 
 impl AttackState {
     pub fn new(cooldown_secs: f32) -> Self {
+        // Start cooldown as finished so player can attack immediately
+        let mut cooldown = Timer::from_seconds(cooldown_secs, TimerMode::Once);
+        cooldown.tick(std::time::Duration::from_secs_f32(cooldown_secs));
+
         Self {
-            cooldown: Timer::from_seconds(cooldown_secs, TimerMode::Once),
+            cooldown,
             attacking: false,
             attack_time: 0.0,
             attack_duration: attack_timing::PUNCH_DURATION,
@@ -126,6 +130,24 @@ pub struct Staggered {
     pub duration: Timer,
 }
 
+/// Per-action feedback configuration, computed by rules.
+/// Values are set by feedback presets and modified by rules (e.g., crit amplify).
+#[derive(Debug, Clone, Default)]
+pub struct HitFeedback {
+    /// Hit stop (freeze frame) duration in seconds.
+    pub hit_stop_duration: f32,
+    /// Screen shake intensity (0.0 to 1.0).
+    pub shake_intensity: f32,
+    /// Hit flash duration on target in seconds.
+    pub flash_duration: f32,
+    /// Gamepad rumble strong motor (0.0 to 1.0).
+    pub rumble_strong: f32,
+    /// Gamepad rumble weak motor (0.0 to 1.0).
+    pub rumble_weak: f32,
+    /// Gamepad rumble duration in milliseconds.
+    pub rumble_duration: f32,
+}
+
 /// Event fired when an entity takes damage (use with commands.trigger()).
 #[derive(Event, Debug, Clone)]
 pub struct DamageEvent {
@@ -135,6 +157,8 @@ pub struct DamageEvent {
     /// Combined force vector (radial + forward + vertical components)
     pub force: Vec3,
     pub is_crit: bool,
+    /// Feedback configuration for this hit.
+    pub feedback: HitFeedback,
 }
 
 /// Event fired when an entity dies (use with commands.trigger()).

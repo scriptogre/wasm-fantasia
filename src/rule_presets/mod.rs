@@ -13,7 +13,8 @@
 //! ```
 
 mod crit;
+pub mod feedback;
 mod stacking;
 
-pub use crit::{CritConfig, crit};
+pub use crit::crit;
 pub use stacking::{StackingConfig, stacking};

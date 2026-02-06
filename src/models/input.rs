@@ -1,3 +1,5 @@
+use bevy::input::gamepad::{GamepadButtonChangedEvent, GamepadAxisChangedEvent, GamepadConnectionEvent};
+
 use super::*;
 
 pub fn plugin(app: &mut App) {
@@ -5,10 +7,71 @@ pub fn plugin(app: &mut App) {
         .add_input_context::<PlayerCtx>()
         .add_input_context::<ModalCtx>()
         .add_systems(Startup, spawn_ctx)
+        .add_systems(Update, log_gamepad_events)
         // .add_observer(rm_modal_ctx)
         // .add_observer(rm_player_ctx)
         .add_observer(add_modal_ctx)
-        .add_observer(add_player_ctx);
+        .add_observer(add_player_ctx)
+        .add_observer(log_navigate)
+        .add_observer(log_jump)
+        .add_observer(log_dash)
+        .add_observer(log_crouch_start)
+        .add_observer(log_crouch_end)
+        .add_observer(log_attack)
+        .add_observer(log_escape);
+}
+
+fn log_gamepad_events(
+    mut connections: MessageReader<GamepadConnectionEvent>,
+    mut buttons: MessageReader<GamepadButtonChangedEvent>,
+    mut axes: MessageReader<GamepadAxisChangedEvent>,
+) {
+    for event in connections.read() {
+        info!("[GAMEPAD] Connection: {:?}", event);
+    }
+    for event in buttons.read() {
+        if event.value.abs() > 0.1 {
+            info!("[GAMEPAD] Button: {:?} = {:.2}", event.button, event.value);
+        }
+    }
+    for event in axes.read() {
+        if event.value.abs() > 0.1 {
+            info!("[GAMEPAD] Axis: {:?} = {:.2}", event.axis, event.value);
+        }
+    }
+}
+
+fn log_navigate(on: On<Fire<Navigate>>, actions: Query<&Action<Navigate>>) {
+    if let Ok(action) = actions.get(on.context) {
+        let val = **action;
+        if val.length() > 0.1 {
+            info!("[ACTION] Navigate: ({:.2}, {:.2})", val.x, val.y);
+        }
+    }
+}
+
+fn log_jump(_on: On<Start<Jump>>) {
+    info!("[ACTION] Jump started");
+}
+
+fn log_dash(_on: On<Start<Dash>>) {
+    info!("[ACTION] Dash started");
+}
+
+fn log_crouch_start(_on: On<Start<Crouch>>) {
+    info!("[ACTION] Crouch started");
+}
+
+fn log_crouch_end(_on: On<Complete<Crouch>>) {
+    info!("[ACTION] Crouch ended");
+}
+
+fn log_attack(_on: On<Start<Attack>>) {
+    info!("[ACTION] Attack started");
+}
+
+fn log_escape(_on: On<Start<Escape>>) {
+    info!("[ACTION] Escape pressed");
 }
 
 markers!(GlobalCtx, PlayerCtx, ModalCtx);
@@ -97,7 +160,7 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         ),
         (
             Action::<Crouch>::new(),
-            bindings![KeyCode::ControlLeft, GamepadButton::East],
+            bindings![KeyCode::ControlLeft, GamepadButton::LeftTrigger2],
         ),
         (
             Action::<Jump>::new(),
@@ -105,11 +168,11 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         ),
         (
             Action::<Dash>::new(),
-            bindings![KeyCode::ShiftLeft, GamepadButton::LeftTrigger],
+            bindings![KeyCode::ShiftLeft, GamepadButton::East],
         ),
         (
             Action::<Attack>::new(),
-            bindings![MouseButton::Left, GamepadButton::RightTrigger2],
+            bindings![MouseButton::Left, GamepadButton::North],
         ),
 
         (
@@ -126,11 +189,11 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
                 require_reset: true,
                 ..Default::default()
             },
-            bindings![KeyCode::Escape, GamepadButton::Select],
+            bindings![KeyCode::Escape, GamepadButton::Start],
         ),
         (
             Action::<SpawnEnemy>::new(),
-            bindings![KeyCode::KeyE],
+            bindings![KeyCode::KeyE, GamepadButton::RightThumb],
         ),
     ]));
 }

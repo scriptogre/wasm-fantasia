@@ -1,7 +1,8 @@
 //! Rule trigger components and observers
 
 use super::*;
-use crate::combat::{DamageEvent, DeathEvent, HitEvent};
+use crate::combat::{AttackState, DamageEvent, DeathEvent, HitEvent};
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // DERIVED EVENTS
@@ -20,28 +21,40 @@ pub struct CritKillEvent {
 }
 
 // ============================================================================
-// TRIGGER COMPONENTS
+// LEVEL 6: TRIGGER COMPONENTS
 // ============================================================================
 
-#[derive(Component, Default, Clone, Debug)]
+/// Rules that execute before a hit resolves (attacker).
+/// Use to compute damage, determine crit, modify force.
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct OnPreHitRules(pub Vec<Rule>);
 
-#[derive(Component, Default, Clone, Debug)]
+/// Rules that execute after a hit lands (attacker).
+/// Use for on-hit effects like lifesteal, stack gain.
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct OnHitRules(pub Vec<Rule>);
 
-#[derive(Component, Default, Clone, Debug)]
+/// Rules that execute after a critical hit (attacker).
+/// Fires automatically when IsCrit is set (see module-level boolean convention).
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct OnCritHitRules(pub Vec<Rule>);
 
-#[derive(Component, Default, Clone, Debug)]
+/// Rules that execute after killing an enemy (killer).
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct OnKillRules(pub Vec<Rule>);
 
-#[derive(Component, Default, Clone, Debug)]
+/// Rules that execute after a critical kill (killer).
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct OnCritKillRules(pub Vec<Rule>);
 
-#[derive(Component, Default, Clone, Debug)]
+/// Rules that execute when taking damage (defender).
+/// Use for damage reduction, shields, armor.
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct OnTakeDamageRules(pub Vec<Rule>);
 
-#[derive(Component, Default, Clone, Debug)]
+/// Rules that execute every frame.
+/// DeltaTime is available in Action context.
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct OnTickRules(pub Vec<Rule>);
 
 // ============================================================================
@@ -50,15 +63,17 @@ pub struct OnTickRules(pub Vec<Rule>);
 
 fn on_hit_observer(
     trigger: On<HitEvent>,
-    mut query: Query<(&OnHitRules, &mut RuleVars)>,
+    mut query: Query<(&OnHitRules, &mut Stats)>,
     mut commands: Commands,
 ) {
     let event = trigger.event();
-    if let Ok((rules, mut vars)) = query.get_mut(event.source) {
-        execute_rules(&rules.0, &mut vars);
+    let mut action = Action::new();
 
-        // Emit CritHitEvent if IsCrit flag is set
-        if vars.get(Var::IsCrit) > 0.5 {
+    if let Ok((rules, mut stats)) = query.get_mut(event.source) {
+        let output = execute_rules(&rules.0, &mut stats, &mut action);
+
+        // Emit CritHitEvent if crit was triggered
+        if output.is_crit() {
             commands.trigger(CritHitEvent {
                 source: event.source,
                 target: event.target,
@@ -69,24 +84,28 @@ fn on_hit_observer(
 
 fn on_crit_hit_observer(
     trigger: On<CritHitEvent>,
-    mut query: Query<(&OnCritHitRules, &mut RuleVars)>,
+    mut query: Query<(&OnCritHitRules, &mut Stats)>,
 ) {
     let event = trigger.event();
-    if let Ok((rules, mut vars)) = query.get_mut(event.source) {
-        execute_rules(&rules.0, &mut vars);
+    let mut action = Action::new();
+
+    if let Ok((rules, mut stats)) = query.get_mut(event.source) {
+        let _ = execute_rules(&rules.0, &mut stats, &mut action);
     }
 }
 
 fn on_kill_observer(
     trigger: On<DeathEvent>,
-    mut query: Query<(&OnKillRules, &mut RuleVars)>,
+    mut query: Query<(&OnKillRules, &mut Stats)>,
     mut commands: Commands,
 ) {
     let event = trigger.event();
-    if let Ok((rules, mut vars)) = query.get_mut(event.killer) {
-        execute_rules(&rules.0, &mut vars);
+    let mut action = Action::new();
 
-        if vars.get(Var::IsCrit) > 0.5 {
+    if let Ok((rules, mut stats)) = query.get_mut(event.killer) {
+        let output = execute_rules(&rules.0, &mut stats, &mut action);
+
+        if output.is_crit() {
             commands.trigger(CritKillEvent {
                 killer: event.killer,
                 victim: event.entity,
@@ -97,62 +116,56 @@ fn on_kill_observer(
 
 fn on_crit_kill_observer(
     trigger: On<CritKillEvent>,
-    mut query: Query<(&OnCritKillRules, &mut RuleVars)>,
+    mut query: Query<(&OnCritKillRules, &mut Stats)>,
 ) {
     let event = trigger.event();
-    if let Ok((rules, mut vars)) = query.get_mut(event.killer) {
-        execute_rules(&rules.0, &mut vars);
+    let mut action = Action::new();
+
+    if let Ok((rules, mut stats)) = query.get_mut(event.killer) {
+        let _ = execute_rules(&rules.0, &mut stats, &mut action);
     }
 }
 
 fn on_take_damage_observer(
     trigger: On<DamageEvent>,
-    mut query: Query<(&OnTakeDamageRules, &mut RuleVars)>,
+    mut query: Query<(&OnTakeDamageRules, &mut Stats)>,
 ) {
     let event = trigger.event();
-    if let Ok((rules, mut vars)) = query.get_mut(event.target) {
-        execute_rules(&rules.0, &mut vars);
+    let mut action = Action::new();
+
+    if let Ok((rules, mut stats)) = query.get_mut(event.target) {
+        let _ = execute_rules(&rules.0, &mut stats, &mut action);
     }
 }
 
-fn tick_rules_system(time: Res<Time>, mut query: Query<(&OnTickRules, &mut RuleVars)>) {
+fn tick_rules_system(time: Res<Time>, mut query: Query<(&OnTickRules, &mut Stats)>) {
     let delta = time.delta_secs();
-    for (rules, mut vars) in query.iter_mut() {
-        vars.set(Var::DeltaTime, delta);
-        execute_rules(&rules.0, &mut vars);
+
+    for (rules, mut stats) in query.iter_mut() {
+        let mut action = Action::new().with(ActionVar::DeltaTime, delta);
+        let _ = execute_rules(&rules.0, &mut stats, &mut action);
     }
 }
 
-// ============================================================================
-// TIMER RULES (periodic)
-// ============================================================================
+/// Syncs AttackState component fields to Stats so rules can react to attack phases.
+fn sync_attack_state_to_stats(mut query: Query<(&AttackState, &mut Stats)>) {
+    for (attack_state, mut stats) in query.iter_mut() {
+        // Boolean: 1.0 = true, 0.0 = false
+        stats.set(
+            Stat::IsAttacking,
+            if attack_state.attacking { 1.0 } else { 0.0 },
+        );
 
-#[derive(Clone, Debug)]
-pub struct TimerRule {
-    pub rule: Rule,
-    pub timer: Timer,
-}
+        stats.set(Stat::AttackProgress, attack_state.progress());
+        stats.set(Stat::ComboCount, attack_state.attack_count as f32);
 
-impl TimerRule {
-    pub fn new(interval_secs: f32, rule: Rule) -> Self {
-        Self {
-            rule,
-            timer: Timer::from_seconds(interval_secs, TimerMode::Repeating),
-        }
-    }
-}
+        // Windup = attacking but hit hasn't triggered yet
+        let in_windup = attack_state.attacking && !attack_state.hit_triggered;
+        stats.set(Stat::InWindup, if in_windup { 1.0 } else { 0.0 });
 
-#[derive(Component, Default, Clone, Debug)]
-pub struct OnTimerRules(pub Vec<TimerRule>);
-
-fn timer_rules_system(time: Res<Time>, mut query: Query<(&mut OnTimerRules, &mut RuleVars)>) {
-    for (mut timer_rules, mut vars) in query.iter_mut() {
-        for tr in timer_rules.0.iter_mut() {
-            tr.timer.tick(time.delta());
-            if tr.timer.just_finished() && check_conditions(&tr.rule.conditions, &vars) {
-                execute_effects(&tr.rule.effects, &mut vars);
-            }
-        }
+        // Recovery = attacking and hit has already triggered
+        let in_recovery = attack_state.attacking && attack_state.hit_triggered;
+        stats.set(Stat::InRecovery, if in_recovery { 1.0 } else { 0.0 });
     }
 }
 
@@ -161,15 +174,19 @@ fn timer_rules_system(time: Res<Time>, mut query: Query<(&mut OnTimerRules, &mut
 // ============================================================================
 
 pub fn plugin(app: &mut App) {
+    use super::RulePresetPlugin;
     use crate::models::Screen;
 
-    app.add_observer(on_hit_observer)
+    app.add_plugins(RulePresetPlugin)
+        .add_observer(on_hit_observer)
         .add_observer(on_crit_hit_observer)
         .add_observer(on_kill_observer)
         .add_observer(on_crit_kill_observer)
         .add_observer(on_take_damage_observer)
         .add_systems(
             Update,
-            (tick_rules_system, timer_rules_system).run_if(in_state(Screen::Gameplay)),
+            (sync_attack_state_to_stats, tick_rules_system)
+                .chain()
+                .run_if(in_state(Screen::Gameplay)),
         );
 }

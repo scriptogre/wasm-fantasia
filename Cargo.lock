@@ -564,7 +564,8 @@ dependencies = [
 [[package]]
 name = "avian3d"
 version = "0.4.1"
-source = "git+https://github.com/Jondolf/avian?branch=main#0c06418426bd9fceab86b953b7fa4d898fe9438d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e09c07567e520b22bd6890a055877cd584fc3fd4317e4a0ba599f4833a4b61bc"
 dependencies = [
  "approx 0.5.1",
  "avian_derive",
@@ -589,7 +590,8 @@ dependencies = [
 [[package]]
 name = "avian_derive"
 version = "0.2.2"
-source = "git+https://github.com/Jondolf/avian?branch=main#0c06418426bd9fceab86b953b7fa4d898fe9438d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12b257f601a1535e0d4a7a7796f535e3a13de62fd422b16dff7c14d27f0d4048"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -1390,9 +1392,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_enhanced_input"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb3567d87ac6428fac9dc9a7528dce246ff976093d3374e86913189a6c2b34e8"
+checksum = "bbed60aa8f8975dab206c693c6a736c36137e5477a0b58618cf997a952e4ba65"
 dependencies = [
  "bevy 0.17.3",
  "bevy_enhanced_input_macros",
@@ -1405,9 +1407,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_enhanced_input_macros"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c5e66100683f533c85365444c3b5a7fba4df5504582d5f30780486fd7695832"
+checksum = "ee2b4e69905392d8d11468559b691bee2d59c3dd3082d4d3751ba0d6a94b44fd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10972,3 +10974,8 @@ checksum = "51d915729b0e7d5fe35c2f294c5dc10b30207cc637920e5b59077bfa3da63f28"
 dependencies = [
  "zune-core 0.5.0",
 ]
+
+[[patch.unused]]
+name = "avian3d"
+version = "0.6.0-dev"
+source = "git+https://github.com/Jondolf/avian?branch=main#4e0c808823b6d6d2b347dd2fc743c97966e9dc26"
