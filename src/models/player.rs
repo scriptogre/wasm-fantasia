@@ -8,6 +8,8 @@ pub struct Player {
     pub speed: f32,
     pub animation_state: AnimationState,
     pub animations: HashMap<String, AnimationNodeIndex>,
+    /// Entity of the AnimationPlayer descendant (set during prepare_animations)
+    pub anim_player_entity: Option<Entity>,
 }
 
 impl Default for Player {
@@ -20,6 +22,7 @@ impl Default for Player {
             speed: 1.0,
             animation_state: AnimationState::StandIdle,
             animations: HashMap::new(),
+            anim_player_entity: None,
         }
     }
 }

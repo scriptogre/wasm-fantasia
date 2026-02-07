@@ -183,9 +183,24 @@ pub struct PlayerCombatant;
 #[reflect(Component)]
 pub struct Enemy;
 
-/// Event fired when an attack connects (hit frame reached).
+/// Event fired when the attack's hit frame is reached.
 /// Triggered by tick_attack_state when attack_time reaches hit_time.
 #[derive(Event, Clone, Debug)]
-pub struct AttackConnect {
+pub struct AttackHit {
     pub attacker: Entity,
+}
+
+/// Standard melee hit feedback values. Same for local and remote hits.
+/// Observers gate screen shake / hit stop / rumble on whether the source is the local player.
+impl HitFeedback {
+    pub fn standard(is_crit: bool) -> Self {
+        Self {
+            hit_stop_duration: 0.04,
+            shake_intensity: 0.25,
+            flash_duration: if is_crit { 0.15 } else { 0.08 },
+            rumble_strong: 0.35,
+            rumble_weak: 0.21,
+            rumble_duration: 60.0,
+        }
+    }
 }

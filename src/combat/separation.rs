@@ -8,8 +8,14 @@ const SEPARATION_FORCE: f32 = 8.0;
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        apply_separation_force.run_if(in_state(Screen::Gameplay)),
+        apply_separation_force
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(not(game_paused)),
     );
+}
+
+fn game_paused(state: Res<crate::models::GameState>) -> bool {
+    state.paused
 }
 
 /// Apply separation force to prevent player from climbing on enemies.

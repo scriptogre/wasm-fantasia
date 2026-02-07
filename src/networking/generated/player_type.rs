@@ -17,8 +17,23 @@ pub struct Player {
     pub vel_z: f32,
     pub on_ground: bool,
     pub anim_state: String,
+    pub attack_seq: u32,
+    pub attack_anim: String,
     pub online: bool,
     pub last_update: i64,
+    pub health: f32,
+    pub max_health: f32,
+    pub attack_damage: f32,
+    pub crit_chance: f32,
+    pub crit_multiplier: f32,
+    pub attack_range: f32,
+    pub attack_arc: f32,
+    pub knockback_force: f32,
+    pub attack_speed: f32,
+    pub stacks: f32,
+    pub stack_decay: f32,
+    pub last_hit_time: i64,
+    pub last_attack_time: i64,
 }
 
 impl __sdk::InModule for Player {

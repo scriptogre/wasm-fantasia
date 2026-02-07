@@ -7,9 +7,14 @@ pub fn plugin(app: &mut App) {
 }
 
 /// Observer: apply damage and knockback when DamageEvent is triggered.
+/// For remote players (multiplayer), health is server-authoritative — we skip
+/// `take_damage` and let the networking sync handle it. VFX and knockback still fire
+/// for immediate feedback.
 fn on_damage(
     on: On<DamageEvent>,
     mut targets: Query<(&mut Health, Option<&mut TnuaController>)>,
+    #[cfg(not(target_arch = "wasm32"))] remote_players: Query<(), With<crate::networking::player::RemotePlayer>>,
+    #[cfg(not(target_arch = "wasm32"))] server_enemies: Query<(), With<crate::networking::combat::ServerEnemy>>,
     mut commands: Commands,
 ) {
     let event = on.event();
@@ -18,9 +23,20 @@ fn on_damage(
         return;
     };
 
-    let died = health.take_damage(event.damage);
+    // Server-owned entities: don't modify health locally, let sync handle it
+    #[cfg(not(target_arch = "wasm32"))]
+    let is_remote = remote_players.get(event.target).is_ok()
+        || server_enemies.get(event.target).is_ok();
+    #[cfg(target_arch = "wasm32")]
+    let is_remote = false;
 
-    // Trigger hit feedback with computed values from rules
+    let died = if is_remote {
+        false // Server decides death
+    } else {
+        health.take_damage(event.damage)
+    };
+
+    // Trigger hit feedback (VFX, damage numbers, screen shake, etc.) regardless
     commands.trigger(HitEvent {
         source: event.source,
         target: event.target,
@@ -52,8 +68,21 @@ fn on_damage(
 }
 
 /// Observer: handle entity death.
-fn on_death(on: On<DeathEvent>, mut commands: Commands) {
+/// Remote players (multiplayer) are handled by the networking layer, not despawned locally.
+fn on_death(
+    on: On<DeathEvent>,
+    #[cfg(not(target_arch = "wasm32"))] remote_players: Query<(), With<crate::networking::player::RemotePlayer>>,
+    #[cfg(not(target_arch = "wasm32"))] server_enemies: Query<(), With<crate::networking::combat::ServerEnemy>>,
+    mut commands: Commands,
+) {
     let event = on.event();
+
+    // Don't despawn server-owned entities — server owns their lifecycle
+    #[cfg(not(target_arch = "wasm32"))]
+    if remote_players.get(event.entity).is_ok() || server_enemies.get(event.entity).is_ok() {
+        return;
+    }
+
     // For now, just despawn. Later: death animation, loot, etc.
     commands.entity(event.entity).despawn();
 }

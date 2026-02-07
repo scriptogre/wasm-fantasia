@@ -9,9 +9,12 @@ pub fn plugin(app: &mut App) {
 }
 
 /// Spawn a pack of enemies in front of the player when E is pressed.
+/// In multiplayer: calls server reducer so all clients see the enemies.
+/// Offline: spawns locally like before.
 fn spawn_enemy_in_front(
     _on: On<Start<SpawnEnemy>>,
     player: Query<&Transform, With<Player>>,
+    #[cfg(not(target_arch = "wasm32"))] conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -20,26 +23,37 @@ fn spawn_enemy_in_front(
         return;
     };
 
-    let enemy_mesh = meshes.add(Capsule3d::new(0.5, 1.0));
-
-    // Spawn 5 enemies in a spread formation in front of the player
     let forward = player_transform.forward();
-    let right = player_transform.right();
-    let base_pos = player_transform.translation + *forward * 5.0;
+    let pos = player_transform.translation;
 
-    // Formation: spread in an arc
+    // If multiplayer is connected, spawn via server
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(conn) = conn {
+        crate::networking::combat::server_spawn_enemies(
+            &conn,
+            pos,
+            forward.as_vec3(),
+        );
+        info!("Requested 5 enemies from server");
+        return;
+    }
+
+    // Offline fallback: spawn locally
+    let enemy_mesh = meshes.add(Capsule3d::new(0.5, 1.0));
+    let right = player_transform.right();
+    let base_pos = pos + *forward * 5.0;
+
     let offsets = [
-        Vec3::ZERO,                      // Center
-        *right * 1.5 + *forward * -0.5,  // Right
-        *right * -1.5 + *forward * -0.5, // Left
-        *right * 2.5 + *forward * -1.5,  // Far right
-        *right * -2.5 + *forward * -1.5, // Far left
+        Vec3::ZERO,
+        *right * 1.5 + *forward * -0.5,
+        *right * -1.5 + *forward * -0.5,
+        *right * 2.5 + *forward * -1.5,
+        *right * -2.5 + *forward * -1.5,
     ];
 
     for (i, offset) in offsets.iter().enumerate() {
         let spawn_pos = base_pos + *offset;
 
-        // Each enemy needs its own material for hit flash to work correctly
         let enemy_material = materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.2, 0.2),
             ..default()
@@ -51,15 +65,12 @@ fn spawn_enemy_in_front(
             Transform::from_translation(spawn_pos),
             Mesh3d(enemy_mesh.clone()),
             MeshMaterial3d(enemy_material),
-            // Combat components
             Health::new(500.0),
             Enemy,
             Combatant,
-            // Stats for rules system
             Stats::new()
                 .with(Stat::MaxHealth, 500.0)
                 .with(Stat::Health, 500.0),
-            // Physics
             Collider::capsule(0.5, 1.0),
             RigidBody::Dynamic,
             LockedAxes::ROTATION_LOCKED,
@@ -67,5 +78,5 @@ fn spawn_enemy_in_front(
         ));
     }
 
-    info!("Spawned 5 enemies in front of player");
+    info!("Spawned 5 enemies locally (offline mode)");
 }

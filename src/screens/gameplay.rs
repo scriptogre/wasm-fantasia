@@ -51,13 +51,19 @@ fn toggle_pause(
     mut time: ResMut<Time<Virtual>>,
     mut state: ResMut<GameState>,
     mut pause_label: Query<&mut Node, With<PauseIcon>>,
+    multiplayer: Option<Res<crate::networking::SpacetimeDbConnection>>,
 ) {
     if let Ok(mut label) = pause_label.single_mut() {
         if time.is_paused() || state.paused {
-            time.unpause();
+            if multiplayer.is_none() {
+                time.unpause();
+            }
             label.display = Display::None;
         } else {
-            time.pause();
+            // Only freeze time in singleplayer — multiplayer world keeps running
+            if multiplayer.is_none() {
+                time.pause();
+            }
             label.display = Display::Flex;
         }
     }

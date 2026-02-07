@@ -74,7 +74,7 @@ Primitive types that everything else builds on.
 
 ---
 
-## Level 1: Expressions (Expr)
+## Level 1: Expressions (Expr)ju
 
 Composable expressions that evaluate to a value. Used everywhere values are needed.
 

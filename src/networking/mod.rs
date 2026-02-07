@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::DbContext;
 
+pub mod combat;
 pub mod generated;
 pub mod player;
 
@@ -46,7 +47,9 @@ impl Plugin for NetworkingPlugin {
             .init_resource::<PositionSyncTimer>()
             .init_resource::<LagSimulator>()
             .init_resource::<LagBuffers>()
+            .init_resource::<combat::CombatEventTracker>()
             .add_systems(PostStartup, connect_to_spacetimedb)
+            .add_observer(combat::send_attack_to_server)
             .add_systems(
                 Update,
                 (
@@ -56,8 +59,16 @@ impl Plugin for NetworkingPlugin {
                     player::update_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
                     player::despawn_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
                     player::interpolate_positions.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::setup_remote_animations.run_if(resource_exists::<SpacetimeDbConnection>),
+                    player::animate_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
                     process_outbound_lag.run_if(resource_exists::<SpacetimeDbConnection>),
                     player::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
+                    combat::sync_remote_health.run_if(resource_exists::<SpacetimeDbConnection>),
+                    combat::sync_local_health.run_if(resource_exists::<SpacetimeDbConnection>),
+                    combat::handle_remote_death.run_if(resource_exists::<SpacetimeDbConnection>),
+                    combat::request_respawn_on_death.run_if(resource_exists::<SpacetimeDbConnection>),
+                    combat::sync_npc_enemies.run_if(resource_exists::<SpacetimeDbConnection>),
+                    combat::process_remote_combat_events.run_if(resource_exists::<SpacetimeDbConnection>),
                 ),
             );
     }
@@ -107,6 +118,8 @@ struct PendingOutboundUpdate {
     z: f32,
     rot_y: f32,
     anim_state: String,
+    attack_seq: u32,
+    attack_anim: String,
     send_at: Instant,
 }
 
@@ -139,9 +152,12 @@ fn connect_to_spacetimedb(config: Res<SpacetimeDbConfig>, mut commands: Commands
             if let Err(e) = conn.reducers.join_game(Some("Player".to_string())) {
                 error!("Failed to call join_game: {:?}", e);
             }
-            // Subscribe to all players
-            conn.subscription_builder()
-                .subscribe(["SELECT * FROM player"]);
+            // Subscribe to all players, NPC enemies, and combat events
+            conn.subscription_builder().subscribe([
+                "SELECT * FROM player",
+                "SELECT * FROM npc_enemy",
+                "SELECT * FROM combat_event",
+            ]);
         })
         .on_connect_error(|_ctx, err| {
             error!("Failed to connect to SpacetimeDB: {:?}", err);
@@ -184,6 +200,8 @@ fn process_outbound_lag(
                 update.z,
                 update.rot_y,
                 update.anim_state,
+                update.attack_seq,
+                update.attack_anim,
             ) {
                 warn!("Failed to send position update: {:?}", e);
             }
@@ -206,6 +224,8 @@ fn process_outbound_lag(
                 update.z,
                 update.rot_y,
                 update.anim_state.clone(),
+                update.attack_seq,
+                update.attack_anim.clone(),
             ) {
                 warn!("Failed to send position update: {:?}", e);
             }

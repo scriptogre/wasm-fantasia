@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
 use crate::combat::components::{DamageEvent, DeathEvent, Enemy, Health};
-use crate::combat::{AttackConnect, VFX_ARC_DEGREES, VFX_RANGE};
+use crate::combat::{AttackHit, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::{GameState, Player, SceneCamera, Screen};
 use crate::rules::{Stat, Stats};
 use crate::ui::colors::{GRASS_GREEN, GRAY_0, LIGHT_GRAY_1, RED, SAND_YELLOW};
@@ -41,12 +41,15 @@ pub fn plugin(app: &mut App) {
                 tick_combat_stacks_display,
             ),
         )
-        // Screen shake: restore original in PreUpdate, apply shake in PostUpdate before rendering
-        .add_systems(PreUpdate, reset_camera_shake)
+        // Screen shake: apply offset after orbit camera computes position.
+        // No save/restore needed — the orbit camera recomputes from the player's
+        // transform each frame, so the shake offset is naturally ephemeral.
         .add_systems(
             PostUpdate,
             (
-                apply_camera_shake.before(TransformSystems::Propagate),
+                apply_camera_shake
+                    .after(bevy_third_person_camera::CameraSyncSet)
+                    .before(TransformSystems::Propagate),
                 // World-to-screen projection needs GlobalTransform to be propagated first
                 (tick_damage_numbers, tick_enemy_health_bars).after(TransformSystems::Propagate),
             ),
@@ -178,7 +181,7 @@ fn create_arc_mesh(radius: f32, arc_angle: f32, height: f32, segments: u32) -> M
 }
 
 fn on_phantom_fist(
-    _on: On<AttackConnect>,
+    _on: On<AttackHit>,
     player: Query<&Transform, With<crate::models::Player>>,
     assets: Option<Res<ArcSlashAssets>>,
     mut commands: Commands,
@@ -279,7 +282,7 @@ fn setup_debug_hitbox_assets(
 }
 
 fn on_debug_hitbox(
-    _on: On<AttackConnect>,
+    _on: On<AttackHit>,
     game_state: Res<GameState>,
     player: Query<&Transform, With<crate::models::Player>>,
     assets: Option<Res<DebugHitboxAssets>>,
@@ -356,10 +359,16 @@ fn on_hit_stop(
     mut hit_stop: ResMut<HitStop>,
     mut time: ResMut<Time<Virtual>>,
     player: Query<&Stats, With<Player>>,
+    local_check: Query<(), With<crate::combat::PlayerCombatant>>,
 ) {
     let event = on.event();
-    let duration = event.feedback.hit_stop_duration;
 
+    // Hit stop is attacker feedback — only apply for local player's hits
+    if local_check.get(event.source).is_err() {
+        return;
+    }
+
+    let duration = event.feedback.hit_stop_duration;
     if duration <= 0.0 {
         return;
     }
@@ -409,8 +418,6 @@ fn tick_hit_stop(
 #[derive(Resource, Default)]
 pub struct ScreenShake {
     pub trauma: f32,
-    /// Stored camera transform from before shake was applied (only Some if shake is active)
-    pub stored_transform: Option<Transform>,
 }
 
 impl ScreenShake {
@@ -420,7 +427,15 @@ impl ScreenShake {
     pub const EXPONENT: f32 = 2.0;
 }
 
-fn on_screen_shake(on: On<HitEvent>, mut shake: ResMut<ScreenShake>) {
+fn on_screen_shake(
+    on: On<HitEvent>,
+    mut shake: ResMut<ScreenShake>,
+    local_check: Query<(), With<crate::combat::PlayerCombatant>>,
+) {
+    // Screen shake is attacker feedback — only apply for local player's hits
+    if local_check.get(on.event().source).is_err() {
+        return;
+    }
     let intensity = on.event().feedback.shake_intensity;
     shake.trauma = (shake.trauma + intensity).min(1.0);
 }
@@ -434,7 +449,13 @@ fn on_rumble(
     on: On<HitEvent>,
     gamepads: Query<Entity, With<Gamepad>>,
     mut rumble: MessageWriter<GamepadRumbleRequest>,
+    local_check: Query<(), With<crate::combat::PlayerCombatant>>,
 ) {
+    // Rumble is attacker feedback — only apply for local player's hits
+    if local_check.get(on.event().source).is_err() {
+        return;
+    }
+
     let feedback = &on.event().feedback;
 
     // Skip if no rumble configured
@@ -454,20 +475,9 @@ fn on_rumble(
     }
 }
 
-/// Restore camera to its original (unshaken) position at start of frame.
-fn reset_camera_shake(
-    mut shake: ResMut<ScreenShake>,
-    mut camera: Query<&mut Transform, With<SceneCamera>>,
-) {
-    // Only restore if we stored a transform (meaning shake was applied last frame)
-    if let Some(original) = shake.stored_transform.take() {
-        if let Ok(mut transform) = camera.single_mut() {
-            *transform = original;
-        }
-    }
-}
-
-/// Apply screen shake offset just before rendering.
+/// Apply screen shake offset after orbit camera computes position.
+/// No save/restore needed — the orbit camera recomputes from the player's
+/// transform each frame, naturally discarding the previous frame's offset.
 fn apply_camera_shake(
     time: Res<Time>,
     game_state: Res<crate::models::GameState>,
@@ -485,9 +495,6 @@ fn apply_camera_shake(
     let Ok(mut transform) = camera.single_mut() else {
         return;
     };
-
-    // Store original BEFORE applying shake (only when we're about to shake)
-    shake.stored_transform = Some(*transform);
 
     let shake_amount = shake.trauma.powf(ScreenShake::EXPONENT);
     let t = time.elapsed_secs() * ScreenShake::NOISE_SPEED;

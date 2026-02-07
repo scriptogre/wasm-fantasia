@@ -46,11 +46,32 @@ const USED_ANIMATIONS: &[&str] = &[
     "Melee_Hook",
 ];
 
+/// Recursively find the first entity with AnimationPlayer in a subtree.
+pub fn find_animation_player_descendant(
+    entity: Entity,
+    children_q: &Query<&Children>,
+    anim_players: &Query<Entity, With<AnimationPlayer>>,
+) -> Option<Entity> {
+    if anim_players.get(entity).is_ok() {
+        return Some(entity);
+    }
+    if let Ok(children) = children_q.get(entity) {
+        for child in children.iter() {
+            if let Some(found) = find_animation_player_descendant(child, children_q, anim_players) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
 pub fn prepare_animations(
-    _: On<SceneInstanceReady>,
+    on: On<SceneInstanceReady>,
     models: Res<Models>,
     gltf_assets: Res<Assets<Gltf>>,
-    animation_player: Query<Entity, With<AnimationPlayer>>,
+    children_q: Query<&Children>,
+    anim_players: Query<Entity, With<AnimationPlayer>>,
+    parents: Query<&ChildOf>,
     mut player: Query<&mut Player>,
     mut commands: Commands,
     mut animation_graphs: ResMut<Assets<AnimationGraph>>,
@@ -59,10 +80,20 @@ pub fn prepare_animations(
     let Some(gltf) = gltf_assets.get(&models.player) else {
         return;
     };
-    let Ok(animation_player) = animation_player.single() else {
+
+    // Find AnimationPlayer as descendant of the scene entity that just loaded
+    let scene_entity = on.entity;
+    let Some(animation_player) = find_animation_player_descendant(scene_entity, &children_q, &anim_players) else {
         return;
     };
-    let Ok(mut player) = player.single_mut() else {
+
+    // Walk up to find the Player entity (scene entity -> player entity)
+    let player_entity = if let Ok(parent) = parents.get(scene_entity) {
+        parent.parent()
+    } else {
+        scene_entity
+    };
+    let Ok(mut player) = player.get_mut(player_entity) else {
         return;
     };
 
@@ -88,6 +119,8 @@ pub fn prepare_animations(
         info!("Loaded animation: {}", name);
         player.animations.insert(name.to_string(), node_index);
     }
+
+    player.anim_player_entity = Some(animation_player);
 
     commands.entity(animation_player).insert((
         AnimationGraphHandle(animation_graphs.add(graph)),
@@ -138,7 +171,12 @@ pub fn animating(
             if speed == 0.0 { 1.0 } else { speed }
         })
         .unwrap_or(1.0);
-    let Ok((mut animation_player, mut transitions)) = animation_query.single_mut() else {
+
+    // Look up the specific AnimationPlayer for this player entity
+    let Some(anim_entity) = player.anim_player_entity else {
+        return;
+    };
+    let Ok((mut animation_player, mut transitions)) = animation_query.get_mut(anim_entity) else {
         return;
     };
 

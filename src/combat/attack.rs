@@ -24,7 +24,7 @@ mod base {
 
 pub fn plugin(app: &mut App) {
     app.add_observer(handle_attack)
-        .add_observer(on_attack_connect)
+        .add_observer(on_attack_hit)
         .add_systems(
             Update,
             (tick_attack_state, process_buffered_attack).run_if(in_state(Screen::Gameplay)),
@@ -102,7 +102,7 @@ fn tick_attack_state(
             state.attack_time += time.delta_secs() * speed_mult;
 
             if !state.hit_triggered && state.attack_time >= state.hit_time {
-                commands.trigger(AttackConnect { attacker: entity });
+                commands.trigger(AttackHit { attacker: entity });
                 state.hit_triggered = true;
             }
 
@@ -117,8 +117,8 @@ fn tick_attack_state(
 
 /// Observer: triggered when attack hit time is reached.
 /// Executes OnPreHitRules to compute damage, crit, force, and feedback values.
-fn on_attack_connect(
-    trigger: On<AttackConnect>,
+fn on_attack_hit(
+    trigger: On<AttackHit>,
     mut attackers: Query<
         (
             &mut AttackState,

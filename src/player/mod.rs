@@ -113,7 +113,7 @@ pub fn spawn_player(
                 // Core stats
                 .with(Stat::MaxHealth, 100.0)
                 .with(Stat::Health, 100.0)
-                // Attack parameters (read by on_attack_connect)
+                // Attack parameters (read by on_attack_hit)
                 .with(Stat::AttackDamage, 25.0)
                 .with(Stat::Knockback, 3.0)
                 .with(Stat::AttackRange, 3.6)

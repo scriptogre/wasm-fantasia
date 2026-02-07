@@ -6,26 +6,44 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod attack_hit_reducer;
+pub mod combat_event_table;
+pub mod combat_event_type;
 pub mod game_tick_reducer;
 pub mod join_game_reducer;
 pub mod leave_game_reducer;
+pub mod npc_enemy_table;
+pub mod npc_enemy_type;
 pub mod player_input_table;
 pub mod player_input_type;
 pub mod player_table;
 pub mod player_type;
+pub mod respawn_reducer;
 pub mod send_input_reducer;
+pub mod spawn_enemies_reducer;
 pub mod update_position_reducer;
 
-pub use game_tick_reducer::{GameTickCallbackId, game_tick, set_flags_for_game_tick};
-pub use join_game_reducer::{JoinGameCallbackId, join_game, set_flags_for_join_game};
-pub use leave_game_reducer::{LeaveGameCallbackId, leave_game, set_flags_for_leave_game};
+pub use attack_hit_reducer::{
+    attack_hit, set_flags_for_attack_hit, AttackHitCallbackId,
+};
+pub use combat_event_table::*;
+pub use combat_event_type::CombatEvent;
+pub use game_tick_reducer::{game_tick, set_flags_for_game_tick, GameTickCallbackId};
+pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
+pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
+pub use npc_enemy_table::*;
+pub use npc_enemy_type::NpcEnemy;
 pub use player_input_table::*;
 pub use player_input_type::PlayerInput;
 pub use player_table::*;
 pub use player_type::Player;
-pub use send_input_reducer::{SendInputCallbackId, send_input, set_flags_for_send_input};
+pub use respawn_reducer::{respawn, set_flags_for_respawn, RespawnCallbackId};
+pub use send_input_reducer::{send_input, set_flags_for_send_input, SendInputCallbackId};
+pub use spawn_enemies_reducer::{
+    set_flags_for_spawn_enemies, spawn_enemies, SpawnEnemiesCallbackId,
+};
 pub use update_position_reducer::{
-    UpdatePositionCallbackId, set_flags_for_update_position, update_position,
+    set_flags_for_update_position, update_position, UpdatePositionCallbackId,
 };
 
 #[derive(Clone, PartialEq, Debug)]
@@ -36,11 +54,13 @@ pub use update_position_reducer::{
 /// to indicate which reducer caused the event.
 
 pub enum Reducer {
+    AttackHit,
     GameTick,
     JoinGame {
         name: Option<String>,
     },
     LeaveGame,
+    Respawn,
     SendInput {
         sequence: u32,
         forward: f32,
@@ -50,12 +70,21 @@ pub enum Reducer {
         crouch: bool,
         yaw: f32,
     },
+    SpawnEnemies {
+        x: f32,
+        y: f32,
+        z: f32,
+        forward_x: f32,
+        forward_z: f32,
+    },
     UpdatePosition {
         x: f32,
         y: f32,
         z: f32,
         rot_y: f32,
         anim_state: String,
+        attack_seq: u32,
+        attack_anim: String,
     },
 }
 
@@ -66,10 +95,13 @@ impl __sdk::InModule for Reducer {
 impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
+            Reducer::AttackHit => "attack_hit",
             Reducer::GameTick => "game_tick",
             Reducer::JoinGame { .. } => "join_game",
             Reducer::LeaveGame => "leave_game",
+            Reducer::Respawn => "respawn",
             Reducer::SendInput { .. } => "send_input",
+            Reducer::SpawnEnemies { .. } => "spawn_enemies",
             Reducer::UpdatePosition { .. } => "update_position",
             _ => unreachable!(),
         }
@@ -79,6 +111,10 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
     type Error = __sdk::Error;
     fn try_from(value: __ws::ReducerCallInfo<__ws::BsatnFormat>) -> __sdk::Result<Self> {
         match &value.reducer_name[..] {
+            "attack_hit" => Ok(__sdk::parse_reducer_args::<
+                attack_hit_reducer::AttackHitArgs,
+            >("attack_hit", &value.args)?
+            .into()),
             "game_tick" => Ok(
                 __sdk::parse_reducer_args::<game_tick_reducer::GameTickArgs>(
                     "game_tick",
@@ -100,6 +136,11 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
                 )?
                 .into(),
             ),
+            "respawn" => Ok(__sdk::parse_reducer_args::<respawn_reducer::RespawnArgs>(
+                "respawn",
+                &value.args,
+            )?
+            .into()),
             "send_input" => Ok(
                 __sdk::parse_reducer_args::<send_input_reducer::SendInputArgs>(
                     "send_input",
@@ -107,6 +148,10 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
                 )?
                 .into(),
             ),
+            "spawn_enemies" => Ok(__sdk::parse_reducer_args::<
+                spawn_enemies_reducer::SpawnEnemiesArgs,
+            >("spawn_enemies", &value.args)?
+            .into()),
             "update_position" => Ok(__sdk::parse_reducer_args::<
                 update_position_reducer::UpdatePositionArgs,
             >("update_position", &value.args)?
@@ -125,6 +170,8 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
+    combat_event: __sdk::TableUpdate<CombatEvent>,
+    npc_enemy: __sdk::TableUpdate<NpcEnemy>,
     player: __sdk::TableUpdate<Player>,
     player_input: __sdk::TableUpdate<PlayerInput>,
 }
@@ -135,6 +182,12 @@ impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in raw.tables {
             match &table_update.table_name[..] {
+                "combat_event" => db_update
+                    .combat_event
+                    .append(combat_event_table::parse_table_update(table_update)?),
+                "npc_enemy" => db_update
+                    .npc_enemy
+                    .append(npc_enemy_table::parse_table_update(table_update)?),
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
@@ -167,6 +220,12 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
+        diff.combat_event = cache
+            .apply_diff_to_table::<CombatEvent>("combat_event", &self.combat_event)
+            .with_updates_by_pk(|row| &row.id);
+        diff.npc_enemy = cache
+            .apply_diff_to_table::<NpcEnemy>("npc_enemy", &self.npc_enemy)
+            .with_updates_by_pk(|row| &row.id);
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
             .with_updates_by_pk(|row| &row.identity);
@@ -182,6 +241,8 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
+    combat_event: __sdk::TableAppliedDiff<'r, CombatEvent>,
+    npc_enemy: __sdk::TableAppliedDiff<'r, NpcEnemy>,
     player: __sdk::TableAppliedDiff<'r, Player>,
     player_input: __sdk::TableAppliedDiff<'r, PlayerInput>,
     __unused: std::marker::PhantomData<&'r ()>,
@@ -197,6 +258,12 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
+        callbacks.invoke_table_row_callbacks::<CombatEvent>(
+            "combat_event",
+            &self.combat_event,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<NpcEnemy>("npc_enemy", &self.npc_enemy, event);
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
         callbacks.invoke_table_row_callbacks::<PlayerInput>(
             "player_input",
@@ -466,21 +533,21 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
 /// either a [`DbConnection`] or an [`EventContext`] and operate on either.
 pub trait RemoteDbContext:
     __sdk::DbContext<
-        DbView = RemoteTables,
-        Reducers = RemoteReducers,
-        SetReducerFlags = SetReducerFlags,
-        SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
-    >
+    DbView = RemoteTables,
+    Reducers = RemoteReducers,
+    SetReducerFlags = SetReducerFlags,
+    SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
+>
 {
 }
 impl<
-    Ctx: __sdk::DbContext<
+        Ctx: __sdk::DbContext<
             DbView = RemoteTables,
             Reducers = RemoteReducers,
             SetReducerFlags = SetReducerFlags,
             SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
         >,
-> RemoteDbContext for Ctx
+    > RemoteDbContext for Ctx
 {
 }
 
@@ -922,6 +989,8 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type SubscriptionHandle = SubscriptionHandle;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
+        combat_event_table::register_table(client_cache);
+        npc_enemy_table::register_table(client_cache);
         player_table::register_table(client_cache);
         player_input_table::register_table(client_cache);
     }
