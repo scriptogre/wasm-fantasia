@@ -1,96 +1,78 @@
 # Vision: Data-Driven Game Systems
 
-Status: **Working draft. Open for discussion. Nothing here is decided.**
+Status: **Principles are stable. Implementation details are not. This doc captures direction, not spec.**
 
 ## What We Want
 
-A game where most behaviors are defined by composing small blocks in data files — not by writing custom Rust for each mechanic. LLMs and designers should be able to create new abilities, items, enemies, and interactions by mixing existing blocks.
+A game where most behaviors are defined by composing small building blocks — not by writing custom Rust for each mechanic. Designers and LLMs should be able to create new abilities, items, enemies, and interactions by mixing existing blocks.
 
-The game uses Bevy (ECS). We want to actually leverage ECS: things in the world are entities with components, behaviors emerge from systems.
+The game uses Bevy (ECS). We leverage ECS fully: entities with components, behaviors emerging from systems.
 
-## The Approach We're Exploring
+## Core Insight: The Resolve Step
 
-We've been exploring a system built on three primitives:
+Every state change has three phases:
 
-- **Expr** — a computed value (literal, stat reference, arithmetic over other Exprs)
-- **Condition** — a boolean test composed from Exprs
-- **Effect** — a state mutation composed from Exprs
+1. **Something is requested** — a player attacks, an item is used, a door is opened
+2. **The request is validated and computed** — damage is calculated, rules/scripts evaluate, authority is checked
+3. **Effects happen** — some change authoritative state (health, inventory), some are cosmetic (VFX, sound, screen shake)
 
-A **Rule** (the first composition) bundles conditions with effects: "if X, then Y."
+The validation/computation step (phase 2) is the only code that differs between single-player and multiplayer. In single-player, it runs locally. In multiplayer, the server handles it. Everything before (input, requests) and after (effects, presentation) is shared.
 
-Rules are data (serializable, RON-loadable). They attach to entities as components and fire at different trigger points (on hit, on taking damage, each frame, etc.).
+State effects and cosmetic effects are siblings — parallel consequences of the same resolution, not sequential stages. This mirrors Unreal's Gameplay Ability System, where Gameplay Effects (state) and Gameplay Cues (cosmetics) are associated with the same outcome.
 
-### Open questions about this model
+## Two Storages
 
-- **Is this the right set of primitives?** SC2's data editor also uses validators (≈ Conditions) and effects, but SC2's "Effects" are much broader — they include spatial searches, projectile launches, entity spawning, and persistent area creation. Ours are narrow (set a number, trigger an event). Is our narrow definition better for composability, or does it push too much into hardcoded Rust systems?
+A key architectural insight borrowed from action RPG design:
 
-- **Where does targeting/spatial logic live?** In SC2, "search this area for targets" is an Effect. In our current thinking, it's a system (Rust code) that reads properties off an entity. Which is more composable? Which is more ECS-native?
+- **Stats** — persistent per-entity values. "Who you are." Health, attack damage, crit chance. Survives across actions.
+- **Action context** — temporary per-action values. "What's happening right now." Computed damage, knockback, is_crit. Created fresh per action, modified by scripts/rules, consumed by the engine, then discarded.
 
-- **Are three primitives the right number?** Could Condition be an Expr that returns a boolean? Could Rule just be a pattern rather than a type? Are we splitting things correctly?
+A crit multiplier modifies the action's damage value, not the entity's attack damage stat. This separation prevents rules from accidentally corrupting persistent state and allows complex modifier stacking within a single action.
+
+## Stats vs Attack Properties
+
+These are different things:
+
+- **Character stats** = who the entity is (health, strength, crit chance). Persistent. Apply to everything.
+- **Attack properties** = what a specific attack is (range, arc, knockback, timing). Belong to the attack or ability, not the character.
+
+A character with two abilities has the same stats but different attack properties per ability.
+
+## Scripting: Lua
+
+Rather than building a custom expression/condition/effect language in Rust, we plan to use embedded Lua for data-driven behaviors. Lua scripts work with building blocks exposed from Rust: stat storage, action context, trigger points, and an effects API.
+
+What Lua replaces: hand-rolled Condition/Effect/Expr enums. What stays in Rust: stat storage, action context lifecycle, trigger dispatch, the effects API, hit detection, physics.
 
 ## Attacks as Entities
 
-One thing we feel strongly about: attacks should be real entities in the world.
+Attacks should be real entities in the world — not boolean flags and timers on the player.
 
-Currently, an "attack" is a boolean flag and timer on the player. It has no presence, no position, no shape, no visibility. This feels wrong.
+An attack entity has position, area, visual, lifetime. It shows up in debug tools. Multiple attacks can coexist. The visual effect IS the entity, not a separate thing spawned after the fact.
 
-An attack entity would have position, an area it affects, a visual, a lifetime. It would show up in debug tools. Multiple attacks could coexist. The visual effect IS the entity, not a separate thing spawned by an event.
+Not yet implemented. The current architecture doesn't prevent this transition.
 
-### Open questions
+## Design Principles
 
-- How much data lives on the attack entity vs. being read from the attacker at resolve time?
-- Should the attack entity use physics colliders for hit detection, or manual spatial checks?
-- How do attack properties (range, shape, timing) relate to character stats?
-
-## Character Stats vs. Attack Properties
-
-We believe these are different things:
-
-- **Character stats** = who the entity is (health, strength, crit chance). Persistent. Apply to everything the character does.
-- **Attack properties** = what a specific attack is (range, arc, knockback, timing). Belong to the attack or ability, not the character.
-
-A character with two different abilities should have the same stats but different attack properties per ability.
-
-## The Pipeline Question
-
-When an attack resolves, some sequence happens: base values are set, rules modify them, targets are found, damage/force/feedback are applied. Currently this is one monolithic function.
-
-### Open questions
-
-- How much of this is "rules" (data-driven) vs. "pipeline" (Rust systems)?
-- In our current model, rules set up values (Action context) and the pipeline applies them. Is this the right split? Or should more of the pipeline be expressible as rules?
-- SC2 puts targeting into its effect system. We keep targeting in Rust. What are the trade-offs?
-
-## Genre Considerations
-
-SC2 is an RTS. Our game is an action RPG / roguelite. The differences matter:
-
-- **RPGs need deep stat interactions.** Items, buffs, abilities all modify stats in layered ways. Our Expr/Condition/Effect model handles this well.
-- **Roguelites need wild combinations.** Hades-style boons that chain and synergize. This needs effects that compose unpredictably. Is our model flexible enough?
-- **Action RPGs need real-time feel.** Hit feedback, timing, spatial precision. This might need more from the Rust systems than from data-driven rules.
-- **SC2 needs hundreds of unit types.** Its data editor optimizes for many similar-but-different units. We might need fewer types but deeper interactions.
+1. **Everything composes.** Small blocks build into larger blocks.
+2. **Two storages.** Stats = persistent. Action context = temporary. Don't conflate them.
+3. **Scripts over custom code.** New behaviors via Lua, not new Rust systems.
+4. **The resolve step is the seam.** Rules, multiplayer authority, and validation all live here.
+5. **ECS-native.** Stats are components. Triggers are observers. Scripting layers on top of ECS, not beside it.
+6. **Compose before coding.** Can existing blocks do this? If not, what's the smallest new block?
 
 ## Reference Systems
 
-Systems we should study and understand before committing:
+- **Unreal GAS** — Gameplay Ability System. Closest to what we're building. Effect/Cue separation, attribute system, ability activation flow.
+- **StarCraft 2 Data Editor** — effect chains, validators, behaviors. Powerful but notoriously complex.
+- **Path of Exile skill gems** — base gem + support gems modifying behavior. Modular composition.
+- **Hades boons** — on-hit procs, stacking, synergies. Great roguelite model.
 
-- **StarCraft 2 Data Editor** — effect chains, validators, behaviors. Extremely powerful but notoriously complex.
-- **Path of Exile skill gems** — skills composed from a base gem + support gems that modify behavior. Very modular.
-- **Hades boons** — on-hit effects, procs, stacking. Great model for roguelite ability composition.
-- **Unreal GAS** — Gameplay Ability System. Industry standard for ability/effect/attribute management.
+## Open Questions
 
-**We haven't deeply studied all of these yet.** Before committing to our primitives, we should understand what these systems got right and wrong.
-
-## The Long-Term Vision
-
-The rule system should eventually be a general-purpose "game API" — not just combat. The same blocks that define "sword slash deals 25 damage" should be able to define AI behaviors, progression triggers, item effects, environmental interactions.
-
-We don't need to build all of that now. But the primitives we choose shouldn't prevent it.
-
-## What We're Unsure About
-
-- Whether our three primitives (Expr, Condition, Effect) are the right foundation, or if we're missing something
-- Whether Effect should stay narrow (data mutations only) or expand to include actions (deal damage, spawn entity, apply force)
-- How much to put in data-driven rules vs. Rust systems
-- The right level of abstraction — too low and everything is verbose, too high and you can't express edge cases
-- How to make this powerful without making it impossible to understand
+- How much logic lives in Lua vs Rust? (Targeting? Spatial logic? AI?)
+- What's the right Lua API surface? Too narrow and scripts can't do anything. Too wide and they bypass the resolve step.
+- How do attack entities interact with scripting? Do scripts live on the attack entity or the character?
+- Should behaviors (buffs/debuffs with duration and stacking) be a Lua concept or a Rust framework?
+- What's the exact naming convention for events? We have strong instincts (past tense for outcomes, noun form for requests) but haven't fully committed.
+- How much of Unreal GAS's model applies to an ECS game with Lua scripting?

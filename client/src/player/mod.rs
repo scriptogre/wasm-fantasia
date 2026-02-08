@@ -1,6 +1,6 @@
 use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
-use crate::rule_presets::{self, StackingConfig};
-use crate::rules::{Effect, OnKillRules, Rule, Stat, Stats};
+use crate::rule_presets;
+use crate::rules::{Stat, Stats};
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
@@ -109,7 +109,7 @@ pub fn spawn_player(
                 Combatant,
                 PlayerCombatant,
             ),
-            // rules system - base stats + presets
+            // rules system - base stats + shared rules
             Stats::new()
                 .with(Stat::MaxHealth, defaults::HEALTH)
                 .with(Stat::Health, defaults::HEALTH)
@@ -119,10 +119,7 @@ pub fn spawn_player(
                 .with(Stat::AttackArc, defaults::ATTACK_ARC)
                 .with(Stat::CritChance, defaults::CRIT_CHANCE)
                 .with(Stat::CritMultiplier, defaults::CRIT_MULTIPLIER),
-            rule_presets::crit(),
-            rule_presets::stacking(StackingConfig::default()),
-            // On kill: log for now (not part of a preset yet)
-            OnKillRules(vec![Rule::new().then(Effect::Log("Enemy killed!".into()))]),
+            rule_presets::rules_bundle(wasm_fantasia_shared::presets::default_player_rules()),
         ))
         // spawn character mesh as child to adjust mesh position relative to the player origin
         .with_children(|parent| {

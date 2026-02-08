@@ -2,7 +2,7 @@ use spacetimedb::Table;
 use wasm_fantasia_shared::combat::{self, cone_hit_check, defaults, resolve_attack, AttackInput};
 use wasm_fantasia_shared::presets;
 use wasm_fantasia_shared::rng;
-use wasm_fantasia_shared::rules::{Stat, Stats};
+use wasm_fantasia_shared::rules::{Action, Stat, Stats, execute_rules};
 
 /// Player state stored on the server (authoritative)
 #[spacetimedb::table(name = player, public)]
@@ -285,14 +285,21 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         return;
     }
 
-    // Lazy stacking decay using shared function
+    // Lazy stacking decay (server uses timestamp check, not frame-by-frame tick)
     let decay_elapsed = (now - attacker.last_hit_time) as f64 / 1_000_000.0;
-    let mut stacks = combat::decay_stacks(attacker.stacks, decay_elapsed, attacker.stack_decay);
-    let mut attack_speed = if stacks == 0.0 && attacker.stacks > 0.0 {
+    let decayed_stacks =
+        combat::decay_stacks(attacker.stacks, decay_elapsed, attacker.stack_decay);
+    let decayed_speed = if decayed_stacks == 0.0 && attacker.stacks > 0.0 {
         1.0
     } else {
         attacker.attack_speed
     };
+
+    // All player rules from shared — server doesn't know what's inside
+    let rules = presets::default_player_rules();
+    let mut rule_stats = Stats::new()
+        .with(Stat::Custom("Stacks".into()), decayed_stacks)
+        .with(Stat::AttackSpeed, decayed_speed);
 
     let half_arc_cos = (attacker.attack_arc / 2.0_f32).to_radians().cos();
     // Bevy's forward is -local_z: for Quat::from_rotation_y(rot_y), forward = (-sin(rot_y), -cos(rot_y))
@@ -307,7 +314,6 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .with(Stat::Knockback, attacker.knockback_force)
         .with(Stat::AttackRange, attacker.attack_range)
         .with(Stat::AttackArc, attacker.attack_arc);
-    let pre_hit_rules = presets::crit::crit_rules();
 
     let mut hit_someone = false;
 
@@ -329,7 +335,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         let roll = rng::deterministic_random_u64(now, enemy.id);
         let result = resolve_attack(&AttackInput {
             attacker_stats: attacker_stats.clone(),
-            pre_hit_rules: pre_hit_rules.clone(),
+            pre_hit_rules: rules.pre_hit.clone(),
             rng_roll: roll,
         });
 
@@ -356,13 +362,15 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
             });
         }
 
-        hit_someone = true;
-    }
+        // Run shared on-hit rules per target hit
+        let mut action = Action::new();
+        execute_rules(&rules.on_hit, &mut rule_stats, &mut action);
+        if result.is_crit {
+            let mut action = Action::new();
+            execute_rules(&rules.on_crit_hit, &mut rule_stats, &mut action);
+        }
 
-    // Update attacker stacking state
-    if hit_someone {
-        stacks = (stacks + 1.0).min(12.0);
-        attack_speed = 1.0 + stacks * 0.12;
+        hit_someone = true;
     }
 
     ctx.db.player().identity().update(Player {
@@ -372,8 +380,8 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         } else {
             attacker.last_hit_time
         },
-        stacks,
-        attack_speed,
+        stacks: rule_stats.get(&Stat::Custom("Stacks".into())),
+        attack_speed: rule_stats.get(&Stat::AttackSpeed),
         last_update: now,
         ..attacker
     });

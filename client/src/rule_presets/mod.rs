@@ -1,20 +1,19 @@
-//! Rule Presets - Reusable rule compositions
-//!
-//! Presets are factory functions that return bundles of rule components
-//! for common gameplay patterns. They build on the rules system.
-//!
-//! # Example
-//! ```rust
-//! commands.spawn((
-//!     Player,
-//!     rule_presets::crit(CritConfig::default()),
-//!     rule_presets::stacking(StackingConfig::default()),
-//! ));
-//! ```
+//! Rule Presets - Bevy component wrappers around shared EntityRules.
 
-mod crit;
 pub mod feedback;
-mod stacking;
 
-pub use crit::crit;
-pub use stacking::{StackingConfig, stacking};
+use bevy::prelude::*;
+use crate::rules::*;
+use wasm_fantasia_shared::presets::EntityRules;
+
+/// Convert shared EntityRules into a Bevy component bundle.
+pub fn rules_bundle(rules: EntityRules) -> impl Bundle {
+    (
+        OnPreHitRules(rules.pre_hit),
+        OnHitRules(rules.on_hit),
+        OnCritHitRules(rules.on_crit_hit),
+        OnTickRules(rules.on_tick),
+        OnKillRules(rules.on_kill),
+        OnTakeDamageRules(rules.on_take_damage),
+    )
+}
