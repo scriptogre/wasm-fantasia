@@ -3,7 +3,7 @@ use bevy_seedling::prelude::Volume;
 use serde::Deserialize;
 use std::{error::Error, fs};
 
-pub const SETTINGS_PATH: &str = "assets/settings.ron";
+pub const SETTINGS_PATH: &str = "client/assets/settings.ron";
 
 pub fn plugin(app: &mut App) {
     let settings = Settings::load();

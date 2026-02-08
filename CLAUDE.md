@@ -34,7 +34,7 @@ Bevy 0.17 3D action RPG targeting native and WebAssembly. Flat module architectu
 - **rules** — Data-driven behavior system via triggers and composable building blocks (stats, conditions, effects)
 - **rule_presets** — Reusable rule compositions (crit, stacking buff)
 - **player** — Character control (Tnua + Avian3d physics), animation state machine, footstep sounds
-- **networking** — SpacetimeDB connection, player sync, combat sync, auto-generated bindings
+- **networking** — SpacetimeDB connection with auto-reconnect, session persistence, dead connection reaping, player sync, combat sync, lag simulator, auto-generated bindings
 - **camera** — Third-person orbit camera (Metin2-style, elevated pitch for combat visibility)
 - **audio** — bevy_seedling (Firewheel) music and sound (native only, WASM has dependency conflicts)
 - **scene** — Environment loading via bevy_skein (Blender workflow), skybox with day/night cycle
