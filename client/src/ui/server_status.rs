@@ -3,11 +3,14 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Table};
 
-use crate::models::{is_multiplayer_mode, Screen};
+use bevy_third_person_camera::ThirdPersonCamera;
+
+use crate::models::{is_multiplayer_mode, GoTo, Player, PlayerCtx, Screen};
 use crate::networking::generated::player_table::PlayerTableAccess;
-use crate::networking::{PingTracker, SpacetimeDbConnection};
-use crate::ui::colors::NEUTRAL300;
+use crate::networking::{PingTracker, SpacetimeDbConnection, STALE_THRESHOLD_SECS};
+use crate::ui::colors::{NEUTRAL300, NEUTRAL950};
 use crate::ui::hud::HudFont;
+use crate::ui::{btn_small, ui_root};
 
 // ── Components ──────────────────────────────────────────────────────
 
@@ -23,16 +26,25 @@ struct PlayersText;
 #[derive(Component)]
 struct PingText;
 
+#[derive(Component)]
+struct ConnectingOverlay;
+
 // ── Plugin ──────────────────────────────────────────────────────────
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(Screen::Gameplay),
-        spawn_status_hud.run_if(is_multiplayer_mode),
+        (spawn_connecting_overlay, spawn_status_hud).run_if(is_multiplayer_mode),
     )
     .add_systems(
         Update,
-        (tick_status, tick_players, tick_ping)
+        (
+            tick_status,
+            tick_players,
+            tick_ping,
+            enforce_connecting_lock,
+            dismiss_connecting_overlay,
+        )
             .run_if(in_state(Screen::Gameplay).and(is_multiplayer_mode)),
     );
 }
@@ -42,6 +54,78 @@ pub fn plugin(app: &mut App) {
 const GREEN: Color = Color::srgb(0.286, 0.878, 0.373);
 const RED: Color = Color::srgb(0.816, 0.125, 0.125);
 const YELLOW: Color = Color::srgb(0.878, 0.780, 0.286);
+
+// ── Connecting overlay ───────────────────────────────────────────────
+
+fn spawn_connecting_overlay(mut commands: Commands, font: Res<HudFont>) {
+    commands
+        .spawn((
+            ConnectingOverlay,
+            DespawnOnExit(Screen::Gameplay),
+            GlobalZIndex(200),
+            ui_root("Connecting Overlay"),
+            BackgroundColor(NEUTRAL950.with_alpha(0.95)),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("CONNECTING..."),
+                TextFont {
+                    font: font.0.clone(),
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(NEUTRAL300),
+            ));
+            parent.spawn(btn_small("Cancel", cancel_connecting));
+        });
+}
+
+fn cancel_connecting(_: On<Pointer<Click>>, mut commands: Commands) {
+    commands.trigger(GoTo(Screen::Title));
+}
+
+/// While overlay is up: remove PlayerCtx (blocks WASD) and unlock cursor.
+/// When overlay is dismissed: restore both.
+fn enforce_connecting_lock(
+    overlay: Query<(), With<ConnectingOverlay>>,
+    player: Query<Entity, With<Player>>,
+    player_has_ctx: Query<(), (With<Player>, With<PlayerCtx>)>,
+    mut cam: Query<&mut ThirdPersonCamera>,
+    mut commands: Commands,
+) {
+    if overlay.single().is_ok() {
+        if player_has_ctx.single().is_ok() {
+            if let Ok(entity) = player.single() {
+                commands.entity(entity).remove::<PlayerCtx>();
+            }
+        }
+        if let Ok(mut cam) = cam.single_mut() {
+            cam.cursor_lock_active = false;
+        }
+    }
+}
+
+fn dismiss_connecting_overlay(
+    conn: Option<Res<SpacetimeDbConnection>>,
+    overlay: Query<Entity, With<ConnectingOverlay>>,
+    player: Query<Entity, With<Player>>,
+    mut cam: Query<&mut ThirdPersonCamera>,
+    mut commands: Commands,
+) {
+    let Ok(entity) = overlay.single() else { return };
+    let Some(conn) = conn else { return };
+    if conn.conn.try_identity().is_none() {
+        return;
+    }
+    commands.entity(entity).despawn();
+
+    if let Ok(entity) = player.single() {
+        commands.entity(entity).insert(PlayerCtx);
+    }
+    if let Ok(mut cam) = cam.single_mut() {
+        cam.cursor_lock_active = true;
+    }
+}
 
 // ── Spawn ───────────────────────────────────────────────────────────
 
@@ -116,21 +200,38 @@ fn spawn_status_hud(mut commands: Commands, font: Res<HudFont>) {
 
 // ── Tick systems ────────────────────────────────────────────────────
 
+/// Derive connection status from three independent signals:
+/// 1. is_active() — send channel exists (can go stale if server crashes)
+/// 2. try_identity() — handshake completed (None on WASM before on_connect)
+/// 3. last_ack — server actually responded recently (catches silent deaths)
+fn connection_status(
+    conn: &Option<Res<SpacetimeDbConnection>>,
+    tracker: &Option<Res<PingTracker>>,
+) -> (&'static str, Color) {
+    let Some(conn) = conn.as_ref() else {
+        return ("OFFLINE", RED);
+    };
+    if !conn.conn.is_active() || conn.conn.try_identity().is_none() {
+        return ("OFFLINE", RED);
+    }
+    // Connection looks alive — check if server is actually responding
+    if let Some(tracker) = tracker.as_ref() {
+        if let Some(last_ack) = tracker.last_ack {
+            if last_ack.elapsed().as_secs_f32() > STALE_THRESHOLD_SECS {
+                return ("STALE", YELLOW);
+            }
+        }
+    }
+    ("ONLINE", GREEN)
+}
+
 fn tick_status(
     conn: Option<Res<SpacetimeDbConnection>>,
+    tracker: Option<Res<PingTracker>>,
     mut dots: Query<&mut BackgroundColor, With<StatusDot>>,
     mut texts: Query<&mut Text, With<StatusText>>,
 ) {
-    let active = conn
-        .as_ref()
-        .map(|c| c.conn.is_active())
-        .unwrap_or(false);
-
-    let (label, color) = if active {
-        ("ONLINE", GREEN)
-    } else {
-        ("OFFLINE", RED)
-    };
+    let (label, color) = connection_status(&conn, &tracker);
 
     if let Ok(mut dot) = dots.single_mut() {
         dot.0 = color;
@@ -144,8 +245,21 @@ fn tick_status(
 
 fn tick_players(
     conn: Option<Res<SpacetimeDbConnection>>,
+    tracker: Option<Res<PingTracker>>,
     mut texts: Query<&mut Text, With<PlayersText>>,
 ) {
+    let Ok(mut text) = texts.single_mut() else {
+        return;
+    };
+
+    let (label, _) = connection_status(&conn, &tracker);
+    if label == "OFFLINE" {
+        if text.0 != "-- / --" {
+            text.0 = "-- / --".to_string();
+        }
+        return;
+    }
+
     let (online, total) = conn
         .as_ref()
         .map(|c| {
@@ -155,15 +269,14 @@ fn tick_players(
         })
         .unwrap_or((0, 0));
 
-    if let Ok(mut text) = texts.single_mut() {
-        let new = format!("{online} / {total}");
-        if text.0 != new {
-            text.0 = new;
-        }
+    let new = format!("{online} / {total}");
+    if text.0 != new {
+        text.0 = new;
     }
 }
 
 fn tick_ping(
+    conn: Option<Res<SpacetimeDbConnection>>,
     tracker: Option<Res<PingTracker>>,
     mut texts: Query<&mut Text, With<PingText>>,
     mut colors: Query<&mut TextColor, With<PingText>>,
@@ -172,14 +285,21 @@ fn tick_ping(
         return;
     };
 
-    let Some(tracker) = tracker.as_ref() else {
+    let (label, _) = connection_status(&conn, &tracker);
+    if label == "OFFLINE" {
         if text.0 != "-- ms" {
             text.0 = "-- ms".to_string();
         }
+        if let Ok(mut tc) = colors.single_mut() {
+            tc.0 = NEUTRAL300;
+        }
         return;
-    };
+    }
 
-    let ms = tracker.smoothed_rtt_ms;
+    let ms = tracker
+        .as_ref()
+        .map(|t| t.smoothed_rtt_ms)
+        .unwrap_or(0.0);
     let new = if ms > 0.0 {
         format!("{ms:.0} ms")
     } else {
@@ -189,7 +309,6 @@ fn tick_ping(
         text.0 = new;
     }
 
-    // Color code: green < 80ms, yellow < 150ms, red >= 150ms
     let color = if ms <= 0.0 {
         NEUTRAL300
     } else if ms < 80.0 {

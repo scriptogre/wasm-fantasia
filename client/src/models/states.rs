@@ -17,10 +17,6 @@ pub fn is_multiplayer_mode(mode: Res<GameMode>) -> bool {
     *mode == GameMode::Multiplayer
 }
 
-/// Inserted when a multiplayer connection attempt fails. Title screen shows error and removes it.
-#[derive(Resource)]
-pub struct ConnectionError;
-
 #[derive(Resource, Reflect, Debug, Clone)]
 #[reflect(Resource)]
 pub struct GameState {

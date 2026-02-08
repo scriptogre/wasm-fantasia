@@ -90,6 +90,30 @@ pub struct PingTracker {
     pub last_seen_update: i64,
     /// Exponentially smoothed RTT in milliseconds
     pub smoothed_rtt_ms: f32,
+    /// When we last received any acknowledgment from the server
+    pub last_ack: Option<Instant>,
+}
+
+/// How long without a server ack before we consider the connection stale.
+pub const STALE_THRESHOLD_SECS: f32 = 3.0;
+
+/// How long to wait for a handshake before considering the connection dead.
+const HANDSHAKE_TIMEOUT_SECS: f32 = 5.0;
+
+/// How often to retry connecting (seconds).
+const RECONNECT_INTERVAL_SECS: f32 = 2.0;
+
+/// Timer for auto-reconnect attempts.
+#[derive(Resource)]
+pub struct ReconnectTimer(pub Timer);
+
+impl Default for ReconnectTimer {
+    fn default() -> Self {
+        // Fire immediately on first tick, then repeat
+        let mut timer = Timer::from_seconds(RECONNECT_INTERVAL_SECS, TimerMode::Repeating);
+        timer.tick(std::time::Duration::from_secs_f32(RECONNECT_INTERVAL_SECS));
+        Self(timer)
+    }
 }
 
 /// Plugin for SpacetimeDB networking
@@ -99,11 +123,20 @@ impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpacetimeDbConfig>()
             .init_resource::<SpacetimeDbToken>()
+            .init_resource::<ReconnectTimer>()
             .init_resource::<PositionSyncTimer>()
             .init_resource::<LagSimulator>()
             .init_resource::<LagBuffers>()
             .init_resource::<PingTracker>()
             .init_resource::<combat::CombatEventTracker>()
+            .add_systems(
+                Update,
+                auto_connect.run_if(
+                    in_state(Screen::Gameplay)
+                        .and(is_multiplayer_mode)
+                        .and(not(resource_exists::<SpacetimeDbConnection>)),
+                ),
+            )
             .add_systems(
                 OnExit(Screen::Gameplay),
                 disconnect_from_spacetimedb.run_if(is_multiplayer_mode),
@@ -113,6 +146,7 @@ impl Plugin for NetworkingPlugin {
             .add_systems(
                 Update,
                 (
+                    reap_dead_connections.run_if(resource_exists::<SpacetimeDbConnection>),
                     handle_connection_events.run_if(resource_exists::<SpacetimeDbConnection>),
                     player::spawn_remote_players.run_if(resource_exists::<SpacetimeDbConnection>),
                     player::buffer_inbound_updates.run_if(resource_exists::<SpacetimeDbConnection>),
@@ -258,6 +292,7 @@ pub fn try_connect(
 fn disconnect_from_spacetimedb(
     conn: Option<Res<SpacetimeDbConnection>>,
     mut commands: Commands,
+    mut ping: ResMut<PingTracker>,
 ) {
     if let Some(conn) = conn {
         if let Err(e) = conn.conn.disconnect() {
@@ -265,7 +300,64 @@ fn disconnect_from_spacetimedb(
         }
         commands.remove_resource::<SpacetimeDbConnection>();
     }
+    *ping = PingTracker::default();
     commands.insert_resource(GameMode::default());
+}
+
+/// Periodically attempt to (re)connect when in multiplayer gameplay without a connection.
+fn auto_connect(
+    config: Res<SpacetimeDbConfig>,
+    token: Res<SpacetimeDbToken>,
+    mut timer: ResMut<ReconnectTimer>,
+    time: Res<Time>,
+    mut commands: Commands,
+) {
+    timer.0.tick(time.delta());
+    if !timer.0.just_finished() {
+        return;
+    }
+    if let Some(conn) = try_connect(&config, &token) {
+        commands.insert_resource(conn);
+        commands.insert_resource(HandshakeStart(Instant::now()));
+        info!("Auto-connect succeeded");
+    }
+}
+
+/// When `build()` was called for the current connection (WASM build is non-blocking).
+#[derive(Resource)]
+struct HandshakeStart(Instant);
+
+/// Drop connections that are dead or stuck in handshake.
+/// On WASM, `build()` returns Ok immediately — the handshake may never complete.
+/// Without this, `auto_connect` never retries because the resource exists.
+fn reap_dead_connections(
+    conn: Option<Res<SpacetimeDbConnection>>,
+    start: Option<Res<HandshakeStart>>,
+    mut commands: Commands,
+) {
+    let Some(conn) = conn else { return };
+
+    if !conn.conn.is_active() {
+        warn!("Connection lost — cleaning up for retry");
+        commands.remove_resource::<SpacetimeDbConnection>();
+        commands.remove_resource::<HandshakeStart>();
+        return;
+    }
+
+    if conn.conn.try_identity().is_some() {
+        commands.remove_resource::<HandshakeStart>();
+        return;
+    }
+
+    // Handshake still pending — check timeout
+    if let Some(start) = start {
+        if start.0.elapsed().as_secs_f32() > HANDSHAKE_TIMEOUT_SECS {
+            warn!("Handshake timeout — dropping stale connection for retry");
+            let _ = conn.conn.disconnect();
+            commands.remove_resource::<SpacetimeDbConnection>();
+            commands.remove_resource::<HandshakeStart>();
+        }
+    }
 }
 
 
@@ -287,6 +379,7 @@ fn measure_ping(conn: Res<SpacetimeDbConnection>, mut tracker: ResMut<PingTracke
 
     if player.last_update != tracker.last_seen_update {
         tracker.last_seen_update = player.last_update;
+        tracker.last_ack = Some(Instant::now());
 
         if let Some(send_time) = tracker.last_send.take() {
             let rtt_ms = send_time.elapsed().as_secs_f32() * 1000.0;

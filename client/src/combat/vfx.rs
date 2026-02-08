@@ -16,12 +16,9 @@ pub fn plugin(app: &mut App) {
             (tick_hit_flash, tick_phantom_fist, tick_debug_hitbox),
         );
 
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        app.add_observer(on_impact_vfx)
-            .add_systems(Startup, setup_impact_assets)
-            .add_systems(Update, tick_impact_vfx);
-    }
+    app.add_observer(on_impact_vfx)
+        .add_systems(Startup, setup_impact_assets)
+        .add_systems(Update, tick_impact_vfx);
 }
 
 // ── Hit Flash ───────────────────────────────────────────────────────
@@ -313,7 +310,7 @@ fn tick_debug_hitbox(
     }
 }
 
-// ── Impact VFX (native only) ────────────────────────────────────────
+// ── Impact VFX ─────────────────────────────────────────────────────
 
 #[derive(Resource)]
 pub struct ImpactAssets {
@@ -321,7 +318,6 @@ pub struct ImpactAssets {
     pub material: Handle<StandardMaterial>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn setup_impact_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -338,7 +334,6 @@ fn setup_impact_assets(
     commands.insert_resource(ImpactAssets { mesh, material });
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Component)]
 pub struct ImpactVfx {
     pub timer: f32,
@@ -348,14 +343,12 @@ pub struct ImpactVfx {
     pub start_pos: Vec3,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Component)]
 pub struct ImpactBurst {
     pub timer: f32,
     pub duration: f32,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn on_impact_vfx(
     on: On<HitLanded>,
     targets: Query<&Transform>,
@@ -414,7 +407,6 @@ fn on_impact_vfx(
     ));
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn tick_impact_vfx(
     time: Res<Time>,
     mut commands: Commands,

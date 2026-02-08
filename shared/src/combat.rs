@@ -8,7 +8,7 @@ pub mod defaults {
     pub const CRIT_MULTIPLIER: f32 = 2.5;
     pub const ATTACK_RANGE: f32 = 3.6;
     pub const ATTACK_ARC: f32 = 150.0;
-    pub const KNOCKBACK: f32 = 3.0;
+    pub const KNOCKBACK: f32 = 1.0;
     pub const ATTACK_SPEED: f32 = 1.0;
     pub const STACK_DECAY: f32 = 2.5;
     pub const ATTACK_COOLDOWN_SECS: f32 = 0.42;
