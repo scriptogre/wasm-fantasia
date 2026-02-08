@@ -1,8 +1,25 @@
 use super::*;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<GameState>().register_type::<Mood>();
+    app.init_resource::<GameState>()
+        .init_resource::<GameMode>()
+        .register_type::<Mood>();
 }
+
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GameMode {
+    #[default]
+    Singleplayer,
+    Multiplayer,
+}
+
+pub fn is_multiplayer_mode(mode: Res<GameMode>) -> bool {
+    *mode == GameMode::Multiplayer
+}
+
+/// Inserted when a multiplayer connection attempt fails. Title screen shows error and removes it.
+#[derive(Resource)]
+pub struct ConnectionError;
 
 #[derive(Resource, Reflect, Debug, Clone)]
 #[reflect(Resource)]
@@ -43,10 +60,8 @@ impl GameState {
 /// Or <https://github.com/bevyengine/bevy/blob/main/examples/ecs/state.rs>
 #[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash, Reflect)]
 pub enum Screen {
-    // Bevy tribute <3 (skipped in dev mode)
     #[cfg_attr(not(feature = "dev_native"), default)]
     Splash,
-    // During the loading State the LoadingPlugin will load our assets
     #[cfg_attr(feature = "dev_native", default)]
     Loading,
     Tutorial,

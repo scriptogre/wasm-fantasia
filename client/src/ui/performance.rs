@@ -37,8 +37,8 @@ fn strip_fps_label(mut texts: Query<&mut Text>) {
 fn adjust_fps_layout(mut nodes: Query<(&GlobalZIndex, &mut Node)>) {
     for (z, mut node) in &mut nodes {
         if z.0 == FPS_OVERLAY_ZINDEX {
-            node.left = Val::Px(10.0);
-            node.top = Val::Px(4.0);
+            node.left = Val::Px(16.0);
+            node.top = Val::Px(16.0);
         }
     }
 }

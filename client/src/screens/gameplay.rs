@@ -19,14 +19,9 @@ fn toggle_pause(
     mut state: ResMut<GameState>,
     player: Query<Entity, With<Player>>,
     mut commands: Commands,
-    #[cfg(feature = "multiplayer")] multiplayer: Option<
-        Res<crate::networking::SpacetimeDbConnection>,
-    >,
+    mode: Res<GameMode>,
 ) {
-    #[cfg(feature = "multiplayer")]
-    let is_multiplayer = multiplayer.is_some();
-    #[cfg(not(feature = "multiplayer"))]
-    let is_multiplayer = false;
+    let is_multiplayer = *mode == GameMode::Multiplayer;
 
     if time.is_paused() || state.paused {
         if !is_multiplayer {

@@ -74,11 +74,35 @@ pub mod to {
     pub fn settings(_: On<Pointer<Click>>, mut commands: Commands) {
         commands.trigger(GoTo(Screen::Settings));
     }
-    pub fn gameplay_or_loading(
+    pub fn singleplayer(
         _: On<Pointer<Click>>,
+        mut commands: Commands,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
     ) {
+        commands.insert_resource(GameMode::Singleplayer);
+        if resource_handles.is_all_done() {
+            next_screen.set(Screen::Gameplay);
+        } else {
+            next_screen.set(Screen::Loading);
+        }
+    }
+
+    #[cfg(feature = "multiplayer")]
+    pub fn multiplayer(
+        _: On<Pointer<Click>>,
+        mut commands: Commands,
+        resource_handles: Res<ResourceHandles>,
+        mut next_screen: ResMut<NextState<Screen>>,
+        config: Res<crate::networking::SpacetimeDbConfig>,
+        token: Res<crate::networking::SpacetimeDbToken>,
+    ) {
+        let Some(conn) = crate::networking::try_connect(&config, &token) else {
+            commands.insert_resource(ConnectionError);
+            return;
+        };
+        commands.insert_resource(conn);
+        commands.insert_resource(GameMode::Multiplayer);
         if resource_handles.is_all_done() {
             next_screen.set(Screen::Gameplay);
         } else {

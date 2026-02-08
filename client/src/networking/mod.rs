@@ -3,6 +3,8 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::DbContext;
 
+use crate::models::{is_multiplayer_mode, GameMode, Screen};
+
 pub mod combat;
 pub mod generated;
 pub mod player;
@@ -12,8 +14,10 @@ pub use player::*;
 
 use generated::join_game_reducer::join_game;
 use generated::leave_game_reducer::leave_game;
+use generated::player_table::PlayerTableAccess;
 use generated::update_position_reducer::update_position;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use web_time::Instant;
 
 /// SpacetimeDB connection resource
@@ -73,17 +77,37 @@ fn default_uri() -> String {
     "ws://127.0.0.1:3000".to_string()
 }
 
+/// Persists the SpacetimeDB auth token across reconnects so the server recognizes the same player.
+#[derive(Resource, Default, Clone)]
+pub struct SpacetimeDbToken(pub Arc<Mutex<Option<String>>>);
+
+/// Tracks round-trip time by comparing position send timestamps against server acks.
+#[derive(Resource, Default)]
+pub struct PingTracker {
+    /// Timestamp of the last position send
+    pub last_send: Option<Instant>,
+    /// The `last_update` field from our player row when we last checked
+    pub last_seen_update: i64,
+    /// Exponentially smoothed RTT in milliseconds
+    pub smoothed_rtt_ms: f32,
+}
+
 /// Plugin for SpacetimeDB networking
 pub struct NetworkingPlugin;
 
 impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpacetimeDbConfig>()
+            .init_resource::<SpacetimeDbToken>()
             .init_resource::<PositionSyncTimer>()
             .init_resource::<LagSimulator>()
             .init_resource::<LagBuffers>()
+            .init_resource::<PingTracker>()
             .init_resource::<combat::CombatEventTracker>()
-            .add_systems(PostStartup, connect_to_spacetimedb);
+            .add_systems(
+                OnExit(Screen::Gameplay),
+                disconnect_from_spacetimedb.run_if(is_multiplayer_mode),
+            );
 
         app.add_observer(combat::send_attack_to_server)
             .add_systems(
@@ -108,6 +132,7 @@ impl Plugin for NetworkingPlugin {
                     combat::sync_npc_enemies.run_if(resource_exists::<SpacetimeDbConnection>),
                     combat::process_remote_combat_events
                         .run_if(resource_exists::<SpacetimeDbConnection>),
+                    measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
                 ),
             );
     }
@@ -181,12 +206,16 @@ pub struct LagBuffers {
 
 /// Builds the configured connection builder with all callbacks registered.
 macro_rules! connection_builder {
-    ($config:expr) => {
+    ($config:expr, $token:expr) => {{
+        let token_store = $token.clone();
+        let stored = $token.lock().unwrap().clone();
         DbConnection::builder()
             .with_uri(&$config.uri)
             .with_module_name(&$config.module_name)
-            .on_connect(|conn, identity, _token| {
+            .with_token(stored)
+            .on_connect(move |conn, identity, token| {
                 info!("Connected to SpacetimeDB with identity: {:?}", identity);
+                *token_store.lock().unwrap() = Some(token.to_string());
                 if let Err(e) = conn.reducers.join_game(Some("Player".to_string())) {
                     error!("Failed to call join_game: {:?}", e);
                 }
@@ -203,48 +232,71 @@ macro_rules! connection_builder {
                 warn!("Disconnected from SpacetimeDB: {:?}", err);
                 let _ = ctx.reducers.leave_game();
             })
-    };
+    }};
 }
 
-/// Connect to SpacetimeDB on startup
-fn connect_to_spacetimedb(config: Res<SpacetimeDbConfig>, mut commands: Commands) {
+/// Attempt a SpacetimeDB connection. Returns the resource on success.
+/// Reuses a stored token if available so the server recognizes the same player.
+pub fn try_connect(
+    config: &SpacetimeDbConfig,
+    token: &SpacetimeDbToken,
+) -> Option<SpacetimeDbConnection> {
     info!("Connecting to SpacetimeDB at {}...", config.uri);
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        match connection_builder!(config).build() {
-            Ok(conn) => {
-                info!("Connected to SpacetimeDB server");
-                commands.insert_resource(SpacetimeDbConnection { conn });
-            }
-            Err(e) => {
-                warn!("No SpacetimeDB server found — running in offline mode: {e:?}");
-            }
+    match connection_builder!(config, token.0).build() {
+        Ok(conn) => {
+            info!("Connected to SpacetimeDB server");
+            Some(SpacetimeDbConnection { conn })
         }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        info!("WASM: calling build() for SpacetimeDB connection");
-        match connection_builder!(config).build() {
-            Ok(conn) => {
-                // Don't call run_background_task() — it holds mutex locks across await
-                // points, which conflicts with the synchronous frame_tick() called by
-                // handle_connection_events each frame. frame_tick() alone is sufficient.
-                commands.insert_resource(SpacetimeDbConnection { conn });
-                info!("WASM: SpacetimeDbConnection resource inserted");
-            }
-            Err(e) => {
-                error!("WASM: build() failed: {e:?}");
-            }
+        Err(e) => {
+            warn!("SpacetimeDB connection failed: {e:?}");
+            None
         }
     }
 }
+
+/// Disconnect and remove the connection resource when leaving gameplay.
+fn disconnect_from_spacetimedb(
+    conn: Option<Res<SpacetimeDbConnection>>,
+    mut commands: Commands,
+) {
+    if let Some(conn) = conn {
+        if let Err(e) = conn.conn.disconnect() {
+            warn!("SpacetimeDB disconnect error: {e:?}");
+        }
+        commands.remove_resource::<SpacetimeDbConnection>();
+    }
+    commands.insert_resource(GameMode::default());
+}
+
 
 /// Process connection events each frame
 fn handle_connection_events(conn: Res<SpacetimeDbConnection>) {
     if let Err(e) = conn.conn.frame_tick() {
         warn!("frame_tick error: {e:?}");
+    }
+}
+
+/// Measure ping by detecting when our player row's `last_update` changes.
+fn measure_ping(conn: Res<SpacetimeDbConnection>, mut tracker: ResMut<PingTracker>) {
+    let Some(identity) = conn.conn.try_identity() else {
+        return;
+    };
+    let Some(player) = conn.conn.db.player().identity().find(&identity) else {
+        return;
+    };
+
+    if player.last_update != tracker.last_seen_update {
+        tracker.last_seen_update = player.last_update;
+
+        if let Some(send_time) = tracker.last_send.take() {
+            let rtt_ms = send_time.elapsed().as_secs_f32() * 1000.0;
+            // EMA smoothing (alpha = 0.2)
+            if tracker.smoothed_rtt_ms <= 0.0 {
+                tracker.smoothed_rtt_ms = rtt_ms;
+            } else {
+                tracker.smoothed_rtt_ms = tracker.smoothed_rtt_ms * 0.8 + rtt_ms * 0.2;
+            }
+        }
     }
 }
 

@@ -15,6 +15,7 @@ pub fn plugin(app: &mut App) {
 fn spawn_enemy_in_front(
     _on: On<Start<SpawnEnemy>>,
     player: Query<&Transform, With<Player>>,
+    mode: Res<GameMode>,
     #[cfg(feature = "multiplayer")] conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -27,14 +28,19 @@ fn spawn_enemy_in_front(
     let forward = player_transform.forward();
     let pos = player_transform.translation;
 
-    // If multiplayer is connected and the server is reachable, spawn via server
+    // Suppress unused warning when multiplayer feature is off
+    let _ = &mode;
+
+    // If multiplayer mode and server is reachable, spawn via server
     #[cfg(feature = "multiplayer")]
-    if let Some(conn) = conn {
-        use spacetimedb_sdk::DbContext;
-        if conn.conn.is_active() {
-            crate::networking::combat::server_spawn_enemies(&conn, pos, forward.as_vec3());
-            debug!("Requested 5 enemies from server");
-            return;
+    if *mode == GameMode::Multiplayer {
+        if let Some(conn) = conn {
+            use spacetimedb_sdk::DbContext;
+            if conn.conn.is_active() {
+                crate::networking::combat::server_spawn_enemies(&conn, pos, forward.as_vec3());
+                debug!("Requested 5 enemies from server");
+                return;
+            }
         }
     }
 

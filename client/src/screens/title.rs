@@ -3,45 +3,68 @@ use super::*;
 /// This plugin is responsible for the game menu
 /// The menu is only drawn during the State [`Screen::Title`] and is removed when that state is exited
 pub fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Title), setup_menu);
+    app.add_systems(OnEnter(Screen::Title), setup_menu)
+        .add_systems(
+            Update,
+            show_connection_error
+                .run_if(in_state(Screen::Title).and(resource_exists::<ConnectionError>)),
+        );
 }
 
 fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
-    commands.spawn((
-        DespawnOnExit(Screen::Title),
-        GlobalZIndex(1),
-        ui_root("Title UI"),
-        BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),
-        children![(
-            Node {
-                width: Vw(40.0),
-                height: Vh(40.0),
+    commands
+        .spawn((
+            DespawnOnExit(Screen::Title),
+            GlobalZIndex(1),
+            ui_root("Title UI"),
+            BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),
+        ))
+        .with_children(|root| {
+            root.spawn(Node {
                 position_type: PositionType::Absolute,
                 flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                row_gap: Vh(1.0),
-                bottom: Vw(1.0),
-                left: Vw(1.0),
+                align_items: AlignItems::FlexStart,
+                row_gap: Vh(2.5),
+                bottom: Vw(5.0),
+                left: Vw(5.0),
                 ..default()
-            },
-            // Crutch until we can use #cfg in children![] macro
-            // https://github.com/bevyengine/bevy/issues/18953
-            #[cfg(target_arch = "wasm32")]
-            children![
-                btn_big("Play", to::gameplay_or_loading),
-                btn_big("Settings", to::settings),
-            ],
-            #[cfg(not(target_arch = "wasm32"))]
-            children![
-                btn_big("Play", to::gameplay_or_loading),
-                btn_big("Settings", to::settings),
-                btn_big("Exit", exit_app)
-            ],
-        )],
-    ));
+            })
+            .with_children(|buttons| {
+                buttons.spawn(btn_big("Singleplayer", to::singleplayer));
+
+                #[cfg(feature = "multiplayer")]
+                buttons.spawn(btn_big("Multiplayer", to::multiplayer));
+                #[cfg(not(feature = "multiplayer"))]
+                buttons.spawn(btn_big_disabled("Multiplayer"));
+
+                buttons.spawn(btn_big("Settings", to::settings));
+
+                #[cfg(not(target_arch = "wasm32"))]
+                buttons.spawn(btn_big("Exit", exit_app));
+            });
+        });
 
     state.reset();
+}
+
+fn show_connection_error(mut commands: Commands, error: Option<Res<ConnectionError>>) {
+    if error.is_none() {
+        return;
+    }
+    commands.remove_resource::<ConnectionError>();
+    commands.spawn((
+        DespawnOnExit(Screen::Title),
+        GlobalZIndex(2),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Vh(4.0),
+            left: Vw(1.0),
+            ..default()
+        },
+        Text::new("Could not connect to server"),
+        TextColor(colors::HEALTH_RED),
+        Pickable::IGNORE,
+    ));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
