@@ -7,9 +7,11 @@ Session-based MMO prototype. Bevy 0.17 + SpacetimeDB multiplayer, targeting nati
 ## What's here
 
 - 3D character controller (Tnua + Avian3d physics)
-- Third-person camera with gamepad support
-- SpacetimeDB multiplayer with server-authoritative movement
-- Network lag/packet-loss simulator for testing (F1-F7)
+- Third-person orbit camera with gamepad support
+- Combat system with attacks, targeting, damage numbers, hit VFX, screen shake
+- Data-driven rules engine (stats, conditions, effects, triggers)
+- SpacetimeDB multiplayer with auto-reconnect, session persistence, server status HUD
+- Network lag/packet-loss simulator for testing
 - Day/night skybox cycle
 - Audio system with music crossfading (native only)
 - Screen flow: splash, loading, title, settings, gameplay
@@ -46,18 +48,11 @@ spacetimedb publish wasm-fantasia
 
 | Path | Description |
 |------|-------------|
-| `src/main.rs` | App entrypoint, plugin registration |
-| `src/models/` | Data layer: input bindings, game state, settings |
-| `src/player/` | Character control, animation, footstep sounds |
-| `src/camera/` | Third-person / top-down camera (feature-flagged) |
-| `src/scene/` | Environment loading, skybox |
-| `src/audio/` | Music bus, crossfading, radio (native only) |
-| `src/networking/` | SpacetimeDB client, position sync, lag simulator |
-| `src/screens/` | Splash, loading, title, settings, gameplay |
-| `src/ui/` | Reusable UI components, modals |
-| `src/game/` | Game mechanics, dev tools |
-| `server/` | SpacetimeDB server module |
-| `docs/` | Design documents |
+| `client/` | Bevy game client — all gameplay, rendering, UI, audio |
+| `shared/` | Pure functions shared between client and server (combat, rules, RNG) |
+| `server/` | SpacetimeDB server module — authoritative game state, reducers |
+| `crates/` | Local dependency forks (spacetimedb-sdk, tokio-tungstenite-wasm) |
+| `docs/` | Design and architecture documents |
 
 ## Feature flags
 
@@ -65,19 +60,6 @@ spacetimedb publish wasm-fantasia
 |------|-------------|
 | `dev_native` | Dev tools, inspector, asset hot-reloading (default) |
 | `audio` | bevy_seedling audio, native only (included in `dev_native`) |
-| `third_person` | Third-person camera (default) |
-| `top_down` | Top-down camera |
+| `third_person` | Third-person orbit camera (default) |
+| `multiplayer` | SpacetimeDB networking |
 | `web` | WebGPU/WASM target |
-
-## Credits
-
-Assets are all third-party. See [credits](assets/credits.json).
-
-## License
-
-Source code is licensed under any of:
-- [CC0-1.0](./LICENSE-CC0)
-- [MIT](./LICENSE-MIT)
-- [Apache 2.0](./LICENSE-APACHE)
-
-Based on [bevy_new_3d_rpg](https://github.com/olekspickle/bevy_new_3d_rpg) by Oleks Pickle.

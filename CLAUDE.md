@@ -38,7 +38,7 @@ Bevy 0.17 3D action RPG targeting native and WebAssembly. Flat module architectu
 - **camera** — Third-person orbit camera (Metin2-style, elevated pitch for combat visibility)
 - **audio** — bevy_seedling (Firewheel) music and sound (native only, WASM has dependency conflicts)
 - **scene** — Environment loading via bevy_skein (Blender workflow), skybox with day/night cycle
-- **screens** — Screen state management (splash, loading, title, settings, credits, gameplay), modal system
+- **screens** — Screen state management (splash, loading, title, settings, gameplay), modal system
 - **ui** — Reusable UI components: modals, settings panels, keybinding editors, interaction observers
 - **models** — Shared data layer: input actions, game state, settings, screen states
 - **asset_loading** — Centralized asset loading with RON config, progress tracking
@@ -83,41 +83,8 @@ Player is Dynamic RigidBody with capsule Collider. TnuaAvian3dSensorShape for gr
 
 ## Architecture Conventions
 
-Reference: `docs/architecture/PATTERNS.md`, `docs/architecture/REFACTOR_PLAN.md`
-
-### Client = Presentation + Prediction
-
-The client is a dumb renderer. It doesn't know or care whether an entity is "local" or "remote," singleplayer or multiplayer. It receives entity state and presents it. The backend (local ECS in SP, SpacetimeDB in MP) decides what exists and where.
-
-The only things that make the local player special are thin markers: `LocallyControlled` (receives input), camera target. Everything else — Health, Combatant, Stats, mesh — is identical for all entities regardless of origin.
-
-### Prediction vs Backend
-
-Client code falls into three categories:
-
-| Category | Mutates game state? | Example |
-|----------|-------------------|---------|
-| **Presentation** | Never | VFX, sound, screen shake, damage numbers, health bars |
-| **Prediction** | Never — fires feedback events only | Hit detection + `resolve_combat()` for instant VFX |
-| **Backend** | Yes — owns authoritative state | `health.take_damage()`, entity spawn/despawn, death |
-
-Prediction code runs `resolve_combat()` speculatively for instant VFX feedback but never mutates Health or triggers death. The backend handles real state changes. In SP the backend is local Bevy systems. In MP the backend is SpacetimeDB + server sync.
-
-Mark prediction systems clearly: doc comments must say `/// Prediction:` and explain what's speculative vs authoritative.
-
-### Protocol (shared/)
-
-`shared/` contains pure game logic (resolve functions, rules, RNG) AND the message contract between client and backend. Message types are plain structs — no Bevy, no SpacetimeDB.
-
-```
-shared/src/
-  combat.rs      ← resolve_combat() — pure game math
-  rules.rs       ← data-driven behavior engine
-  rng.rs         ← deterministic RNG
-  protocol.rs    ← message types between client and backend
-```
-
-The client wraps protocol types in Bevy `Event`. The server wraps them in SpacetimeDB reducer/table logic. Neither framework leaks into `shared/`.
+Reference: `docs/architecture/PATTERNS.md`
+Refactoring plan: `REFACTOR.md`
 
 ### Module Dependency Direction
 
@@ -129,7 +96,7 @@ combat → shared, models                         (never imports networking)
 player → shared, models, combat                 (may read combat components)
 ui → models, combat, rules                      (reads state, never mutates)
 models → (nothing game-specific)                (pure data definitions)
-shared → (no Bevy types)                        (pure functions + protocol)
+shared → (no Bevy types)                        (pure functions only)
 ```
 
 Domain modules (combat, player) never import networking. If combat needs to tell the server something, it fires a domain event that networking observes.
@@ -152,11 +119,11 @@ The module that owns a domain concept owns its entity archetype.
 
 - `combat/enemy.rs` owns enemy bundles (Health, Stats, Combatant, Collider, mesh)
 - `player/` owns player bundles
-- Networking **never** constructs domain bundles — it fires spawn events carrying server data, the owning module's observer builds the entity
+- Networking should not construct domain bundles — it fires spawn events, the owning module's observer builds the entity
 
-### No `cfg(feature)` in Domain Code
+### Multiplayer Runtime
 
-Domain modules (combat/, player/) must not contain `cfg(feature = "multiplayer")`. The `GameMode` resource and backend plugin system handle SP/MP differences. If domain code needs to behave differently based on authority, it checks a marker component or run condition — never a feature flag or networking import.
+`GameMode` resource (Singleplayer/Multiplayer) set by title screen buttons. Use `is_multiplayer_mode` run condition for MP-only systems. `#[cfg(feature = "multiplayer")]` gates code existence (module declarations, type imports), `GameMode` gates runtime behavior.
 
 ## Rules System (Data-Driven Behaviors)
 
