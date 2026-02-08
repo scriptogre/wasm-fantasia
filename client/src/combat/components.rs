@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-pub use wasm_fantasia_shared::combat::{HitFeedback, attack_timing, hit_timing};
+pub use wasm_fantasia_shared::combat::{attack_timing, hit_timing};
 
 pub fn plugin(app: &mut App) {
     app.register_type::<Health>().register_type::<AttackState>();
@@ -106,24 +106,6 @@ pub struct Staggered {
     pub duration: Timer,
 }
 
-/// Event fired when an entity takes damage.
-#[derive(Event, Debug, Clone)]
-pub struct DamageEvent {
-    pub source: Entity,
-    pub target: Entity,
-    pub damage: f32,
-    pub force: Vec3,
-    pub is_crit: bool,
-    pub feedback: HitFeedback,
-}
-
-/// Event fired when an entity dies.
-#[derive(Event, Debug, Clone)]
-pub struct DeathEvent {
-    pub killer: Entity,
-    pub entity: Entity,
-}
-
 /// Marker component for entities that can deal damage.
 #[derive(Component, Reflect, Debug, Clone, Default)]
 #[reflect(Component)]
@@ -139,8 +121,3 @@ pub struct PlayerCombatant;
 #[reflect(Component)]
 pub struct Enemy;
 
-/// Event fired when the attack's hit frame is reached.
-#[derive(Event, Clone, Debug)]
-pub struct AttackHit {
-    pub attacker: Entity,
-}

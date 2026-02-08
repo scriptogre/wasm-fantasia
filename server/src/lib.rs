@@ -1,8 +1,7 @@
 use spacetimedb::Table;
-use wasm_fantasia_shared::combat::{self, cone_hit_check, defaults, resolve_attack, AttackInput};
+use wasm_fantasia_shared::combat::{self, defaults, resolve_combat, CombatInput, HitTarget};
 use wasm_fantasia_shared::presets;
-use wasm_fantasia_shared::rng;
-use wasm_fantasia_shared::rules::{Action, Stat, Stats, execute_rules};
+use wasm_fantasia_shared::rules::{Stat, Stats};
 
 /// Player state stored on the server (authoritative)
 #[spacetimedb::table(name = player, public)]
@@ -295,29 +294,24 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         attacker.attack_speed
     };
 
-    // All player rules from shared — server doesn't know what's inside
     let rules = presets::default_player_rules();
-    let mut rule_stats = Stats::new()
-        .with(Stat::Custom("Stacks".into()), decayed_stacks)
-        .with(Stat::AttackSpeed, decayed_speed);
 
     let half_arc_cos = (attacker.attack_arc / 2.0_f32).to_radians().cos();
     // Bevy's forward is -local_z: for Quat::from_rotation_y(rot_y), forward = (-sin(rot_y), -cos(rot_y))
     let fwd = glam::Vec2::new(-attacker.rot_y.sin(), -attacker.rot_y.cos());
     let origin = glam::Vec2::new(attacker.x, attacker.z);
 
-    // Build attacker stats for shared resolve_attack
     let attacker_stats = Stats::new()
         .with(Stat::AttackDamage, attacker.attack_damage)
         .with(Stat::CritChance, attacker.crit_chance)
         .with(Stat::CritMultiplier, attacker.crit_multiplier)
         .with(Stat::Knockback, attacker.knockback_force)
         .with(Stat::AttackRange, attacker.attack_range)
-        .with(Stat::AttackArc, attacker.attack_arc);
+        .with(Stat::AttackArc, attacker.attack_arc)
+        .with(Stat::Custom("Stacks".into()), decayed_stacks)
+        .with(Stat::AttackSpeed, decayed_speed);
 
-    let mut hit_someone = false;
-
-    // --- Hit detection against NPC enemies ---
+    // Build target list from NPC enemies
     let enemy_targets: Vec<NpcEnemy> = ctx
         .db
         .npc_enemy()
@@ -325,63 +319,62 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .filter(|e| e.health > 0.0)
         .collect();
 
-    for enemy in enemy_targets {
-        let enemy_pos = glam::Vec2::new(enemy.x, enemy.z);
+    let hit_targets: Vec<HitTarget> = enemy_targets
+        .iter()
+        .map(|e| HitTarget {
+            id: e.id,
+            pos: glam::Vec2::new(e.x, e.z),
+            health: e.health,
+        })
+        .collect();
 
-        if !cone_hit_check(origin, fwd, enemy_pos, attacker.attack_range, half_arc_cos) {
-            continue;
-        }
+    let output = resolve_combat(&CombatInput {
+        origin,
+        forward: fwd,
+        base_range: attacker.attack_range,
+        half_arc_cos,
+        attacker_stats: &attacker_stats,
+        rules: &rules,
+        rng_seed: now as u64,
+        targets: &hit_targets,
+    });
 
-        let roll = rng::deterministic_random_u64(now, enemy.id);
-        let result = resolve_attack(&AttackInput {
-            attacker_stats: attacker_stats.clone(),
-            pre_hit_rules: rules.pre_hit.clone(),
-            rng_roll: roll,
-        });
-
-        let new_health = (enemy.health - result.damage).max(0.0);
-
+    // Apply results to DB
+    for hit in &output.hits {
         ctx.db.combat_event().insert(CombatEvent {
             id: 0,
             attacker: ctx.sender,
             target_player: None,
-            target_npc_id: Some(enemy.id),
-            damage: result.damage,
-            is_crit: result.is_crit,
+            target_npc_id: Some(hit.target_id),
+            damage: hit.damage,
+            is_crit: hit.is_crit,
             attacker_x: attacker.x,
             attacker_z: attacker.z,
             timestamp: now,
         });
 
-        if new_health <= 0.0 {
-            ctx.db.npc_enemy().delete(enemy);
-        } else {
-            ctx.db.npc_enemy().id().update(NpcEnemy {
-                health: new_health,
-                ..enemy
-            });
+        // Look up current enemy state from DB (not the Vec — avoids borrow issues)
+        if let Some(enemy) = ctx.db.npc_enemy().id().find(hit.target_id) {
+            if hit.died {
+                ctx.db.npc_enemy().delete(enemy);
+            } else {
+                ctx.db.npc_enemy().id().update(NpcEnemy {
+                    health: hit.new_health,
+                    ..enemy
+                });
+            }
         }
-
-        // Run shared on-hit rules per target hit
-        let mut action = Action::new();
-        execute_rules(&rules.on_hit, &mut rule_stats, &mut action);
-        if result.is_crit {
-            let mut action = Action::new();
-            execute_rules(&rules.on_crit_hit, &mut rule_stats, &mut action);
-        }
-
-        hit_someone = true;
     }
 
     ctx.db.player().identity().update(Player {
         last_attack_time: now,
-        last_hit_time: if hit_someone {
+        last_hit_time: if output.hit_any {
             now
         } else {
             attacker.last_hit_time
         },
-        stacks: rule_stats.get(&Stat::Custom("Stacks".into())),
-        attack_speed: rule_stats.get(&Stat::AttackSpeed),
+        stacks: output.attacker_stats.get(&Stat::Custom("Stacks".into())),
+        attack_speed: output.attacker_stats.get(&Stat::AttackSpeed),
         last_update: now,
         ..attacker
     });

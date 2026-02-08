@@ -6,12 +6,12 @@ pub fn plugin(app: &mut App) {
     app.add_observer(on_damage).add_observer(on_death);
 }
 
-/// Observer: apply damage and knockback when DamageEvent is triggered.
+/// Observer: apply damage and knockback when [`DamageDealt`] is triggered.
 /// For remote players (multiplayer), health is server-authoritative — we skip
 /// `take_damage` and let the networking sync handle it. VFX and knockback still fire
 /// for immediate feedback.
 fn on_damage(
-    on: On<DamageEvent>,
+    on: On<DamageDealt>,
     mut targets: Query<(&mut Health, Option<&mut TnuaController>)>,
     #[cfg(feature = "multiplayer")] remote_players: Query<
         (),
@@ -43,7 +43,7 @@ fn on_damage(
     };
 
     // Trigger hit feedback (VFX, damage numbers, screen shake, etc.) regardless
-    commands.trigger(HitEvent {
+    commands.trigger(HitLanded {
         source: event.source,
         target: event.target,
         damage: event.damage,
@@ -66,7 +66,7 @@ fn on_damage(
     }
 
     if died {
-        commands.trigger(DeathEvent {
+        commands.trigger(Died {
             killer: event.source,
             entity: event.target,
         });
@@ -76,7 +76,7 @@ fn on_damage(
 /// Observer: handle entity death.
 /// Remote players (multiplayer) are handled by the networking layer, not despawned locally.
 fn on_death(
-    on: On<DeathEvent>,
+    on: On<Died>,
     #[cfg(feature = "multiplayer")] remote_players: Query<
         (),
         With<crate::networking::player::RemotePlayer>,

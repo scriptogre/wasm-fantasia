@@ -1,21 +1,23 @@
 //! Rule trigger components and observers
 
 use super::*;
-use crate::combat::{AttackState, DamageEvent, DeathEvent, HitEvent};
+use crate::combat::{AttackState, DamageDealt};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // DERIVED EVENTS
 // ============================================================================
 
+/// Sub-feedback: a critical hit occurred. See [`HitLanded`].
 #[derive(Event, Clone, Debug)]
-pub struct CritHitEvent {
+pub struct CritHit {
     pub source: Entity,
     pub target: Entity,
 }
 
+/// Sub-feedback: a critical kill occurred. See [`Died`].
 #[derive(Event, Clone, Debug)]
-pub struct CritKillEvent {
+pub struct CritKill {
     pub killer: Entity,
     pub victim: Entity,
 }
@@ -61,73 +63,12 @@ pub struct OnTickRules(pub Vec<Rule>);
 // OBSERVERS
 // ============================================================================
 
-fn on_hit_observer(
-    trigger: On<HitEvent>,
-    mut query: Query<(&OnHitRules, &mut Stats)>,
-    mut commands: Commands,
-) {
-    let event = trigger.event();
-    let mut action = Action::new();
-
-    if let Ok((rules, mut stats)) = query.get_mut(event.source) {
-        let output = execute_rules(&rules.0, &mut stats.0, &mut action);
-
-        // Emit CritHitEvent if crit was triggered
-        if output.is_crit() {
-            commands.trigger(CritHitEvent {
-                source: event.source,
-                target: event.target,
-            });
-        }
-    }
-}
-
-fn on_crit_hit_observer(
-    trigger: On<CritHitEvent>,
-    mut query: Query<(&OnCritHitRules, &mut Stats)>,
-) {
-    let event = trigger.event();
-    let mut action = Action::new();
-
-    if let Ok((rules, mut stats)) = query.get_mut(event.source) {
-        let _ = execute_rules(&rules.0, &mut stats.0, &mut action);
-    }
-}
-
-fn on_kill_observer(
-    trigger: On<DeathEvent>,
-    mut query: Query<(&OnKillRules, &mut Stats)>,
-    mut commands: Commands,
-) {
-    let event = trigger.event();
-    let mut action = Action::new();
-
-    if let Ok((rules, mut stats)) = query.get_mut(event.killer) {
-        let output = execute_rules(&rules.0, &mut stats.0, &mut action);
-
-        if output.is_crit() {
-            commands.trigger(CritKillEvent {
-                killer: event.killer,
-                victim: event.entity,
-            });
-        }
-    }
-}
-
-fn on_crit_kill_observer(
-    trigger: On<CritKillEvent>,
-    mut query: Query<(&OnCritKillRules, &mut Stats)>,
-) {
-    let event = trigger.event();
-    let mut action = Action::new();
-
-    if let Ok((rules, mut stats)) = query.get_mut(event.killer) {
-        let _ = execute_rules(&rules.0, &mut stats.0, &mut action);
-    }
-}
+/// On-hit/on-crit-hit/on-kill rule execution is now handled by
+/// `resolve_combat()` in the shared crate. These observers only
+/// dispatch sub-feedback events for VFX that care about crits.
 
 fn on_take_damage_observer(
-    trigger: On<DamageEvent>,
+    trigger: On<DamageDealt>,
     mut query: Query<(&OnTakeDamageRules, &mut Stats)>,
 ) {
     let event = trigger.event();
@@ -178,10 +119,6 @@ pub fn plugin(app: &mut App) {
     use crate::models::Screen;
 
     app.add_plugins(RulePresetPlugin)
-        .add_observer(on_hit_observer)
-        .add_observer(on_crit_hit_observer)
-        .add_observer(on_kill_observer)
-        .add_observer(on_crit_kill_observer)
         .add_observer(on_take_damage_observer)
         .add_systems(
             Update,

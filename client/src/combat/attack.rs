@@ -1,10 +1,14 @@
 use super::*;
 use crate::player::control::InputBuffer;
-use crate::rules::{OnPreHitRules, Stat, Stats};
+use crate::rules::{
+    OnCritHitRules, OnHitRules, OnKillRules, OnPreHitRules, OnTakeDamageRules, OnTickRules, Stat,
+    Stats,
+};
 use bevy_enhanced_input::prelude::Fire;
 use bevy_tnua::builtins::TnuaBuiltinDash;
 use bevy_tnua::prelude::*;
-use wasm_fantasia_shared::combat::{AttackInput, cone_hit_check, defaults, resolve_attack};
+use wasm_fantasia_shared::combat::{CombatInput, HitTarget, defaults, resolve_combat};
+use wasm_fantasia_shared::presets::EntityRules;
 
 /// Visual constants for attack effects
 pub const VFX_RANGE: f32 = 2.0;
@@ -86,7 +90,7 @@ fn tick_attack_state(
             state.attack_time += time.delta_secs() * speed_mult;
 
             if !state.hit_triggered && state.attack_time >= state.hit_time {
-                commands.trigger(AttackHit { attacker: entity });
+                commands.trigger(AttackIntent { attacker: entity });
                 state.hit_triggered = true;
             }
 
@@ -100,94 +104,133 @@ fn tick_attack_state(
 }
 
 /// Observer: triggered when attack hit time is reached.
-/// Executes OnPreHitRules to compute damage, crit, force, and feedback values.
+/// Calls [`resolve_combat`] and fires [`DamageDealt`] per hit.
 fn on_attack_hit(
-    trigger: On<AttackHit>,
+    trigger: On<AttackIntent>,
     mut attackers: Query<
         (
             &mut AttackState,
             &Transform,
-            Option<&OnPreHitRules>,
             Option<&mut Stats>,
+            Option<&OnPreHitRules>,
+            Option<&OnHitRules>,
+            Option<&OnCritHitRules>,
+            Option<&OnKillRules>,
+            Option<&OnTakeDamageRules>,
+            Option<&OnTickRules>,
         ),
         With<PlayerCombatant>,
     >,
-    targets: Query<(Entity, &Transform), (With<Health>, With<Enemy>)>,
+    targets: Query<(Entity, &Transform, &Health), With<Enemy>>,
     mut commands: Commands,
 ) {
     let attacker_entity = trigger.event().attacker;
-    let Ok((mut attack_state, transform, pre_hit_rules, stats)) =
-        attackers.get_mut(attacker_entity)
+    let Ok((
+        mut attack_state,
+        transform,
+        stats,
+        pre_hit,
+        on_hit,
+        on_crit_hit,
+        on_kill,
+        on_take_damage,
+        on_tick,
+    )) = attackers.get_mut(attacker_entity)
     else {
         return;
     };
 
-    // Build attacker stats for shared resolution
     let attacker_stats = stats.as_ref().map(|s| s.0.clone()).unwrap_or_default();
 
-    let base_range = attacker_stats.get(&Stat::AttackRange);
-    let base_range = if base_range > 0.0 {
-        base_range
-    } else {
-        defaults::ATTACK_RANGE
+    let base_range = {
+        let v = attacker_stats.get(&Stat::AttackRange);
+        if v > 0.0 { v } else { defaults::ATTACK_RANGE }
     };
-    let base_arc = attacker_stats.get(&Stat::AttackArc);
-    let base_arc = if base_arc > 0.0 {
-        base_arc
-    } else {
-        defaults::ATTACK_ARC
+    let base_arc = {
+        let v = attacker_stats.get(&Stat::AttackArc);
+        if v > 0.0 { v } else { defaults::ATTACK_ARC }
     };
 
-    let rng_roll: f32 = rand::random();
-    let result = resolve_attack(&AttackInput {
-        attacker_stats,
-        pre_hit_rules: pre_hit_rules.map(|r| r.0.clone()).unwrap_or_default(),
-        rng_roll,
-    });
+    let rules = EntityRules {
+        pre_hit: pre_hit.map(|r| r.0.clone()).unwrap_or_default(),
+        on_hit: on_hit.map(|r| r.0.clone()).unwrap_or_default(),
+        on_crit_hit: on_crit_hit.map(|r| r.0.clone()).unwrap_or_default(),
+        on_kill: on_kill.map(|r| r.0.clone()).unwrap_or_default(),
+        on_take_damage: on_take_damage.map(|r| r.0.clone()).unwrap_or_default(),
+        on_tick: on_tick.map(|r| r.0.clone()).unwrap_or_default(),
+    };
 
-    let is_crit = result.is_crit;
-    let damage = result.damage;
-    let force_radial = result.knockback;
-    let force_forward = result.push;
-    let force_vertical = result.launch;
-    let feedback = result.feedback;
-
-    attack_state.is_crit = is_crit;
+    // Build target list with entity mapping
+    let target_list: Vec<(Entity, Vec3)> = targets
+        .iter()
+        .map(|(e, tf, _)| (e, tf.translation))
+        .collect();
+    let hit_targets: Vec<HitTarget> = targets
+        .iter()
+        .map(|(e, tf, h)| HitTarget {
+            id: e.to_bits(),
+            pos: Vec2::new(tf.translation.x, tf.translation.z),
+            health: h.current,
+        })
+        .collect();
 
     let attacker_pos = transform.translation;
     let forward = transform.forward().as_vec3();
-    let half_arc_cos = (base_arc / 2.0_f32).to_radians().cos();
     let forward_xz = Vec2::new(forward.x, forward.z).normalize_or_zero();
     let origin_xz = Vec2::new(attacker_pos.x, attacker_pos.z);
+    let half_arc_cos = (base_arc / 2.0_f32).to_radians().cos();
 
-    // Crits get 30% more range
-    let range = if is_crit {
-        base_range * 1.3
-    } else {
-        base_range
-    };
+    let output = resolve_combat(&CombatInput {
+        origin: origin_xz,
+        forward: forward_xz,
+        base_range,
+        half_arc_cos,
+        attacker_stats: &attacker_stats,
+        rules: &rules,
+        rng_seed: rand::random(),
+        targets: &hit_targets,
+    });
 
-    for (target_entity, target_tf) in targets.iter() {
-        let target_xz = Vec2::new(target_tf.translation.x, target_tf.translation.z);
-
-        if !cone_hit_check(origin_xz, forward_xz, target_xz, range, half_arc_cos) {
-            continue;
+    // Write back modified stats (stacking etc.)
+    if output.hit_any {
+        if let Some(mut stats) = stats {
+            stats.0 = output.attacker_stats;
         }
+    }
 
-        let to_target = target_tf.translation - attacker_pos;
+    // Fire events per hit
+    let forward_flat = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
+    let mut any_crit = false;
+
+    for hit in &output.hits {
+        // Look up the target entity and position
+        let Some(&(target_entity, target_pos)) = target_list
+            .iter()
+            .find(|(e, _)| e.to_bits() == hit.target_id)
+        else {
+            continue;
+        };
+
+        // Compute 3D force direction
+        let to_target = target_pos - attacker_pos;
         let to_target_flat = Vec3::new(to_target.x, 0.0, to_target.z).normalize_or_zero();
-        let forward_flat = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
         let radial_dir = to_target_flat.normalize_or(forward_flat);
         let force =
-            radial_dir * force_radial + forward_flat * force_forward + Vec3::Y * force_vertical;
+            radial_dir * hit.knockback + forward_flat * hit.push + Vec3::Y * hit.launch;
 
-        commands.trigger(DamageEvent {
+        commands.trigger(DamageDealt {
             source: attacker_entity,
             target: target_entity,
-            damage,
+            damage: hit.damage,
             force,
-            is_crit,
-            feedback: feedback.clone(),
+            is_crit: hit.is_crit,
+            feedback: hit.feedback.clone(),
         });
+
+        if hit.is_crit {
+            any_crit = true;
+        }
     }
+
+    attack_state.is_crit = any_crit;
 }

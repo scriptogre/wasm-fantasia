@@ -101,8 +101,10 @@ pub fn can_attack(last_attack_micros: i64, now_micros: i64, attack_speed: f32) -
 // ============================================================================
 
 use crate::presets::feedback;
+use crate::presets::EntityRules;
 use crate::rules::{
-    Action, ActionVar, Rule, RuleOutput, Stats, execute_effects, execute_rules_with_roll,
+    Action, ActionVar, Rule, RuleOutput, Stats, execute_effects, execute_rules,
+    execute_rules_with_roll,
 };
 
 /// Input to the shared attack resolver.
@@ -182,5 +184,123 @@ pub fn resolve_attack(input: &AttackInput) -> AttackOutput {
         launch,
         feedback,
         rule_output,
+    }
+}
+
+// ============================================================================
+// FULL COMBAT RESOLUTION (multi-target)
+// ============================================================================
+
+/// Crits extend hit range by 30%.
+pub const CRIT_RANGE_BONUS: f32 = 1.3;
+
+/// A potential target for the attack.
+pub struct HitTarget {
+    pub id: u64,
+    pub pos: glam::Vec2,
+    pub health: f32,
+}
+
+/// Result for a single target that was hit.
+pub struct HitResult {
+    pub target_id: u64,
+    pub damage: f32,
+    pub is_crit: bool,
+    pub knockback: f32,
+    pub push: f32,
+    pub launch: f32,
+    pub new_health: f32,
+    pub died: bool,
+    pub feedback: HitFeedback,
+}
+
+/// Everything needed to resolve a full attack against multiple targets.
+pub struct CombatInput<'a> {
+    pub origin: glam::Vec2,
+    pub forward: glam::Vec2,
+    pub base_range: f32,
+    pub half_arc_cos: f32,
+    pub attacker_stats: &'a Stats,
+    pub rules: &'a EntityRules,
+    pub rng_seed: u64,
+    pub targets: &'a [HitTarget],
+}
+
+/// Results from [`resolve_combat`].
+pub struct CombatOutput {
+    /// Per-target hit results (only targets that passed the cone check).
+    pub hits: Vec<HitResult>,
+    /// Attacker stats after on_hit/on_crit_hit/on_kill rule execution.
+    pub attacker_stats: Stats,
+    pub hit_any: bool,
+}
+
+/// Full attack resolution: per-target RNG, damage calc, cone check,
+/// health calc, death check, and on_hit/on_crit_hit/on_kill rule dispatch.
+///
+/// Callers build [`CombatInput`] from their storage (ECS or DB), call this,
+/// then apply [`CombatOutput`] back. Zero game logic lives in the callers.
+pub fn resolve_combat(input: &CombatInput) -> CombatOutput {
+    let mut hits = Vec::new();
+    let mut rule_stats = input.attacker_stats.clone();
+    let mut hit_any = false;
+
+    for target in input.targets {
+        // Per-target deterministic RNG
+        let rng_roll = crate::rng::deterministic_random_u64(input.rng_seed as i64, target.id);
+
+        let result = resolve_attack(&AttackInput {
+            attacker_stats: input.attacker_stats.clone(),
+            pre_hit_rules: input.rules.pre_hit.clone(),
+            rng_roll,
+        });
+
+        // Crits get bonus range
+        let range = if result.is_crit {
+            input.base_range * CRIT_RANGE_BONUS
+        } else {
+            input.base_range
+        };
+
+        if !cone_hit_check(input.origin, input.forward, target.pos, range, input.half_arc_cos) {
+            continue;
+        }
+
+        let new_health = (target.health - result.damage).max(0.0);
+        let died = new_health <= 0.0;
+
+        hits.push(HitResult {
+            target_id: target.id,
+            damage: result.damage,
+            is_crit: result.is_crit,
+            knockback: result.knockback,
+            push: result.push,
+            launch: result.launch,
+            new_health,
+            died,
+            feedback: result.feedback,
+        });
+
+        // On-hit rules accumulate on the attacker's stats (e.g. stacking)
+        let mut action = Action::new();
+        execute_rules(&input.rules.on_hit, &mut rule_stats, &mut action);
+
+        if result.is_crit {
+            let mut action = Action::new();
+            execute_rules(&input.rules.on_crit_hit, &mut rule_stats, &mut action);
+        }
+
+        if died {
+            let mut action = Action::new();
+            execute_rules(&input.rules.on_kill, &mut rule_stats, &mut action);
+        }
+
+        hit_any = true;
+    }
+
+    CombatOutput {
+        hits,
+        attacker_stats: rule_stats,
+        hit_any,
     }
 }

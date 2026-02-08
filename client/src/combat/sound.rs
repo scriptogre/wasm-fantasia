@@ -1,5 +1,5 @@
 use crate::asset_loading::AudioSources;
-use crate::combat::HitEvent;
+use crate::combat::HitLanded;
 use crate::models::{GameState, Settings};
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
@@ -10,7 +10,7 @@ pub fn plugin(app: &mut App) {
 }
 
 fn punch_sound(
-    _on: On<HitEvent>,
+    _on: On<HitLanded>,
     state: Res<GameState>,
     settings: Res<Settings>,
     mut cmds: Commands,

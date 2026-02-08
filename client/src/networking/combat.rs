@@ -8,9 +8,8 @@ use super::generated::player_table::PlayerTableAccess;
 use super::generated::respawn_reducer::respawn;
 use super::generated::spawn_enemies_reducer::spawn_enemies;
 use super::player::RemotePlayer;
-use crate::combat::{
-    AttackHit, Combatant, DamageEvent, Enemy, Health, HitFeedback, PlayerCombatant,
-};
+use crate::combat::{AttackIntent, Combatant, DamageDealt, Enemy, Health, PlayerCombatant};
+use wasm_fantasia_shared::combat::HitFeedback;
 use crate::models::Player as LocalPlayer;
 use crate::rules::{Stat, Stats};
 use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
@@ -19,7 +18,7 @@ use spacetimedb_sdk::{DbContext, Table};
 
 /// Observer: when local player's attack connects, notify the server.
 pub fn send_attack_to_server(
-    on: On<AttackHit>,
+    on: On<AttackIntent>,
     players: Query<(), With<PlayerCombatant>>,
     conn: Res<SpacetimeDbConnection>,
 ) {
@@ -187,7 +186,7 @@ pub struct CombatEventTracker {
 }
 
 /// Poll the combat_event table for new events from remote players.
-/// Fires DamageEvent so existing VFX observers (damage numbers, hit flash, impact particles) trigger.
+/// Fires [`DamageDealt`] so existing VFX observers (damage numbers, hit flash, impact particles) trigger.
 /// Local player's own hits are skipped (already handled by the local attack pipeline).
 pub fn process_remote_combat_events(
     conn: Res<SpacetimeDbConnection>,
@@ -241,9 +240,9 @@ pub fn process_remote_combat_events(
             continue;
         };
 
-        // Fire DamageEvent — on_damage already skips health modification for remote entities,
-        // and it triggers HitEvent which drives all VFX observers.
-        commands.trigger(DamageEvent {
+        // Fire DamageDealt — on_damage already skips health modification for remote entities,
+        // and it triggers HitLanded which drives all VFX observers.
+        commands.trigger(DamageDealt {
             source: source_entity,
             target: target_entity,
             damage: event.damage,

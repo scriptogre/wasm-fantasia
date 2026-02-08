@@ -4,8 +4,8 @@ use bevy::input::gamepad::{GamepadRumbleIntensity, GamepadRumbleRequest};
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
-use crate::combat::components::{DamageEvent, DeathEvent, Enemy, Health};
-use crate::combat::{AttackHit, VFX_ARC_DEGREES, VFX_RANGE};
+use crate::combat::components::{Enemy, Health};
+use crate::combat::{AttackIntent, DamageDealt, Died, HitLanded, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::{GameState, Player, SceneCamera, Screen};
 use crate::rules::{Stat, Stats};
 use crate::ui::colors::{GRASS_GREEN, GRAY_0, LIGHT_GRAY_1, RED, SAND_YELLOW};
@@ -181,7 +181,7 @@ fn create_arc_mesh(radius: f32, arc_angle: f32, height: f32, segments: u32) -> M
 }
 
 fn on_phantom_fist(
-    _on: On<AttackHit>,
+    _on: On<AttackIntent>,
     player: Query<&Transform, With<crate::models::Player>>,
     assets: Option<Res<ArcSlashAssets>>,
     mut commands: Commands,
@@ -282,7 +282,7 @@ fn setup_debug_hitbox_assets(
 }
 
 fn on_debug_hitbox(
-    _on: On<AttackHit>,
+    _on: On<AttackIntent>,
     game_state: Res<GameState>,
     player: Query<&Transform, With<crate::models::Player>>,
     assets: Option<Res<DebugHitboxAssets>>,
@@ -329,17 +329,6 @@ fn tick_debug_hitbox(
     }
 }
 
-/// Event fired when a hit connects, triggering feedback effects.
-#[derive(Event, Debug, Clone)]
-pub struct HitEvent {
-    pub source: Entity,
-    pub target: Entity,
-    pub damage: f32,
-    pub is_crit: bool,
-    /// Feedback configuration computed by rules.
-    pub feedback: super::HitFeedback,
-}
-
 // ============================================================================
 // HIT STOP (Freeze Frame)
 // ============================================================================
@@ -355,7 +344,7 @@ impl HitStop {
 }
 
 fn on_hit_stop(
-    on: On<HitEvent>,
+    on: On<HitLanded>,
     mut hit_stop: ResMut<HitStop>,
     mut time: ResMut<Time<Virtual>>,
     player: Query<&Stats, With<Player>>,
@@ -431,7 +420,7 @@ impl ScreenShake {
 }
 
 fn on_screen_shake(
-    on: On<HitEvent>,
+    on: On<HitLanded>,
     mut shake: ResMut<ScreenShake>,
     local_check: Query<(), With<crate::combat::PlayerCombatant>>,
 ) {
@@ -452,7 +441,7 @@ fn on_screen_shake(
 // ============================================================================
 
 fn on_rumble(
-    on: On<HitEvent>,
+    on: On<HitLanded>,
     gamepads: Query<Entity, With<Gamepad>>,
     mut rumble: MessageWriter<GamepadRumbleRequest>,
     local_check: Query<(), With<crate::combat::PlayerCombatant>>,
@@ -528,7 +517,7 @@ impl HitFlash {
 }
 
 fn on_hit_flash(
-    on: On<HitEvent>,
+    on: On<HitLanded>,
     mut targets: Query<(&MeshMaterial3d<StandardMaterial>, Option<&HitFlash>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut commands: Commands,
@@ -601,7 +590,7 @@ pub struct ImpactVfx {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn on_impact_vfx(
-    on: On<HitEvent>,
+    on: On<HitLanded>,
     targets: Query<&Transform>,
     impact_assets: Option<Res<ImpactAssets>>,
     mut commands: Commands,
@@ -764,7 +753,7 @@ fn setup_damage_number_pool(mut commands: Commands) {
     }
 }
 
-fn on_damage_number(on: On<HitEvent>, targets: Query<&Transform>, mut commands: Commands) {
+fn on_damage_number(on: On<HitLanded>, targets: Query<&Transform>, mut commands: Commands) {
     let event = on.event();
 
     let Ok(target_transform) = targets.get(event.target) else {
@@ -921,7 +910,7 @@ pub struct PlayerHealthBar;
 pub struct HealthBarFill;
 
 fn on_enemy_damaged(
-    on: On<DamageEvent>,
+    on: On<DamageDealt>,
     enemies: Query<&GlobalTransform, With<Enemy>>,
     mut health_bars: Query<&mut EnemyHealthBar>,
     mut commands: Commands,
@@ -980,7 +969,7 @@ fn on_enemy_damaged(
 }
 
 fn on_enemy_death(
-    on: On<DeathEvent>,
+    on: On<Died>,
     health_bars: Query<(Entity, &EnemyHealthBar)>,
     mut commands: Commands,
 ) {

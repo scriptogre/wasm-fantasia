@@ -5,6 +5,7 @@ mod attack;
 mod components;
 mod damage;
 mod enemy;
+pub mod events;
 mod hit_feedback;
 mod separation;
 mod sound;
@@ -12,6 +13,7 @@ mod targeting;
 
 pub use attack::{VFX_ARC_DEGREES, VFX_RANGE};
 pub use components::*;
+pub use events::*;
 pub use hit_feedback::*;
 pub use targeting::LockedTarget;
 
