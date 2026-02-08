@@ -27,13 +27,12 @@ Session-based MMO prototype. Bevy 0.17 + SpacetimeDB multiplayer, targeting nati
 
 ```bash
 just              # Run native dev build
-just run-web      # Run web build via trunk
-just hot          # Run with hotpatching (BEVY_ASSET_ROOT="." dx serve --hot-patch)
-just lint         # Clippy + fmt check + machete
-just check-web    # Quick web compilation check
+just mp           # Start SpacetimeDB server + two clients
 just build        # Native release build
-just build-web    # Full web release bundle
-just docs         # Generate and open docs
+just check        # Clippy + fmt + machete + web compilation check
+just web          # Run WASM dev server
+just web-mp       # Start SpacetimeDB server + WASM dev server
+just web-build    # Full web release bundle
 ```
 
 ### SpacetimeDB server

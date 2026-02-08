@@ -68,7 +68,6 @@ pub struct Models {
     pub scene: Handle<Gltf>,
 }
 
-// TODO: restore player-web.glb for wasm32 once web model generation is validated
 const PLAYER_MODEL: &str = "models/player.glb";
 
 impl FromWorld for Models {

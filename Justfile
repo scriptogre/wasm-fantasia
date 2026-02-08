@@ -40,17 +40,12 @@ mp:
 build:
     cargo build -p wasm_fantasia --release
 
-# Pre-commit checks: lint + web compilation + web model verification
+# Pre-commit checks: lint + web compilation
 check:
     cargo clippy --workspace -- -D warnings
     cargo fmt --all -- --check
     cargo machete
     cargo check -p wasm_fantasia --profile ci --no-default-features --features web --target wasm32-unknown-unknown
-    node scripts/build-web-model.mjs --verify
-
-# Regenerate player-web.glb from player.glb (strips unused animations, quantizes)
-web-model:
-    node scripts/build-web-model.mjs
 
 # Run WASM dev server
 web:
@@ -93,6 +88,10 @@ web-build:
     rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
     command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
     cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
+
+# Analyze web build sizes (WASM sections + assets). Pass "release" to also build+analyze release WASM.
+web-size *args:
+    python3 client/web_size.py {{args}}
 
 # Wipe SpacetimeDB data and redeploy module
 db-reset:

@@ -8341,6 +8341,7 @@ dependencies = [
  "rand 0.9.2",
  "ron 0.10.1",
  "serde",
+ "serde_json",
  "smol_str 0.3.4",
  "spacetimedb-sdk",
  "thiserror 2.0.17",
