@@ -19,7 +19,7 @@ fn setup_animus_scene(
     let floor_mesh = meshes.add(Plane3d::default().mesh().size(floor_size, floor_size));
 
     let floor_material = materials.add(StandardMaterial {
-        base_color: colors::NEUTRAL940,
+        base_color: colors::NEUTRAL920,
         perceptual_roughness: 0.9,
         metallic: 0.0,
         reflectance: 0.05,

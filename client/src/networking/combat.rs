@@ -20,8 +20,9 @@ use spacetimedb_sdk::{DbContext, Table};
 pub fn send_attack_to_server(
     on: On<AttackIntent>,
     players: Query<(), With<PlayerCombatant>>,
-    conn: Res<SpacetimeDbConnection>,
+    conn: Option<Res<SpacetimeDbConnection>>,
 ) {
+    let Some(conn) = conn else { return };
     // Only relay attacks from the local player
     if players.get(on.event().attacker).is_ok() {
         if let Err(e) = conn.conn.reducers.attack_hit() {

@@ -2,8 +2,8 @@
 
 use super::generated::player_table::PlayerTableAccess;
 use super::{
-    BufferedInboundState, LagBuffers, LagSimulator, PendingOutboundUpdate, PositionSyncTimer,
-    SpacetimeDbConnection,
+    BufferedInboundState, LagBuffers, LagSimulator, PendingOutboundUpdate, PingTracker,
+    PositionSyncTimer, SpacetimeDbConnection,
 };
 use crate::asset_loading::Models;
 use crate::combat::{AttackIntent, AttackState, Combatant, Health};
@@ -390,6 +390,7 @@ pub fn send_local_position(
     lag: Res<LagSimulator>,
     mut buffers: ResMut<LagBuffers>,
     mut timer: ResMut<PositionSyncTimer>,
+    mut ping: ResMut<PingTracker>,
     time: Res<Time>,
     query: Query<(&Transform, &LocalPlayer, Option<&AttackState>), With<LocalPlayer>>,
 ) {
@@ -428,5 +429,6 @@ pub fn send_local_position(
         },
     };
 
+    ping.last_send = Some(web_time::Instant::now());
     buffers.outbound_queue.push(update);
 }

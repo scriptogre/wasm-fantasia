@@ -70,6 +70,31 @@ where
     btn(opts, action)
 }
 
+/// Non-interactive button with disabled styling.
+pub fn btn_big_disabled(opts: impl Into<Props>) -> impl Bundle {
+    let opts: Props = opts.into();
+    let disabled = PaletteSet::default().disabled;
+    let border_radius = opts.border_radius;
+    let node = Node {
+        min_width: Vw(30.0),
+        padding: UiRect::axes(Vw(8.0), Vh(2.0)),
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        ..opts.node.clone()
+    };
+    let text = opts.color(disabled.text).into_text_bundle();
+
+    (
+        Name::new("Button (Disabled)"),
+        node,
+        BackgroundColor(disabled.bg),
+        disabled.border,
+        border_radius,
+        Pickable::IGNORE,
+        children![(text, Pickable::IGNORE)],
+    )
+}
+
 // A small square button with text and an action defined as an [`Observer`].
 pub fn btn_small<E, B, M, I>(opts: impl Into<Props>, action: I) -> impl Bundle
 where

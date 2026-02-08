@@ -13,9 +13,6 @@ collapsible_if = "allow"
 nonstandard_macro_braces = "warn"
 
 [patch.crates-io]
-avian3d = { git = "https://github.com/Jondolf/avian", branch = "main" }
-# bevy-tnua = { git = "https://github.com/janhohenheim/bevy-tnua", branch = "bevy-0.17.0-dev" }
-# bevy-tnua-avian3d = { git = "https://github.com/janhohenheim/bevy-tnua", branch = "bevy-0.17.0-dev" }
 firewheel-web-audio = { git = "https://github.com/CorvusPrudens/firewheel-web-audio", rev = "ad810af" }
 tokio-tungstenite-wasm = { path = "crates/tokio-tungstenite-wasm" }
 bevy_third_person_camera = { git = "https://github.com/olekspickle/bevy_third_person_camera", branch = "0.17.0" }

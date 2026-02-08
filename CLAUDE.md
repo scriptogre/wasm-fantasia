@@ -83,77 +83,80 @@ Player is Dynamic RigidBody with capsule Collider. TnuaAvian3dSensorShape for gr
 
 ## Architecture Conventions
 
-Reference: `docs/architecture/PATTERNS.md` (sources: Overwatch, Quake 3, Source Engine, Flecs, Bevy community)
+Reference: `docs/architecture/PATTERNS.md`, `docs/architecture/REFACTOR_PLAN.md`
+
+### Client = Presentation + Prediction
+
+The client is a dumb renderer. It doesn't know or care whether an entity is "local" or "remote," singleplayer or multiplayer. It receives entity state and presents it. The backend (local ECS in SP, SpacetimeDB in MP) decides what exists and where.
+
+The only things that make the local player special are thin markers: `LocallyControlled` (receives input), camera target. Everything else — Health, Combatant, Stats, mesh — is identical for all entities regardless of origin.
+
+### Prediction vs Backend
+
+Client code falls into three categories:
+
+| Category | Mutates game state? | Example |
+|----------|-------------------|---------|
+| **Presentation** | Never | VFX, sound, screen shake, damage numbers, health bars |
+| **Prediction** | Never — fires feedback events only | Hit detection + `resolve_combat()` for instant VFX |
+| **Backend** | Yes — owns authoritative state | `health.take_damage()`, entity spawn/despawn, death |
+
+Prediction code runs `resolve_combat()` speculatively for instant VFX feedback but never mutates Health or triggers death. The backend handles real state changes. In SP the backend is local Bevy systems. In MP the backend is SpacetimeDB + server sync.
+
+Mark prediction systems clearly: doc comments must say `/// Prediction:` and explain what's speculative vs authoritative.
+
+### Protocol (shared/)
+
+`shared/` contains pure game logic (resolve functions, rules, RNG) AND the message contract between client and backend. Message types are plain structs — no Bevy, no SpacetimeDB.
+
+```
+shared/src/
+  combat.rs      ← resolve_combat() — pure game math
+  rules.rs       ← data-driven behavior engine
+  rng.rs         ← deterministic RNG
+  protocol.rs    ← message types between client and backend
+```
+
+The client wraps protocol types in Bevy `Event`. The server wraps them in SpacetimeDB reducer/table logic. Neither framework leaks into `shared/`.
 
 ### Module Dependency Direction
 
 Strict import hierarchy. Violations are bugs.
 
 ```
-networking → combat, player, models    (networking may import domain types)
-combat → shared, models                (combat never imports networking)
-player → shared, models, combat        (player may read combat components)
-ui → models, combat, rules             (ui reads state, never mutates)
-models → (nothing game-specific)       (pure data definitions)
-shared → (no Bevy types at all)        (pure functions only)
+networking → combat, player, models, shared    (transport layer)
+combat → shared, models                         (never imports networking)
+player → shared, models, combat                 (may read combat components)
+ui → models, combat, rules                      (reads state, never mutates)
+models → (nothing game-specific)                (pure data definitions)
+shared → (no Bevy types)                        (pure functions + protocol)
 ```
 
-**The rule**: Domain modules (combat, player) never import networking. Networking is a transport layer — it adapts between SpacetimeDB and domain events. If combat needs to "tell the server something," it fires a domain event that networking observes.
+Domain modules (combat, player) never import networking. If combat needs to tell the server something, it fires a domain event that networking observes.
 
 ### Event Flow
 
-Three-phase flow. Every state change follows this path:
-
 ```
-Request (imperative)  →  Resolve (shared)  →  Outcome (past tense)  →  Feedback (cosmetic)
+Request (imperative)  →  Resolve (shared/)  →  Outcome (past tense)  →  Feedback (cosmetic)
 AttackIntent              resolve_combat()     DamageDealt              HitLanded
 SpawnEnemyRequest         validate/position     EnemySpawned             (VFX, sound)
 ```
 
-**Naming convention**:
-- **Requests**: noun/imperative — `AttackIntent`, `SpawnEnemyRequest`. Hasn't happened yet.
-- **Outcomes**: past tense — `DamageDealt`, `Died`, `EnemySpawned`. It happened, state changed.
-- **Feedback**: past tense — `HitLanded`, `CritHit`. Cosmetic-only, never mutates game state.
-
-Requests flow inward (input/networking → logic). Outcomes flow outward (logic → presentation/networking). Feedback is terminal — nothing observes feedback events to produce more state changes.
+- **Requests**: imperative — `AttackIntent`, `SpawnEnemyRequest`. Hasn't happened yet.
+- **Outcomes**: past tense — `DamageDealt`, `Died`. State changed.
+- **Feedback**: past tense — `HitLanded`, `CritHit`. Cosmetic-only, terminal.
 
 ### Entity Spawning Ownership
 
-The module that owns a domain concept owns its entity archetype. Period.
+The module that owns a domain concept owns its entity archetype.
 
-- `combat/enemy.rs` owns enemy entity bundles (Health, Stats, Combatant, Collider, mesh, etc.)
-- `player/` owns player entity bundles
-- Networking **never** constructs domain bundles. It fires a spawn request event carrying server data. The owning module observes it and builds the entity.
+- `combat/enemy.rs` owns enemy bundles (Health, Stats, Combatant, Collider, mesh)
+- `player/` owns player bundles
+- Networking **never** constructs domain bundles — it fires spawn events carrying server data, the owning module's observer builds the entity
 
-Why: When you add a new component to enemies (e.g., AI, pathfinding), you change one file in combat/, not also networking/combat.rs.
+### No `cfg(feature)` in Domain Code
 
-### Server Authority Marker
-
-Use a `ServerAuthoritative` marker component on entities whose state is owned by the server. Domain modules check this marker instead of checking for networking-specific components with `cfg(feature)`.
-
-```rust
-// Good: combat/damage.rs
-if server_auth.get(entity).is_ok() { /* skip local health mutation */ }
-
-// Bad: combat/damage.rs
-#[cfg(feature = "multiplayer")]
-if remote_players.get(entity).is_ok() || server_enemies.get(entity).is_ok() { ... }
-```
-
-This eliminates `cfg(feature = "multiplayer")` from domain code entirely. Networking adds the marker when it creates entities. Domain code is feature-flag-free.
-
-### Component Categories
-
-Every component belongs to exactly one category:
-
-| Category | Replicated? | Mutated by | Example |
-|----------|------------|------------|---------|
-| Authoritative | Yes | Resolve layer or server sync | Health, Position, Inventory |
-| Cosmetic | Never | Presentation systems only | Particle timers, animation blend, HitFlash |
-| Input | Client→Server | Input systems | Movement intent, attack request |
-| Derived | Recomputed locally | Domain systems | Computed stat totals, UI display values |
-
-Networking only touches Authoritative components. Cosmetic and Derived state never crosses the network.
+Domain modules (combat/, player/) must not contain `cfg(feature = "multiplayer")`. The `GameMode` resource and backend plugin system handle SP/MP differences. If domain code needs to behave differently based on authority, it checks a marker component or run condition — never a feature flag or networking import.
 
 ## Rules System (Data-Driven Behaviors)
 

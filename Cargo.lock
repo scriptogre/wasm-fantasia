@@ -9417,8 +9417,3 @@ checksum = "51d915729b0e7d5fe35c2f294c5dc10b30207cc637920e5b59077bfa3da63f28"
 dependencies = [
  "zune-core 0.5.0",
 ]
-
-[[patch.unused]]
-name = "avian3d"
-version = "0.6.0-dev"
-source = "git+https://github.com/Jondolf/avian?branch=main#4e0c808823b6d6d2b347dd2fc743c97966e9dc26"
