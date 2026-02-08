@@ -440,7 +440,10 @@ fn on_screen_shake(
         return;
     }
     let intensity = on.event().feedback.shake_intensity;
-    shake.trauma = (shake.trauma + intensity).min(1.0);
+    // Diminishing returns: each hit contributes less as trauma builds up,
+    // so multi-target hits feel impactful without going nuclear.
+    let diminish = 1.0 - shake.trauma * 0.7;
+    shake.trauma = (shake.trauma + intensity * diminish).min(0.7);
 }
 
 // ============================================================================
