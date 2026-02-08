@@ -8347,6 +8347,7 @@ dependencies = [
  "tracing",
  "wasm-bindgen",
  "wasm-fantasia-shared",
+ "web-sys",
  "web-time",
  "winit",
 ]

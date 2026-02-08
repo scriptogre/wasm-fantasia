@@ -3,3 +3,4 @@ target/
 .DS_Store
 *blend1
 .env
+node_modules/

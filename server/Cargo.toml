@@ -7,4 +7,9 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-spacetimedb = "1.11"
+spacetimedb = "=1.11.2"
+wasm-fantasia-shared = { path = "../shared" }
+glam = { workspace = true }
+
+[lints]
+workspace = true

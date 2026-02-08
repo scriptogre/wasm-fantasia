@@ -1,0 +1,70 @@
+[package]
+name = "spacetimedb-sdk"
+version = "1.11.2"
+edition = "2021"
+description = "A Rust SDK for clients to interface with SpacetimeDB (with WASM support)"
+license-file = "LICENSE"
+
+[lib]
+name = "spacetimedb_sdk"
+path = "src/lib.rs"
+
+[features]
+default = []
+web = [
+    "dep:getrandom",
+    "dep:gloo-console",
+    "dep:gloo-net",
+    "dep:gloo-utils",
+    "dep:js-sys",
+    "dep:tokio-tungstenite-wasm",
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:web-sys",
+]
+
+[dependencies]
+anymap = "0.12"
+base64 = "0.21.2"
+brotli = "3.5"
+bytes = "1.10.1"
+flate2 = "1.0.24"
+futures = "0.3"
+futures-channel = "0.3"
+http = "1.0"
+log = "0.4.17"
+once_cell = "1.16"
+prometheus = "0.13.0"
+rand = "0.9"
+thiserror = "1.0.37"
+
+spacetimedb-client-api-messages = "=1.11.2"
+spacetimedb-data-structures = "=1.11.2"
+spacetimedb-lib = { version = "=1.11.2", default-features = false, features = ["serde", "metrics_impls"] }
+spacetimedb-metrics = "=1.11.2"
+spacetimedb-sats = "=1.11.2"
+
+# WASM-optional deps
+getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
+gloo-console = { version = "0.3", optional = true }
+gloo-net = { version = "0.6", optional = true }
+gloo-utils = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+tokio-tungstenite-wasm = { version = "0.6", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+web-sys = { version = "0.3", features = ["HtmlDocument", "Window", "Storage"], optional = true }
+
+# Native-only deps (conditional on target)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+home = "0.5"
+tokio = { version = "1.37", features = ["full"] }
+tokio-tungstenite = { version = "0.27.0", features = ["native-tls", "url"] }
+
+[lints.clippy]
+result_large_err = "allow"
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+priority = 0
+check-cfg = ["cfg(tokio_unstable)", "cfg(feature, values(\"web\"))"]

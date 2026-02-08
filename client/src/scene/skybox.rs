@@ -1,0 +1,93 @@
+use super::*;
+use bevy::{
+    camera::Exposure,
+    core_pipeline::tonemapping::Tonemapping,
+    light::{CascadeShadowConfigBuilder, light_consts::lux},
+    pbr::{Atmosphere, AtmosphereSettings, DistanceFog, FogFalloff},
+};
+
+markers!(Sun, Moon);
+
+/// Mainly this example:
+/// <https://bevyengine.org/examples/3d-rendering/atmosphere/>
+pub fn add_skybox_to_camera(
+    cfg: Res<Config>,
+    mut commands: Commands,
+    mut camera: Query<Entity, With<SceneCamera>>,
+) -> Result {
+    let camera = camera.single_mut()?;
+
+    let cascade_shadow_config = CascadeShadowConfigBuilder {
+        first_cascade_far_bound: 0.3,
+        maximum_distance: cfg.physics.shadow_distance,
+        ..default()
+    }
+    .build();
+
+    commands.spawn((
+        Sun,
+        DespawnOnExit(Screen::Gameplay),
+        DirectionalLight {
+            color: colors::SUN,
+            shadows_enabled: true,
+            illuminance: light_consts::lux::FULL_DAYLIGHT,
+            ..Default::default()
+        },
+        // Transform::from_translation(Vec3::new(0.0, 0.0, 200.0)),
+        cascade_shadow_config.clone(),
+    ));
+
+    commands.spawn((
+        Moon,
+        DespawnOnExit(Screen::Gameplay),
+        DirectionalLight {
+            color: colors::MOON,
+            shadows_enabled: true,
+            illuminance: lux::FULL_MOON_NIGHT,
+            ..Default::default()
+        },
+        Transform::from_translation(Vec3::new(0.0, 10.0, -200.0)),
+        cascade_shadow_config,
+    ));
+
+    // Lighting
+    commands.entity(camera).insert((
+        // This is the component that enables atmospheric scattering for a camera
+        // TODO: manipulate ground_albedo depending on the angle of the sun
+        Atmosphere::EARTH,
+        // The scene is in units of 10km, so we need to scale up the
+        // aerial view lut distance and set the scene scale accordingly.
+        // Most usages of this feature will not need to adjust this.
+        AtmosphereSettings {
+            scene_units_to_m: 1.0,
+            aerial_view_lut_max_distance: 40_000.0,
+            // Use reasonable LUT sizes (defaults are fine for most cases)
+            // Web builds especially need smaller textures to avoid OOM
+            ..Default::default()
+        },
+        Exposure::OVERCAST,
+        Tonemapping::BlenderFilmic,
+        // BloomSettings::NATURAL,
+        // DebandDither::Enabled, // Bloom causes gradients which cause banding
+    ));
+
+    if cfg.physics.distance_fog {
+        commands.entity(camera).insert(distance_fog(cfg));
+    }
+
+    Ok(())
+}
+
+pub fn distance_fog(cfg: Res<Config>) -> impl Bundle {
+    DistanceFog {
+        color: Color::srgba(0.35, 0.48, 0.66, 1.0),
+        directional_light_color: Color::srgba(1.0, 0.95, 0.85, 0.5),
+        directional_light_exponent: cfg.physics.fog_directional_light_exponent,
+        falloff: FogFalloff::ExponentialSquared { density: 0.002 },
+        // falloff: FogFalloff::from_visibility_colors(
+        //     cfg.physics.fog_visibility, // distance in world units up to which objects retain visibility (>= 5% contrast)
+        //     Color::srgb(0.35, 0.5, 0.66), // atmospheric extinction color (after light is lost due to absorption by atmospheric particles)
+        //     Color::srgb(0.8, 0.844, 1.0), // atmospheric inscattering color (light gained due to scattering from the sun)
+        // ),
+    }
+}

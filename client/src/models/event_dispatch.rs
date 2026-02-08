@@ -1,0 +1,64 @@
+use super::*;
+
+pub fn plugin(app: &mut App) {
+    app.add_observer(pause)
+        .add_observer(mute)
+        .add_observer(back);
+}
+
+#[derive(Event)]
+pub struct GoTo(pub Screen);
+#[derive(EntityEvent)]
+pub struct Back {
+    pub entity: Entity,
+    pub screen: Screen,
+}
+#[derive(EntityEvent)]
+pub struct SwitchTab {
+    pub entity: Entity,
+    pub tab: UiTab,
+}
+#[derive(Event)]
+pub struct CamCursorToggle;
+#[derive(Event)]
+pub struct TogglePause;
+#[derive(Event)]
+pub struct ToggleMute;
+#[derive(Event)]
+pub struct ToggleDebugUi;
+#[derive(EntityEvent)]
+pub struct ChangeMood {
+    pub entity: Entity,
+    pub mood: Mood,
+}
+/// Event triggered on a UI entity when the [`Interaction`] component on the same entity changes to
+/// [`Interaction::Pressed`]. Observe this event to detect e.g. button presses.
+#[derive(Event)]
+pub struct Press;
+#[derive(Event)]
+pub struct SettingsChanged;
+
+// ================== trigger events on input ========================
+fn back(
+    on: On<Start<Escape>>,
+    screen: Res<State<Screen>>,
+    states: Res<GameState>,
+    mut commands: Commands,
+) {
+    match screen.get() {
+        Screen::Splash | Screen::Title | Screen::Loading => {}
+        _ => {
+            let last = states.last_screen.clone();
+            commands.trigger(Back {
+                entity: on.event_target(),
+                screen: last,
+            });
+        }
+    }
+}
+fn pause(_: On<Start<Pause>>, mut commands: Commands) {
+    commands.trigger(TogglePause);
+}
+fn mute(_: On<Start<Mute>>, mut commands: Commands) {
+    commands.trigger(ToggleMute);
+}
