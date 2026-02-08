@@ -86,9 +86,3 @@ pub struct CameraPreset {
     pub max_height: f32,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect, Asset, Resource)]
-#[reflect(Resource)]
-pub struct CreditsPreset {
-    pub assets: Vec<(String, String)>,
-    pub devs: Vec<(String, String)>,
-}

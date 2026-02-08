@@ -28,8 +28,8 @@ impl Props {
                 padding: UiRect::horizontal(Vw(3.0)),
                 ..Default::default()
             },
-            bg_color: BackgroundColor(colors::TRANSPARENT),
-            border_color: BorderColor::all(colors::WHITEISH),
+            bg_color: BackgroundColor(colors::NEUTRAL900),
+            border_color: BorderColor::all(colors::NEUTRAL850),
             border_radius: BorderRadius::all(size::BORDER_RADIUS),
         }
     }
@@ -62,6 +62,10 @@ impl Props {
     }
     pub fn border_radius(mut self, r: Val) -> Self {
         self.border_radius = BorderRadius::all(r);
+        self
+    }
+    pub fn border_radius_custom(mut self, r: BorderRadius) -> Self {
+        self.border_radius = r;
         self
     }
     pub fn node(mut self, new: Node) -> Self {
@@ -163,11 +167,11 @@ impl Default for TextContent {
     fn default() -> Self {
         Self {
             text: "".into(),
-            color: colors::WHITEISH.into(),
+            color: colors::NEUTRAL300.into(),
             layout: TextLayout::new_with_justify(Justify::Center),
             font: TextFont::from_font_size(size::FONT_SIZE),
             border: BorderColor {
-                bottom: colors::WHITEISH,
+                bottom: colors::NEUTRAL100,
                 ..BorderColor::DEFAULT
             },
         }

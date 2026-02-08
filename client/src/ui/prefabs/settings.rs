@@ -1,6 +1,4 @@
 use super::*;
-#[cfg(feature = "dev_native")]
-use bevy::ui::Display as NodeDisplay;
 use bevy::window::{PresentMode, PrimaryWindow};
 use bevy_seedling::prelude::*;
 
@@ -26,7 +24,6 @@ markers!(
     FovLabel,
     TabBar,
     TabContent,
-    PerfUi,
     ScreenShakeLabel
 );
 #[cfg(feature = "dev_native")]
@@ -63,39 +60,79 @@ pub fn save_settings(
 
 // TAB CHANGING
 fn update_tab_content(
-    settings: Res<Settings>,
     game_state: Res<GameState>,
     active_tab: Res<ActiveTab>,
     tab_bar: Query<&Children, With<TabBar>>,
     mut tab_content: Query<(Entity, &Children), With<TabContent>>,
-    mut buttons: Query<(&UiTab, &mut Node)>,
+    buttons: Query<(&UiTab, &Children)>,
+    mut style_q: Query<(&mut PaletteSet, &mut BackgroundColor, &mut BorderColor, &Children)>,
+    mut text_color_q: Query<&mut TextColor>,
     mut commands: Commands,
 ) -> Result {
     for children in &tab_bar {
         for &child in children {
-            if let Ok((tab, mut node)) = buttons.get_mut(child) {
-                if *tab == active_tab.0 {
-                    node.border.bottom = Px(0.0);
+            let Ok((tab, btn_children)) = buttons.get(child) else {
+                continue;
+            };
+            let is_active = *tab == active_tab.0;
 
-                    let (e, content) = tab_content.single_mut()?;
-                    for child in content.iter() {
-                        commands.entity(child).despawn();
+            // Update PaletteSet + immediate colors on the "Button Content" child
+            for &btn_child in btn_children {
+                if let Ok((mut palette, mut bg, mut border, content_children)) =
+                    style_q.get_mut(btn_child)
+                {
+                    let new_palette = if is_active {
+                        PaletteSet {
+                            none: Palette::new(
+                                colors::NEUTRAL100,
+                                colors::NEUTRAL800,
+                                BorderColor::all(colors::NEUTRAL700),
+                            ),
+                            hovered: Palette::new(
+                                colors::NEUTRAL100,
+                                colors::NEUTRAL750,
+                                BorderColor::all(colors::NEUTRAL650),
+                            ),
+                            pressed: Palette::new(
+                                colors::NEUTRAL100,
+                                colors::NEUTRAL700,
+                                BorderColor::all(colors::NEUTRAL600),
+                            ),
+                            disabled: Palette::new(
+                                colors::NEUTRAL400,
+                                colors::NEUTRAL800,
+                                BorderColor::all(colors::NEUTRAL700),
+                            ),
+                        }
+                    } else {
+                        PaletteSet::default()
+                    };
+
+                    bg.0 = new_palette.none.bg;
+                    *border = new_palette.none.border;
+                    let text_color = new_palette.none.text;
+                    *palette = new_palette;
+
+                    for &text_child in content_children {
+                        if let Ok(mut tc) = text_color_q.get_mut(text_child) {
+                            tc.0 = text_color;
+                        }
                     }
-                    match tab {
-                        UiTab::Audio => {
-                            commands.spawn(audio_grid()).insert(ChildOf(e));
-                        }
-                        UiTab::Video => {
-                            commands.spawn(video_grid(&game_state)).insert(ChildOf(e));
-                        }
-                        UiTab::Keybindings => {
-                            commands
-                                .spawn(keybind_editor(&settings.input_map))
-                                .insert(ChildOf(e));
-                        }
+                }
+            }
+
+            if is_active {
+                let (e, content) = tab_content.single_mut()?;
+                for child in content.iter() {
+                    commands.entity(child).despawn();
+                }
+                match tab {
+                    UiTab::Audio => {
+                        commands.spawn(audio_grid()).insert(ChildOf(e));
                     }
-                } else {
-                    node.border.bottom = Px(10.0);
+                    UiTab::Video => {
+                        commands.spawn(video_grid(&game_state)).insert(ChildOf(e));
+                    }
                 }
             }
         }
@@ -284,21 +321,12 @@ fn update_button_text(
 fn click_toggle_diagnostics(
     _: On<Pointer<Click>>,
     mut state: ResMut<GameState>,
-    mut perf_ui: Query<&mut Node, With<PerfUi>>,
     buttons: Query<Entity, With<DiagnosticsLabel>>,
     children_q: Query<&Children>,
     mut text_q: Query<&mut Text>,
 ) {
     state.diagnostics = !state.diagnostics;
     let label = if state.diagnostics { "on" } else { "off" };
-
-    if let Ok(mut perf_ui) = perf_ui.single_mut() {
-        perf_ui.display = if state.diagnostics {
-            NodeDisplay::Flex
-        } else {
-            NodeDisplay::None
-        };
-    }
 
     for button in buttons.iter() {
         update_button_text(button, label, &children_q, &mut text_q);
@@ -356,7 +384,7 @@ fn click_toggle_settings(
 pub fn settings_ui() -> impl Bundle {
     (
         ui_root("Settings Screen"),
-        BackgroundColor(colors::TRANSLUCENT),
+        GlobalZIndex(200),
         children![(
             Node {
                 width: Percent(80.0),
@@ -376,7 +404,14 @@ pub fn settings_ui() -> impl Bundle {
 }
 
 fn tab_bar() -> impl Bundle {
-    let opts = Props::default().border_radius(Px(0.0));
+    let r = size::BORDER_RADIUS;
+    let z = Px(0.0);
+    let left_tab = Props::default()
+        .text("Audio")
+        .border_radius_custom(BorderRadius::new(r, z, z, r));
+    let right_tab = Props::default()
+        .text("Video")
+        .border_radius_custom(BorderRadius::new(z, r, r, z));
     (
         Node {
             flex_direction: FlexDirection::Column,
@@ -384,6 +419,7 @@ fn tab_bar() -> impl Bundle {
             position_type: PositionType::Absolute,
             width: Percent(100.0),
             top: Vh(2.0),
+            row_gap: Vh(2.0),
             ..default()
         },
         children![
@@ -398,16 +434,12 @@ fn tab_bar() -> impl Bundle {
                 TabBar,
                 children![
                     (
-                        btn(opts.clone().text("Audio"), switch_to_tab(UiTab::Audio)),
+                        btn(left_tab, switch_to_tab(UiTab::Audio)),
                         UiTab::Audio
                     ),
                     (
-                        btn(opts.clone().text("Video"), switch_to_tab(UiTab::Video)),
+                        btn(right_tab, switch_to_tab(UiTab::Video)),
                         UiTab::Video
-                    ),
-                    (
-                        btn(opts.text("Keybindings"), switch_to_tab(UiTab::Keybindings)),
-                        UiTab::Keybindings
                     ),
                 ],
             ),
@@ -420,8 +452,8 @@ fn bottom_row() -> impl Bundle {
         Node {
             position_type: PositionType::Absolute,
             flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceEvenly,
-            width: Percent(50.0),
+            justify_content: JustifyContent::Center,
+            column_gap: Px(16.0),
             bottom: Vh(1.0),
             ..default()
         },
@@ -443,12 +475,12 @@ fn video_grid(state: &GameState) -> impl Bundle {
     (
         Name::new("Settings Video Grid"),
         Node {
-            row_gap: Px(10.0),
+            row_gap: Px(14.0),
             column_gap: Px(30.0),
             display: Display::Grid,
-            grid_template_columns: RepeatedGridTrack::vw(4, 20.0),
-            justify_items: JustifyItems::Center,
+            grid_template_columns: RepeatedGridTrack::px(2, 240.0),
             align_items: AlignItems::Center,
+            justify_items: JustifyItems::Center,
             ..default()
         },
         #[cfg(target_arch = "wasm32")]
@@ -474,12 +506,12 @@ fn video_grid(state: &GameState) -> impl Bundle {
                 btn(screen_shake_label, click_toggle_screen_shake),
                 ScreenShakeLabel
             ),
-            label("diagnostics"),
+            label("Diagnostics"),
             (
                 btn(diagnostics_label, click_toggle_diagnostics),
                 DiagnosticsLabel
             ),
-            label("debug ui"),
+            label("Debug UI"),
             (btn(debug_ui_label, click_toggle_debug_ui), DebugUiLabel),
         ],
     )
@@ -487,20 +519,22 @@ fn video_grid(state: &GameState) -> impl Bundle {
 
 fn audio_grid() -> impl Bundle {
     (
-        Name::new("Settings Grid"),
+        Name::new("Settings Audio Grid"),
         Node {
-            row_gap: Px(10.0),
+            row_gap: Px(14.0),
             column_gap: Px(30.0),
             display: Display::Grid,
-            grid_template_columns: RepeatedGridTrack::px(2, 400.0),
+            grid_template_columns: RepeatedGridTrack::px(2, 240.0),
+            align_items: AlignItems::Center,
+            justify_items: JustifyItems::Center,
             ..default()
         },
         children![
-            label("general"),
+            label("General"),
             plus_minus_bar(GeneralVolumeLabel, general_lower, general_raise),
-            label("music"),
+            label("Music"),
             plus_minus_bar(MusicVolumeLabel, music_lower, music_raise),
-            label("sfx"),
+            label("SFX"),
             plus_minus_bar(SfxVolumeLabel, sfx_lower, sfx_raise),
         ],
     )

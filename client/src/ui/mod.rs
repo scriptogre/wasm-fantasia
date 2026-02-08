@@ -15,10 +15,11 @@ use bevy::{
 use serde::{Deserialize, Serialize};
 
 mod constants;
+pub mod hud;
 mod interaction;
 mod modal;
 #[cfg(feature = "dev")]
-mod perf;
+mod performance;
 mod prefabs;
 mod props;
 mod widget;
@@ -30,8 +31,8 @@ pub use props::*;
 pub use widget::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((prefabs::plugin, interaction::plugin, modal::plugin));
+    app.add_plugins((prefabs::plugin, interaction::plugin, modal::plugin, hud::plugin));
 
     #[cfg(feature = "dev")]
-    app.add_plugins(perf::plugin);
+    app.add_plugins(performance::plugin);
 }

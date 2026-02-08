@@ -6,7 +6,7 @@ use super::{
     SpacetimeDbConnection,
 };
 use crate::asset_loading::Models;
-use crate::combat::{ArcSlash, ArcSlashAssets, AttackState, Combatant, Health};
+use crate::combat::{AttackIntent, AttackState, Combatant, Health};
 use crate::models::{AnimationState, Player as LocalPlayer};
 use crate::player::{Animation, find_animation_player_descendant};
 use crate::rules::{Stat, Stats};
@@ -177,17 +177,17 @@ pub fn setup_remote_animations(
 }
 
 /// System to drive remote player animations based on anim_state from server.
-/// Also spawns arc slash VFX when a new attack is detected.
+/// Fires [`AttackIntent`] when a new attack is detected so the VFX system
+/// handles arc slash spawning uniformly for both local and remote players.
 pub fn animate_remote_players(
     conn: Res<SpacetimeDbConnection>,
-    mut remote_q: Query<(&RemotePlayer, &mut RemoteAnimations, &Transform)>,
+    mut remote_q: Query<(Entity, &RemotePlayer, &mut RemoteAnimations)>,
     mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
-    arc_assets: Option<Res<ArcSlashAssets>>,
     mut commands: Commands,
 ) {
     const BLEND: Duration = Duration::from_millis(150);
 
-    for (rp, mut remote_anim, transform) in remote_q.iter_mut() {
+    for (entity, rp, mut remote_anim) in remote_q.iter_mut() {
         let Some(anim_entity) = remote_anim.anim_player_entity else {
             continue; // Not initialized yet
         };
@@ -205,22 +205,7 @@ pub fn animate_remote_players(
             remote_anim.last_attack_seq = player.attack_seq;
             remote_anim.current_anim = format!("attack:{}", player.attack_seq);
 
-            // Spawn arc slash at remote player's position
-            if let Some(ref assets) = arc_assets {
-                let pos = transform.translation + Vec3::Y * 0.8;
-                commands.spawn((
-                    ArcSlash {
-                        timer: 0.0,
-                        duration: 0.15,
-                        start_scale: Vec3::new(0.3, 1.0, 0.3),
-                    },
-                    Mesh3d(assets.mesh.clone()),
-                    MeshMaterial3d(assets.material.clone()),
-                    Transform::from_translation(pos)
-                        .with_rotation(transform.rotation)
-                        .with_scale(Vec3::new(0.3, 1.0, 0.3)),
-                ));
-            }
+            commands.trigger(AttackIntent { attacker: entity });
         } else if player.anim_state == remote_anim.current_anim {
             continue;
         } else {

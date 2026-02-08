@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::Modals;
 use bevy_third_person_camera::*;
 
 pub fn plugin(app: &mut App) {
@@ -45,12 +46,25 @@ fn add_tpv_cam(
     Ok(())
 }
 
-fn rm_tpv_cam(mut commands: Commands, mut camera: Query<Entity, With<ThirdPersonCamera>>) {
-    if let Ok(camera) = camera.single_mut() {
-        commands.entity(camera).remove::<ThirdPersonCamera>();
+fn rm_tpv_cam(
+    mut commands: Commands,
+    mut camera: Query<(Entity, &mut Transform), With<ThirdPersonCamera>>,
+) {
+    if let Ok((entity, mut transform)) = camera.single_mut() {
+        commands.entity(entity).remove::<ThirdPersonCamera>();
+        // Point camera at nothing so gameplay scene doesn't bleed into title screen
+        *transform = Transform::from_xyz(0.0, 50.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y);
     }
 }
 
-fn toggle_cam_cursor(_: On<CamCursorToggle>, mut cam: Single<&mut ThirdPersonCamera>) {
-    cam.cursor_lock_active = !cam.cursor_lock_active;
+fn toggle_cam_cursor(
+    _: On<CamCursorToggle>,
+    mut cam: Query<&mut ThirdPersonCamera>,
+    modals: Res<Modals>,
+) {
+    let Ok(mut cam) = cam.single_mut() else {
+        return;
+    };
+    // Explicitly set based on modal state — avoids desync from double-fires
+    cam.cursor_lock_active = modals.is_empty();
 }

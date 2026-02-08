@@ -2,7 +2,6 @@
 use super::*;
 use bevy_seedling::prelude::*;
 
-use crate::combat::{spawn_combat_stacks_display, spawn_player_health_bar};
 
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(Modals(Vec::default()))
@@ -12,45 +11,12 @@ pub(super) fn plugin(app: &mut App) {
         .add_observer(toggle_mute);
 }
 
-markers!(PauseIcon, MuteIcon, GameplayUi);
-
-fn spawn_gameplay_ui(mut cmds: Commands, textures: Res<Textures>, _settings: Res<Settings>) {
-    // info!("settings on gameplay enter:{settings:?}");
-    let opts = Props::default().hidden().width(Vw(5.0)).height(Vw(5.0));
-    cmds.spawn((
-        DespawnOnExit(Screen::Gameplay),
-        GameplayUi,
-        ui_root("Gameplay Ui"),
-        children![
-            // mute/pause icons
-            (
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Start,
-                    justify_content: JustifyContent::Start,
-                    position_type: PositionType::Absolute,
-                    top: Px(0.0),
-                    left: Vw(47.5),
-                    ..Default::default()
-                },
-                children![
-                    (icon(opts.clone().image(textures.pause.clone())), PauseIcon),
-                    (icon(opts.clone().image(textures.mute.clone())), MuteIcon),
-                ]
-            ),
-        ],
-    ));
-
-    // Player health bar and combat stacks
-    spawn_player_health_bar(&mut cmds);
-    spawn_combat_stacks_display(&mut cmds);
-}
+fn spawn_gameplay_ui() {}
 
 fn toggle_pause(
     _: On<TogglePause>,
     mut time: ResMut<Time<Virtual>>,
     mut state: ResMut<GameState>,
-    mut pause_label: Query<&mut Node, With<PauseIcon>>,
     player: Query<Entity, With<Player>>,
     mut commands: Commands,
     #[cfg(feature = "multiplayer")] multiplayer: Option<
@@ -62,24 +28,16 @@ fn toggle_pause(
     #[cfg(not(feature = "multiplayer"))]
     let is_multiplayer = false;
 
-    if let Ok(mut label) = pause_label.single_mut() {
-        if time.is_paused() || state.paused {
-            if !is_multiplayer {
-                time.unpause();
-            }
-            label.display = Display::None;
-        } else {
-            if !is_multiplayer {
-                time.pause();
-            }
-            label.display = Display::Flex;
+    if time.is_paused() || state.paused {
+        if !is_multiplayer {
+            time.unpause();
         }
+    } else if !is_multiplayer {
+        time.pause();
     }
 
     state.paused = !state.paused;
 
-    // Toggle player input context: removing PlayerCtx disables all gameplay
-    // actions at the source — no per-handler checks needed.
     if let Ok(entity) = player.single() {
         if state.paused {
             commands.entity(entity).remove::<PlayerCtx>();
@@ -87,31 +45,23 @@ fn toggle_pause(
             commands.entity(entity).insert(PlayerCtx);
         }
     }
-
-    info!("paused: {}", state.paused);
 }
 
 fn toggle_mute(
     _: On<ToggleMute>,
     settings: ResMut<Settings>,
     mut state: ResMut<GameState>,
-    mut label: Query<&mut Node, With<MuteIcon>>,
     mut music: Single<&mut VolumeNode, (With<MusicPool>, Without<SfxBus>)>,
     mut sfx: Single<&mut VolumeNode, (With<SfxBus>, Without<MusicPool>)>,
 ) {
-    if let Ok(mut node) = label.single_mut() {
-        if state.muted {
-            music.volume = settings.music();
-            sfx.volume = settings.sfx();
-            node.display = Display::None;
-        } else {
-            music.volume = Volume::SILENT;
-            sfx.volume = Volume::SILENT;
-            node.display = Display::Flex;
-        }
+    if state.muted {
+        music.volume = settings.music();
+        sfx.volume = settings.sfx();
+    } else {
+        music.volume = Volume::SILENT;
+        sfx.volume = Volume::SILENT;
     }
     state.muted = !state.muted;
-    info!("muted: {}", state.muted);
 }
 
 // ============================ UI ============================

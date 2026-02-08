@@ -1,4 +1,4 @@
-# Run native dev build
+# Run native dev build (singleplayer)
 default:
     cargo run -p wasm_fantasia --features dev_native
 

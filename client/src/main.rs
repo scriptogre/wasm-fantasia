@@ -2,12 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bevy::asset::load_internal_binary_asset;
-use bevy::{
-    app::App, asset::AssetMetaCheck, log, prelude::*, window::PrimaryWindow, winit::WINIT_WINDOWS,
-};
+use bevy::{app::App, asset::AssetMetaCheck, log, prelude::*};
 use bevy_fix_cursor_unlock_web::prelude::*;
-use std::io::Cursor;
-use winit::window::Icon;
 
 pub mod asset_loading;
 pub mod audio;
@@ -25,7 +21,7 @@ pub mod scene;
 pub mod screens;
 pub mod ui;
 
-use asset_loading::{AudioSources, Models, ResourceHandles, Textures};
+use asset_loading::{AudioSources, Models, ResourceHandles};
 use audio::*;
 use models::*;
 use ui::*;
@@ -51,7 +47,7 @@ fn main() {
     };
     // DEBUG
     // let filter = "debug,symphonia=off,naga=off,wgpu=warn,bevy_enhanced_input=debug".to_string();
-    let filter = "info,cosmic_text=info,calloop=off,symphonia=off,naga=off,wgpu=warn".to_string();
+    let filter = "info,cosmic_text=info,calloop=off,symphonia=off,naga=off,wgpu=warn,wgpu_core=error,bevy_core_pipeline=error,bevy_pbr=error,bevy_dev_tools=warn".to_string();
     let log_level = log::LogPlugin {
         level: log::Level::TRACE,
         filter,
@@ -73,44 +69,12 @@ fn main() {
     #[cfg(feature = "multiplayer")]
     app.add_plugins(networking::NetworkingPlugin);
 
-    app.add_systems(Startup, set_window_icon);
-
     // override default font
     load_internal_binary_asset!(
         app,
         TextFont::default().font,
-        "../assets/fonts/Not-Jam-Mono-Clean-16.ttf",
+        "../assets/fonts/ChakraPetch-SemiBold.ttf",
         |bytes: &[u8], _path: String| { Font::try_from_bytes(bytes.to_vec()).unwrap() }
     );
     app.run();
-}
-
-/// Sets the icon on windows and X11
-/// TODO: fix when bevy gets a normal way of setting window image
-/// FIXME: use query again after !Send resources are removed
-/// <https://github.com/bevyengine/bevy/issues/17667>
-fn set_window_icon(
-    // windows: NonSend<WinitWindows>,
-    primary_window: Query<Entity, With<PrimaryWindow>>,
-) -> Result {
-    // let Some(primary) = windows.get_window(primary_entity) else {
-    //     return Ok(());
-    // };
-    let primary_entity = primary_window.single()?;
-
-    WINIT_WINDOWS.with_borrow_mut(|windows| {
-        let Some(primary) = windows.get_window(primary_entity) else {
-            return;
-        };
-        let icon_buf = Cursor::new(include_bytes!("../assets/textures/icon.png"));
-        if let Ok(image) = image::load(icon_buf, image::ImageFormat::Png) {
-            let image = image.into_rgba8();
-            let (width, height) = image.dimensions();
-            let rgba = image.into_raw();
-            let icon = Icon::from_rgba(rgba, width, height).unwrap();
-            primary.set_window_icon(Some(icon));
-        };
-    });
-
-    Ok(())
 }

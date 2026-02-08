@@ -81,6 +81,80 @@ Player is Dynamic RigidBody with capsule Collider. TnuaAvian3dSensorShape for gr
 - Player rotation is locked on X/Z but free on Y (LockedAxes::ROTATION_LOCKED.unlock_rotation_y())
 - TNUA movement is in FixedUpdate schedule, not Update
 
+## Architecture Conventions
+
+Reference: `docs/architecture/PATTERNS.md` (sources: Overwatch, Quake 3, Source Engine, Flecs, Bevy community)
+
+### Module Dependency Direction
+
+Strict import hierarchy. Violations are bugs.
+
+```
+networking → combat, player, models    (networking may import domain types)
+combat → shared, models                (combat never imports networking)
+player → shared, models, combat        (player may read combat components)
+ui → models, combat, rules             (ui reads state, never mutates)
+models → (nothing game-specific)       (pure data definitions)
+shared → (no Bevy types at all)        (pure functions only)
+```
+
+**The rule**: Domain modules (combat, player) never import networking. Networking is a transport layer — it adapts between SpacetimeDB and domain events. If combat needs to "tell the server something," it fires a domain event that networking observes.
+
+### Event Flow
+
+Three-phase flow. Every state change follows this path:
+
+```
+Request (imperative)  →  Resolve (shared)  →  Outcome (past tense)  →  Feedback (cosmetic)
+AttackIntent              resolve_combat()     DamageDealt              HitLanded
+SpawnEnemyRequest         validate/position     EnemySpawned             (VFX, sound)
+```
+
+**Naming convention**:
+- **Requests**: noun/imperative — `AttackIntent`, `SpawnEnemyRequest`. Hasn't happened yet.
+- **Outcomes**: past tense — `DamageDealt`, `Died`, `EnemySpawned`. It happened, state changed.
+- **Feedback**: past tense — `HitLanded`, `CritHit`. Cosmetic-only, never mutates game state.
+
+Requests flow inward (input/networking → logic). Outcomes flow outward (logic → presentation/networking). Feedback is terminal — nothing observes feedback events to produce more state changes.
+
+### Entity Spawning Ownership
+
+The module that owns a domain concept owns its entity archetype. Period.
+
+- `combat/enemy.rs` owns enemy entity bundles (Health, Stats, Combatant, Collider, mesh, etc.)
+- `player/` owns player entity bundles
+- Networking **never** constructs domain bundles. It fires a spawn request event carrying server data. The owning module observes it and builds the entity.
+
+Why: When you add a new component to enemies (e.g., AI, pathfinding), you change one file in combat/, not also networking/combat.rs.
+
+### Server Authority Marker
+
+Use a `ServerAuthoritative` marker component on entities whose state is owned by the server. Domain modules check this marker instead of checking for networking-specific components with `cfg(feature)`.
+
+```rust
+// Good: combat/damage.rs
+if server_auth.get(entity).is_ok() { /* skip local health mutation */ }
+
+// Bad: combat/damage.rs
+#[cfg(feature = "multiplayer")]
+if remote_players.get(entity).is_ok() || server_enemies.get(entity).is_ok() { ... }
+```
+
+This eliminates `cfg(feature = "multiplayer")` from domain code entirely. Networking adds the marker when it creates entities. Domain code is feature-flag-free.
+
+### Component Categories
+
+Every component belongs to exactly one category:
+
+| Category | Replicated? | Mutated by | Example |
+|----------|------------|------------|---------|
+| Authoritative | Yes | Resolve layer or server sync | Health, Position, Inventory |
+| Cosmetic | Never | Presentation systems only | Particle timers, animation blend, HitFlash |
+| Input | Client→Server | Input systems | Movement intent, attack request |
+| Derived | Recomputed locally | Domain systems | Computed stat totals, UI display values |
+
+Networking only touches Authoritative components. Cosmetic and Derived state never crosses the network.
+
 ## Rules System (Data-Driven Behaviors)
 
 **Direction**: `docs/architecture/VISION.md`

@@ -80,13 +80,34 @@ where
     let opts: Props = opts.into();
     let new_node = Node {
         margin: UiRect::ZERO,
-        padding: UiRect::horizontal(Vw(1.0)),
+        padding: UiRect::axes(Vw(1.0), Px(6.0)),
         align_items: AlignItems::Center,
         justify_content: JustifyContent::Center,
         ..opts.node.clone()
     };
     let mut opts = opts.node(new_node);
-    opts.border_radius = BorderRadius::all(Px(7.0));
+    opts.border_radius = BorderRadius::all(size::BORDER_RADIUS);
+
+    btn(opts, action)
+}
+
+/// Compact button for +/- controls.
+pub fn btn_tiny<E, B, M, I>(opts: impl Into<Props>, action: I) -> impl Bundle
+where
+    E: EntityEvent,
+    B: Bundle,
+    I: IntoObserverSystem<E, B, M>,
+{
+    let opts: Props = opts.into();
+    let new_node = Node {
+        margin: UiRect::ZERO,
+        padding: UiRect::axes(Px(8.0), Px(2.0)),
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        ..opts.node.clone()
+    };
+    let mut opts = opts.font_size(14.0).node(new_node);
+    opts.border_radius = BorderRadius::all(size::BORDER_RADIUS);
 
     btn(opts, action)
 }
@@ -148,13 +169,20 @@ where
 {
     (
         Node {
-            justify_self: JustifySelf::Start,
+            align_items: AlignItems::Center,
             ..default()
         },
         children![
-            btn_small("-", lower),
-            (label(""), label_marker),
-            btn_small("+", raise),
+            btn_tiny("-", lower),
+            (
+                label(Props::new("").node(Node {
+                    width: Px(80.0),
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                })),
+                label_marker,
+            ),
+            btn_tiny("+", raise),
         ],
     )
 }

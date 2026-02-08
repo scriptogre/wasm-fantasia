@@ -1,18 +1,12 @@
 //! Various non-themable constants
 use super::*;
 
-/// Font asset paths
+/// Font asset paths (Chakra Petch family)
 pub mod fonts {
-    /// Default regular font path
-    pub const REGULAR: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-Regular.ttf";
-    /// Regular italic font path
-    pub const ITALIC: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-Italic.ttf";
-    /// Bold font path
-    pub const BOLD: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-Bold.ttf";
-    /// Bold italic font path
-    pub const BOLD_ITALIC: &str = "embedded://wasm_fantasia/assets/fonts/FiraSans-BoldItalic.ttf";
-    /// Monospace font path
-    pub const MONO: &str = "embedded://wasm_fantasia/assets/fonts/FiraMono-Medium.ttf";
+    pub const REGULAR: &str = "fonts/ChakraPetch-Regular.ttf";
+    pub const MEDIUM: &str = "fonts/ChakraPetch-Medium.ttf";
+    pub const SEMIBOLD: &str = "fonts/ChakraPetch-SemiBold.ttf";
+    pub const BOLD: &str = "fonts/ChakraPetch-Bold.ttf";
 }
 
 /// Size constants
@@ -20,10 +14,10 @@ pub mod size {
     use super::*;
 
     /// Default font size
-    pub const FONT_SIZE: f32 = 24.0;
+    pub const FONT_SIZE: f32 = 20.0;
 
-    /// Default border radius for buttons, sliders, spinners, etc.
-    pub const BORDER_RADIUS: Val = Px(15.0);
+    /// Default border radius for buttons, panels, sliders, spinners, etc.
+    pub const BORDER_RADIUS: Val = Vw(0.6);
 
     /// Common row size for buttons, sliders, spinners, etc.
     pub const ROW_HEIGHT: Val = Px(24.0);
@@ -39,56 +33,58 @@ pub mod size {
 
     /// Height of a toggle switch
     pub const TOGGLE_HEIGHT: Val = Px(18.0);
+
+    /// Health bar width
+    pub const HEALTH_BAR_WIDTH: f32 = 288.0;
+
+    /// Health bar height
+    pub const HEALTH_BAR_HEIGHT: f32 = 16.0;
 }
 
+/// Tailwind CSS neutral palette (oklch, zero chroma)
 pub mod colors {
     use bevy::prelude::Color;
-    /// #00000000
+
+    // ── Neutral scale ───────────────────────────────────────────────
+    pub const NEUTRAL10: Color = Color::oklcha(0.998, 0.0, 0.0, 1.0);
+    pub const NEUTRAL25: Color = Color::oklcha(0.995, 0.0, 0.0, 1.0);
+    pub const NEUTRAL50: Color = Color::oklcha(0.985, 0.0, 0.0, 1.0);
+    pub const NEUTRAL75: Color = Color::oklcha(0.978, 0.0, 0.0, 1.0);
+    pub const NEUTRAL100: Color = Color::oklcha(0.970, 0.0, 0.0, 1.0);
+    pub const NEUTRAL150: Color = Color::oklcha(0.956, 0.0, 0.0, 1.0);
+    pub const NEUTRAL200: Color = Color::oklcha(0.922, 0.0, 0.0, 1.0);
+    pub const NEUTRAL300: Color = Color::oklcha(0.870, 0.0, 0.0, 1.0);
+    pub const NEUTRAL350: Color = Color::oklcha(0.809, 0.0, 0.0, 1.0);
+    pub const NEUTRAL400: Color = Color::oklcha(0.708, 0.0, 0.0, 1.0);
+    pub const NEUTRAL450: Color = Color::oklcha(0.629, 0.0, 0.0, 1.0);
+    pub const NEUTRAL500: Color = Color::oklcha(0.556, 0.0, 0.0, 1.0);
+    pub const NEUTRAL550: Color = Color::oklcha(0.497, 0.0, 0.0, 1.0);
+    pub const NEUTRAL600: Color = Color::oklcha(0.439, 0.0, 0.0, 1.0);
+    pub const NEUTRAL650: Color = Color::oklcha(0.405, 0.0, 0.0, 1.0);
+    pub const NEUTRAL700: Color = Color::oklcha(0.371, 0.0, 0.0, 1.0);
+    pub const NEUTRAL750: Color = Color::oklcha(0.320, 0.0, 0.0, 1.0);
+    pub const NEUTRAL800: Color = Color::oklcha(0.269, 0.0, 0.0, 1.0);
+    pub const NEUTRAL850: Color = Color::oklcha(0.237, 0.0, 0.0, 1.0);
+    pub const NEUTRAL875: Color = Color::oklcha(0.221, 0.0, 0.0, 1.0);
+    pub const NEUTRAL900: Color = Color::oklcha(0.205, 0.0, 0.0, 1.0);
+    pub const NEUTRAL910: Color = Color::oklcha(0.193, 0.0, 0.0, 1.0);
+    pub const NEUTRAL920: Color = Color::oklcha(0.181, 0.0, 0.0, 1.0);
+    pub const NEUTRAL930: Color = Color::oklcha(0.169, 0.0, 0.0, 1.0);
+    pub const NEUTRAL940: Color = Color::oklcha(0.157, 0.0, 0.0, 1.0);
+    pub const NEUTRAL950: Color = Color::oklcha(0.145, 0.0, 0.0, 1.0);
+
+    // ── Semantic aliases ────────────────────────────────────────────
     pub const TRANSPARENT: Color = Color::srgba(0.0, 0.0, 0.0, 0.0);
-    /// #332666b3
-    pub const TRANSLUCENT: Color = Color::srgba(0.2, 0.15, 0.4, 0.7);
-    /// #000000
-    pub const BLACK: Color = Color::oklcha(0.0, 0.0, 0.0, 1.0);
-    /// #1F1F24
-    pub const GRAY: Color = Color::oklcha(0.2414, 0.0095, 285.67, 1.0);
-    /// #282828
-    pub const GRAY_0: Color = Color::srgb(0.157, 0.157, 0.157);
-    /// #2A2A2E
-    pub const GRAY_1: Color = Color::oklcha(0.2866, 0.0072, 285.93, 1.0);
-    /// #36373B
-    pub const GRAY_2: Color = Color::oklcha(0.3373, 0.0071, 274.77, 1.0);
-    /// #46474D
-    pub const GRAY_3: Color = Color::oklcha(0.3992, 0.0101, 278.38, 1.0);
-    /// #414142
-    pub const WARM_GRAY_1: Color = Color::oklcha(0.3757, 0.0017, 286.32, 1.0);
-    /// #838385
-    pub const LIGHT_GRAY_1: Color = Color::oklcha(0.6106, 0.003, 286.31, 1.0);
-    /// #B1B1B2
-    pub const LIGHT_GRAY_2: Color = Color::oklcha(0.7607, 0.0014, 286.37, 1.0);
-    /// #ececec
-    pub const WHITEISH: Color = Color::srgb(0.925, 0.925, 0.925);
-    /// #FFFFFF
-    pub const WHITE: Color = Color::oklcha(1.0, 0.000000059604645, 90.0, 1.0);
-    /// #cdaa6d
+    // ── Accent colors ───────────────────────────────────────────────
     pub const SAND_YELLOW: Color = Color::srgb(205. / 255., 170. / 255., 109. / 255.);
-    /// #49e05f
     pub const ACID_GREEN: Color = Color::srgb(0.286, 0.878, 0.373);
-    /// #5D8D0A
     pub const GRASS_GREEN: Color = Color::oklcha(0.5866, 0.1543, 129.84, 1.0);
-    /// #2f5392
-    pub const DIM_BLUE: Color = Color::srgb(0.186, 0.328, 0.573);
-    /// #2160A3
-    pub const BLUE: Color = Color::oklcha(0.4847, 0.1249, 253.08, 1.0);
-    /// #206EC9
-    pub const BRIGHT_BLUE: Color = Color::oklcha(0.4847, 0.1249, 253.08, 1.0);
-    /// #4979c5
-    pub const CHROME_BLUE: Color = Color::srgb(0.286, 0.478, 0.773);
-    /// #fac896
-    pub const SUN: Color = Color::srgb(250.0 / 255.0, 200.0 / 255.0, 150.0 / 255.0);
-    /// #506886
-    pub const MOON: Color = Color::srgb(80.0 / 255.0, 104.0 / 255.0, 134.0 / 255.0);
-    /// #AB4051
     pub const RED: Color = Color::oklcha(0.5232, 0.1404, 13.84, 1.0);
+    pub const HEALTH_RED: Color = Color::srgb(0.816, 0.125, 0.125);
+
+    // ── Scene ──────────────────────────────────────────────────────────
+    /// Near-black void used for ClearColor and fog
+    pub const VOID: Color = Color::oklcha(0.100, 0.0, 0.0, 1.0);
 }
 
 /// TODO: text is not working at the moment due to a button ECS hierarchy being tricky
@@ -117,18 +113,10 @@ pub struct PaletteSet {
 impl Default for PaletteSet {
     fn default() -> Self {
         Self {
-            none: Palette::new(
-                colors::WHITEISH,
-                colors::TRANSPARENT,
-                BorderColor::all(colors::WHITEISH),
-            ),
-            pressed: Palette::new(
-                colors::TRANSPARENT,
-                colors::BRIGHT_BLUE,
-                BorderColor::DEFAULT,
-            ),
-            hovered: Palette::new(colors::WHITEISH, colors::DIM_BLUE, BorderColor::DEFAULT),
-            disabled: Palette::new(colors::TRANSPARENT, colors::DIM_BLUE, BorderColor::DEFAULT),
+            none: Palette::new(colors::NEUTRAL300, colors::NEUTRAL900, BorderColor::all(colors::NEUTRAL850)),
+            hovered: Palette::new(colors::NEUTRAL300, colors::NEUTRAL850, BorderColor::all(colors::NEUTRAL800)),
+            pressed: Palette::new(colors::NEUTRAL300, colors::NEUTRAL800, BorderColor::all(colors::NEUTRAL750)),
+            disabled: Palette::new(colors::NEUTRAL500, colors::NEUTRAL900, BorderColor::all(colors::NEUTRAL850)),
         }
     }
 }

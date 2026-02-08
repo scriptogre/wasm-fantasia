@@ -6,12 +6,10 @@ use std::{error::Error, fs};
 pub const SETTINGS_PATH: &str = "assets/settings.ron";
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Settings>().init_resource::<ActiveTab>();
-    app.add_systems(
-        OnEnter(Screen::Title),
-        load_settings.run_if(resource_exists::<Config>.and(run_once)),
-    )
-    .add_systems(OnExit(Screen::Settings), auto_save_settings);
+    let settings = Settings::load();
+    app.insert_resource(settings)
+        .init_resource::<ActiveTab>()
+        .add_systems(OnExit(Screen::Settings), auto_save_settings);
 }
 
 fn auto_save_settings(settings: Res<Settings>) {
@@ -43,13 +41,26 @@ impl Settings {
         Volume::Linear(self.sound.general * self.sound.sfx)
     }
 
-    pub fn read() -> Result<Self, Box<dyn Error>> {
-        let content = fs::read_to_string(SETTINGS_PATH)?;
-        let settings = ron::from_str(&content).unwrap_or_default();
-        Ok(settings)
+    pub fn load() -> Self {
+        match fs::read_to_string(SETTINGS_PATH) {
+            Ok(content) => match ron::from_str(&content) {
+                Ok(settings) => {
+                    info!("Loaded settings from '{SETTINGS_PATH}'");
+                    settings
+                }
+                Err(e) => {
+                    warn!("Failed to parse '{SETTINGS_PATH}', using defaults: {e}");
+                    Self::default()
+                }
+            },
+            Err(_) => Self::default(),
+        }
     }
 
     pub fn save(&self) -> Result<(), Box<dyn Error>> {
+        if let Some(parent) = std::path::Path::new(SETTINGS_PATH).parent() {
+            fs::create_dir_all(parent)?;
+        }
         let content = ron::ser::to_string_pretty(self, Default::default())?;
         fs::write(SETTINGS_PATH, content)?;
         Ok(())
@@ -66,28 +77,12 @@ impl Default for Settings {
     }
 }
 
-fn load_settings(mut commands: Commands) {
-    let settings = match Settings::read() {
-        Ok(settings) => {
-            info!("loaded settings from '{SETTINGS_PATH}'");
-            settings
-        }
-        Err(e) => {
-            info!("unable to load settings from '{SETTINGS_PATH}', switching to defaults: {e}");
-            Default::default()
-        }
-    };
-
-    commands.insert_resource(settings);
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Reflect, Component)]
 #[reflect(Component)]
 pub enum UiTab {
     #[default]
     Audio,
     Video,
-    Keybindings,
 }
 
 #[derive(Resource, Default)]

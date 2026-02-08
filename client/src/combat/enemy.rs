@@ -33,7 +33,7 @@ fn spawn_enemy_in_front(
         use spacetimedb_sdk::DbContext;
         if conn.conn.is_active() {
             crate::networking::combat::server_spawn_enemies(&conn, pos, forward.as_vec3());
-            info!("Requested 5 enemies from server");
+            debug!("Requested 5 enemies from server");
             return;
         }
     }
@@ -55,7 +55,7 @@ fn spawn_enemy_in_front(
         let spawn_pos = base_pos + *offset;
 
         let enemy_material = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.8, 0.2, 0.2),
+            base_color: crate::ui::colors::HEALTH_RED,
             ..default()
         });
 
@@ -78,5 +78,5 @@ fn spawn_enemy_in_front(
         ));
     }
 
-    info!("Spawned 5 enemies locally (offline mode)");
+    debug!("Spawned 5 enemies locally");
 }

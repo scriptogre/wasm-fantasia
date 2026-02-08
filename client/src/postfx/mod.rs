@@ -22,7 +22,7 @@ pub fn plugin(app: &mut App) {
 fn postfx_preset() -> ColorGrading {
     ColorGrading {
         global: ColorGradingGlobal {
-            exposure: 0.1,    // Slight brightness boost
+            exposure: 0.0,    // Neutral — dark scene handles its own brightness
             temperature: 0.0, // Neutral
             tint: 0.0,        // Neutral
             hue: 0.0,         // No hue shift
@@ -44,10 +44,10 @@ fn postfx_preset() -> ColorGrading {
         },
         shadows: ColorGradingSection {
             saturation: 0.95, // Slightly desaturated shadows (cinematic)
-            contrast: 1.15,   // Deeper blacks (FakeHDR effect)
-            gamma: 0.95,      // Crush blacks slightly
+            contrast: 1.0,
+            gamma: 1.0,
             gain: 1.0,
-            lift: -0.02, // Lower shadow floor
+            lift: 0.0,
         },
     }
 }

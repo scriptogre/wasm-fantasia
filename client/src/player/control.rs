@@ -105,12 +105,27 @@ fn tick_input_buffer(time: Res<Time>, mut buffer: ResMut<InputBuffer>) {
 /// <https://github.com/idanarye/bevy-tnua/blob/main/demos/src/character_control_systems/platformer_control_systems.rs>
 fn movement(
     cfg: Res<Config>,
-    navigate: Single<&Action<Navigate>>,
-    crouch: Single<&Action<Crouch>>,
+    navigate: Query<&Action<Navigate>>,
+    crouch: Query<&Action<Crouch>>,
     camera: Query<&Transform, With<SceneCamera>>,
     mut player_query: Query<(&mut Player, &mut TnuaController, &mut StepTimer)>,
 ) -> Result {
-    let (navigate, crouch) = (*navigate.into_inner(), *crouch.into_inner());
+    let Ok(navigate) = navigate.single() else {
+        // PlayerCtx removed (paused/menu) — zero velocity but keep float height
+        for (_player, mut controller, _step_timer) in player_query.iter_mut() {
+            controller.basis(TnuaBuiltinWalk {
+                desired_velocity: Vec3::ZERO,
+                float_height: 0.15,
+                cling_distance: 0.20,
+                spring_strength: 500.0,
+                spring_dampening: 1.0,
+                ..Default::default()
+            });
+        }
+        return Ok(());
+    };
+    let navigate = *navigate;
+    let crouch = crouch.single().copied().unwrap_or_default();
 
     for (player, mut controller, mut step_timer) in player_query.iter_mut() {
         let cam_transform = camera.single()?;

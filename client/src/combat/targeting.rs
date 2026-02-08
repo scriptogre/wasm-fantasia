@@ -144,7 +144,7 @@ fn update_target_indicator(
                 // Spawn indicator
                 let mesh = meshes.add(Annulus::new(0.6, 0.7));
                 let material = materials.add(StandardMaterial {
-                    base_color: Color::srgba(1.0, 0.8, 0.3, 0.6),
+                    base_color: crate::ui::colors::SAND_YELLOW.with_alpha(0.6),
                     emissive: LinearRgba::new(1.5, 1.0, 0.3, 1.0),
                     alpha_mode: AlphaMode::Blend,
                     unlit: true,

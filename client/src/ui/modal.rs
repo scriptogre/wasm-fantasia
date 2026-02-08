@@ -6,7 +6,7 @@ pub fn plugin(app: &mut App) {
         .add_observer(clear_modals);
 }
 
-markers!(MenuModal, SettingsModal);
+markers!(MenuModal, SettingsModal, ModalBackdrop);
 
 pub fn click_pop_modal(on: On<Pointer<Click>>, mut commands: Commands) {
     commands.entity(on.entity).trigger(PopModal);
@@ -32,6 +32,14 @@ pub fn add_new_modal(
             }
             commands.trigger(CamCursorToggle);
         }
+        // Spawn persistent backdrop behind all modals
+        commands.spawn((
+            ModalBackdrop,
+            DespawnOnExit(Screen::Gameplay),
+            ui_root("Modal Backdrop"),
+            GlobalZIndex(199),
+            BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),
+        ));
     }
 
     // despawn all previous modal entities to avoid clattering
@@ -49,6 +57,7 @@ pub fn pop_modal(
     screen: Res<State<Screen>>,
     menu_marker: Query<Entity, With<MenuModal>>,
     settings_marker: Query<Entity, With<SettingsModal>>,
+    backdrop: Query<Entity, With<ModalBackdrop>>,
     mut commands: Commands,
     mut modals: ResMut<Modals>,
 ) {
@@ -82,6 +91,9 @@ pub fn pop_modal(
     }
 
     if modals.is_empty() {
+        if let Ok(bg) = backdrop.single() {
+            commands.entity(bg).despawn();
+        }
         commands.trigger(TogglePause);
         commands.trigger(CamCursorToggle);
     }

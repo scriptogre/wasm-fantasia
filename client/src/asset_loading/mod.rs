@@ -13,48 +13,32 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(tracking::plugin)
         .add_plugins(RonAssetPlugin::<Config>::default())
         .load_resource_from_path::<Config>("config.ron")
-        .add_plugins(RonAssetPlugin::<CreditsPreset>::default())
-        .load_resource_from_path::<CreditsPreset>("credits.ron")
-        .load_resource::<Textures>()
-        // .load_resource::<Fonts>()
+        .load_resource::<Fonts>()
         .load_resource::<Models>()
         .load_resource::<AudioSources>();
 }
 
-// #[derive(Asset, Clone, Reflect, Resource)]
-// #[reflect(Resource)]
-// pub struct Fonts {
-//     #[dependency]
-//     pub custom: Handle<Font>,
-// }
-//
-// impl FromWorld for Fonts {
-//     fn from_world(world: &mut World) -> Self {
-//         let assets = world.resource::<AssetServer>();
-//         Self {
-//             custom: assets.load("fonts/custom.ttf"),
-//         }
-//     }
-// }
-
 #[derive(Asset, Clone, Reflect, Resource)]
 #[reflect(Resource)]
-pub struct Textures {
+pub struct Fonts {
     #[dependency]
-    pub github: Handle<Image>,
+    pub regular: Handle<Font>,
     #[dependency]
-    pub pause: Handle<Image>,
+    pub medium: Handle<Font>,
     #[dependency]
-    pub mute: Handle<Image>,
+    pub semibold: Handle<Font>,
+    #[dependency]
+    pub bold: Handle<Font>,
 }
 
-impl FromWorld for Textures {
+impl FromWorld for Fonts {
     fn from_world(world: &mut World) -> Self {
-        let assets = world.resource::<AssetServer>();
+        let a = world.resource::<AssetServer>();
         Self {
-            github: assets.load("textures/github.png"),
-            pause: assets.load("textures/pause.png"),
-            mute: assets.load("textures/mute.png"),
+            regular: a.load(fonts::REGULAR),
+            medium: a.load(fonts::MEDIUM),
+            semibold: a.load(fonts::SEMIBOLD),
+            bold: a.load(fonts::BOLD),
         }
     }
 }

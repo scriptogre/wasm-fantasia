@@ -44,7 +44,7 @@ pub fn spawn_camera(mut commands: Commands) {
         Fxaa::default(),
         // Fog to fade grid into void at distance - creates infinite feel
         DistanceFog {
-            color: Color::srgb(0.92, 0.92, 0.95),
+            color: colors::VOID,
             falloff: fog_falloff,
             ..default()
         },

@@ -1,5 +1,6 @@
 use crate::*;
 
+pub mod combat_debug;
 #[cfg(any(feature = "dev_native", not(target_arch = "wasm32")))]
 mod dev_tools;
 mod music;
@@ -13,6 +14,7 @@ pub fn plugin(app: &mut App) {
         crate::rules::plugin,
         postfx::plugin,
         music::plugin,
+        combat_debug::plugin,
         #[cfg(any(feature = "dev_native", not(target_arch = "wasm32")))]
         dev_tools::plugin,
         screens::plugin,

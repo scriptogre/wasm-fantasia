@@ -147,7 +147,7 @@ pub fn sync_npc_enemies(
 
         // Each enemy needs its own material for hit flash
         let enemy_material = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.8, 0.2, 0.2),
+            base_color: crate::ui::colors::HEALTH_RED,
             ..default()
         });
 

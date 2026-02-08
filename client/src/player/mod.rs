@@ -38,8 +38,10 @@ pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::Gameplay), spawn_player)
         .add_systems(
             Update,
-            animating
-                .in_set(TnuaUserControlsSystems)
+            (
+                animating.in_set(TnuaUserControlsSystems),
+                sync_debug_colliders,
+            )
                 .run_if(in_state(Screen::Gameplay)),
         )
         .add_observer(player_post_spawn);
@@ -126,23 +128,42 @@ pub fn spawn_player(
             let mut e = parent.spawn((Transform::from_xyz(0.0, -1.0, 0.0), mesh));
             e.observe(prepare_animations);
 
-            // DEBUG
-            let collider_mesh = Mesh::from(Capsule3d::new(
+            let collider_mesh = meshes.add(Capsule3d::new(
                 cfg.player.hitbox.radius,
                 cfg.player.hitbox.height,
             ));
-            let debug_collider_mesh = Mesh3d(meshes.add(collider_mesh.clone()));
-            let debug_collider_color: MeshMaterial3d<StandardMaterial> =
-                MeshMaterial3d(materials.add(Color::srgba(0.9, 0.9, 0.9, 0.1)));
             parent.spawn((
-                debug_collider_mesh,
-                debug_collider_color,
+                DebugCollider,
+                Mesh3d(collider_mesh),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: crate::ui::colors::NEUTRAL200.with_alpha(0.1),
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    ..default()
+                })),
                 Transform::from_xyz(0.0, -0.1, 0.0),
+                Visibility::Hidden,
             ));
-            // DEBUG
         });
 
     Ok(())
+}
+
+#[derive(Component)]
+struct DebugCollider;
+
+fn sync_debug_colliders(
+    state: Res<GameState>,
+    mut colliders: Query<&mut Visibility, With<DebugCollider>>,
+) {
+    let vis = if state.debug_ui {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    for mut v in &mut colliders {
+        *v = vis;
+    }
 }
 
 fn player_post_spawn(on: On<Add, Player>, mut players: Query<&mut Player>) {

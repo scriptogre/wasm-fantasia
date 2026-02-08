@@ -164,9 +164,10 @@ pub fn prepare_animations(
         let clip = original_clip.clone();
         let modified_handle = animation_clips.add(clip);
         let node_index = graph.add_clip(modified_handle, 1.0, root_node);
-        info!("Loaded animation: {}", name);
         player.animations.insert(anim, node_index);
     }
+
+    info!("Loaded {} animations", player.animations.len());
 
     // Debug: warn about any expected animations missing from the model
     #[cfg(debug_assertions)]
@@ -178,10 +179,28 @@ pub fn prepare_animations(
 
     player.anim_player_entity = Some(animation_player);
 
+    let idle_node = player.animations.get(&Animation::Idle).copied();
+    let graph_handle = animation_graphs.add(graph);
+
     commands.entity(animation_player).insert((
-        AnimationGraphHandle(animation_graphs.add(graph)),
+        AnimationGraphHandle(graph_handle),
         AnimationTransitions::new(),
     ));
+
+    // Start idle animation immediately to avoid T-pose on first frame
+    if let Some(index) = idle_node {
+        commands.entity(animation_player).queue(move |mut entity: EntityWorldMut| {
+            let Some(mut transitions) = entity.take::<AnimationTransitions>() else {
+                return;
+            };
+            if let Some(mut player) = entity.get_mut::<AnimationPlayer>() {
+                transitions
+                    .play(&mut player, index, Duration::ZERO)
+                    .repeat();
+            }
+            entity.insert(transitions);
+        });
+    }
 }
 
 /// Tnua takes the heavy lifting with blending animations, but it leads to most of the animation
@@ -240,8 +259,10 @@ pub fn animating(
     const BLEND_DURATION: Duration = Duration::from_millis(150);
 
     // Check if player is attacking - override Tnua animation
+    // Dash takes visual priority over attack (attack hit still triggers via timer)
+    let dashing = controller.action_name() == Some(TnuaBuiltinDash::NAME);
     if let Some(attack) = attack_state {
-        if attack.attacking {
+        if attack.attacking && !dashing {
             player.animation_state = AnimationState::Attack;
             // Keep TnuaAnimatingState in sync (for when attack ends)
             animating_state.update_by_discriminant(AnimationState::Attack);

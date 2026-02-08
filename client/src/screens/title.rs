@@ -11,7 +11,7 @@ fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
         DespawnOnExit(Screen::Title),
         GlobalZIndex(1),
         ui_root("Title UI"),
-        BackgroundColor(colors::TRANSLUCENT),
+        BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),
         children![(
             Node {
                 width: Vw(40.0),
@@ -30,13 +30,11 @@ fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
             #[cfg(target_arch = "wasm32")]
             children![
                 btn_big("Play", to::gameplay_or_loading),
-                btn_big("Credits", to::credits),
                 btn_big("Settings", to::settings),
             ],
             #[cfg(not(target_arch = "wasm32"))]
             children![
                 btn_big("Play", to::gameplay_or_loading),
-                btn_big("Credits", to::credits),
                 btn_big("Settings", to::settings),
                 btn_big("Exit", exit_app)
             ],

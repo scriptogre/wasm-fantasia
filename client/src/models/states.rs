@@ -22,7 +22,7 @@ impl Default for GameState {
         Self {
             last_screen: Screen::Title,
             current_mood: Mood::Exploration,
-            diagnostics: false, // Off by default - heavy on WASM
+            diagnostics: false,
             debug_ui: false,    // Off by default
             screen_shake: true, // On by default
             paused: false,
@@ -50,7 +50,6 @@ pub enum Screen {
     #[cfg_attr(feature = "dev_native", default)]
     Loading,
     Tutorial,
-    Credits,
     Settings,
     // Here the menu is drawn and waiting for player interaction
     Title,

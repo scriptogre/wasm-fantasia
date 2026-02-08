@@ -2,7 +2,6 @@
 use crate::*;
 use bevy::ui::Val::*;
 
-mod credits;
 mod gameplay;
 mod loading;
 mod settings;
@@ -18,7 +17,6 @@ pub fn plugin(app: &mut App) {
         loading::plugin,
         title::plugin,
         settings::plugin,
-        credits::plugin,
         gameplay::plugin,
     ))
     .add_systems(Update, track_last_screen.run_if(state_changed::<Screen>))
@@ -75,9 +73,6 @@ pub mod to {
     }
     pub fn settings(_: On<Pointer<Click>>, mut commands: Commands) {
         commands.trigger(GoTo(Screen::Settings));
-    }
-    pub fn credits(_: On<Pointer<Click>>, mut commands: Commands) {
-        commands.trigger(GoTo(Screen::Credits));
     }
     pub fn gameplay_or_loading(
         _: On<Pointer<Click>>,

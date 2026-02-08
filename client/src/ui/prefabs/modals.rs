@@ -27,11 +27,10 @@ pub fn menu_modal() -> impl Bundle {
         DespawnOnExit(Screen::Gameplay),
         MenuModal,
         ui_root("In game menu"),
+        GlobalZIndex(200),
         children![(
-            BorderColor::all(colors::WHITEISH),
-            BackgroundColor(colors::TRANSLUCENT),
             Node {
-                border: UiRect::all(Px(2.0)),
+                border: UiRect::all(Px(1.0)),
                 padding: UiRect::all(Vw(10.0)),
                 left: Px(0.0),
                 bottom: Px(0.0),
@@ -41,8 +40,8 @@ pub fn menu_modal() -> impl Bundle {
                 (
                     Node {
                         position_type: PositionType::Absolute,
-                        right: Px(0.0),
-                        bottom: Px(0.0),
+                        right: Px(32.0),
+                        bottom: Px(32.0),
                         ..Default::default()
                     },
                     children![btn_small(

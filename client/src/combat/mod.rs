@@ -6,15 +6,18 @@ mod components;
 mod damage;
 mod enemy;
 pub mod events;
-mod hit_feedback;
+mod feedback;
+mod floaters;
 mod separation;
 mod sound;
 mod targeting;
+mod vfx;
 
 pub use attack::{VFX_ARC_DEGREES, VFX_RANGE};
 pub use components::*;
 pub use events::*;
-pub use hit_feedback::*;
+pub use feedback::*;
+pub use floaters::*;
 pub use targeting::LockedTarget;
 
 pub fn plugin(app: &mut App) {
@@ -24,7 +27,9 @@ pub fn plugin(app: &mut App) {
         damage::plugin,
         separation::plugin,
         enemy::plugin,
-        hit_feedback::plugin,
+        feedback::plugin,
+        floaters::plugin,
+        vfx::plugin,
         targeting::plugin,
         sound::plugin,
     ));

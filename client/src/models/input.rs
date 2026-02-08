@@ -28,16 +28,16 @@ fn log_gamepad_events(
     mut axes: MessageReader<GamepadAxisChangedEvent>,
 ) {
     for event in connections.read() {
-        info!("[GAMEPAD] Connection event: {:?}", event);
+        debug!("Gamepad connection: {:?}", event);
     }
     for event in buttons.read() {
         if event.value.abs() > 0.1 {
-            info!("[GAMEPAD] Button: {:?} = {:.2}", event.button, event.value);
+            trace!("Gamepad button: {:?} = {:.2}", event.button, event.value);
         }
     }
     for event in axes.read() {
         if event.value.abs() > 0.1 {
-            info!("[GAMEPAD] Axis: {:?} = {:.2}", event.axis, event.value);
+            trace!("Gamepad axis: {:?} = {:.2}", event.axis, event.value);
         }
     }
 }
@@ -53,15 +53,15 @@ fn log_gamepad_status(
     if prev.is_none() || prev != Some(count) {
         if count > 0 {
             for (entity, gamepad) in gamepads.iter() {
-                info!(
-                    "[GAMEPAD] Detected: entity={:?} vendor={:?} product={:?}",
+                debug!(
+                    "Gamepad detected: entity={:?} vendor={:?} product={:?}",
                     entity,
                     gamepad.vendor_id(),
                     gamepad.product_id(),
                 );
             }
         } else {
-            warn!("[GAMEPAD] No gamepads detected by Bevy");
+            debug!("No gamepads detected");
         }
         *prev_count = Some(count);
     }
@@ -71,33 +71,33 @@ fn log_navigate(on: On<Fire<Navigate>>, actions: Query<&Action<Navigate>>) {
     if let Ok(action) = actions.get(on.context) {
         let val = **action;
         if val.length() > 0.1 {
-            info!("[ACTION] Navigate: ({:.2}, {:.2})", val.x, val.y);
+            trace!("Navigate: ({:.2}, {:.2})", val.x, val.y);
         }
     }
 }
 
 fn log_jump(_on: On<Start<Jump>>) {
-    info!("[ACTION] Jump started");
+    debug!("Jump");
 }
 
 fn log_dash(_on: On<Start<Dash>>) {
-    info!("[ACTION] Dash started");
+    debug!("Dash");
 }
 
 fn log_crouch_start(_on: On<Start<Crouch>>) {
-    info!("[ACTION] Crouch started");
+    debug!("Crouch start");
 }
 
 fn log_crouch_end(_on: On<Complete<Crouch>>) {
-    info!("[ACTION] Crouch ended");
+    debug!("Crouch end");
 }
 
 fn log_attack(_on: On<Start<Attack>>) {
-    info!("[ACTION] Attack started");
+    debug!("Attack");
 }
 
 fn log_escape(_on: On<Start<Escape>>) {
-    info!("[ACTION] Escape pressed");
+    debug!("Escape");
 }
 
 markers!(GlobalCtx, PlayerCtx, ModalCtx);
@@ -163,7 +163,7 @@ pub struct RightTab;
 pub struct LeftTab;
 
 pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
-    info!("[INPUT] PlayerCtx added to entity {:?} — inserting gamepad bindings", add.entity);
+    debug!("PlayerCtx added to {:?}", add.entity);
     let mut e = commands.entity(add.entity);
 
     e.insert(actions!(PlayerCtx[

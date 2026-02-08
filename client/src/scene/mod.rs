@@ -1,22 +1,14 @@
-//! Animus-style loading scene - minimal grid floor fading into void
+//! Dark animus-style scene - minimal grid floor fading into void
 use crate::*;
 use avian3d::prelude::*;
 use bevy_skein::SkeinPlugin;
 
-mod skybox;
-
-pub use skybox::*;
-
 pub fn plugin(app: &mut App) {
-    app.add_plugins((
-        PhysicsPlugins::default(),
-        SkeinPlugin::default(),
-        // skybox::plugin, // Disabled for clean Animus look
-    ))
+    app.add_plugins((PhysicsPlugins::default(), SkeinPlugin::default()))
     .add_systems(OnEnter(Screen::Gameplay), setup_animus_scene);
 }
 
-/// Creates an Assassin's Creed Animus-style loading scene
+/// Dark animus scene — near-black floor with faintly glowing grid lines
 fn setup_animus_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -26,12 +18,11 @@ fn setup_animus_scene(
     let floor_size = 500.0;
     let floor_mesh = meshes.add(Plane3d::default().mesh().size(floor_size, floor_size));
 
-    // Clean white/light gray floor material
     let floor_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.88, 0.88, 0.91),
+        base_color: colors::NEUTRAL940,
         perceptual_roughness: 0.9,
         metallic: 0.0,
-        reflectance: 0.1,
+        reflectance: 0.05,
         ..default()
     });
 
@@ -47,9 +38,10 @@ fn setup_animus_scene(
     ));
 
     // Grid lines - much larger extent for "infinite" feel
+    let grid_color = ui::colors::NEUTRAL900;
     let grid_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.55, 0.55, 0.6, 0.6),
-        alpha_mode: AlphaMode::Blend,
+        base_color: grid_color,
+        emissive: LinearRgba::from(grid_color),
         unlit: true,
         ..default()
     });
@@ -76,7 +68,7 @@ fn setup_animus_scene(
             DespawnOnExit(Screen::Gameplay),
             Mesh3d(line_mesh.clone()),
             MeshMaterial3d(grid_material.clone()),
-            Transform::from_translation(Vec3::new(offset, 0.001, 0.0)),
+            Transform::from_translation(Vec3::new(offset, 0.005, 0.0)),
         ));
 
         // Lines along Z axis
@@ -84,29 +76,26 @@ fn setup_animus_scene(
             DespawnOnExit(Screen::Gameplay),
             Mesh3d(line_mesh_z.clone()),
             MeshMaterial3d(grid_material.clone()),
-            Transform::from_translation(Vec3::new(0.0, 0.001, offset)),
+            Transform::from_translation(Vec3::new(0.0, 0.005, offset)),
         ));
     }
 
-    // Bright ambient light for that clean Animus look
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 2000.0,
+        brightness: 1500.0,
         ..Default::default()
     });
 
-    // Soft directional light
     commands.spawn((
         DespawnOnExit(Screen::Gameplay),
         DirectionalLight {
             color: Color::WHITE,
-            illuminance: 5000.0,
-            shadows_enabled: false,
+            illuminance: 4000.0,
+            shadows_enabled: true,
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.5, 0.5, 0.0)),
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.7, 0.3, 0.0)),
     ));
 
-    // Clean white/gray background matching fog
-    commands.insert_resource(ClearColor(Color::srgb(0.92, 0.92, 0.95)));
+    commands.insert_resource(ClearColor(colors::VOID));
 }
