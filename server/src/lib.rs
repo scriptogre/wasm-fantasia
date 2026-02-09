@@ -359,46 +359,31 @@ pub fn spawn_enemies(
     x: f32,
     y: f32,
     z: f32,
-    forward_x: f32,
-    forward_z: f32,
+    _forward_x: f32,
+    _forward_z: f32,
 ) {
     let Some(_player) = ctx.db.player().identity().find(ctx.sender) else {
         return;
     };
 
-    let base_x = x + forward_x * 5.0;
-    let base_z = z + forward_z * 5.0;
+    // TODO(server-abstraction): spawn logic is duplicated in client's spawn_enemy_in_front.
+    // Per-enemy scatter using hash that varies meaningfully per index
+    let seed = ctx.timestamp.to_micros_since_unix_epoch() as u64;
+    let count = 80 + (seed % 41) as u32; // 80–120 enemies
 
-    let right_x = -forward_z;
-    let right_z = forward_x;
+    for i in 0..count {
+        let h = (seed ^ 0xDEADBEEF).wrapping_add(i as u64).wrapping_mul(6364136223846793005);
+        let angle = (h & 0xFFFF) as f32 / 65535.0 * std::f32::consts::TAU;
+        let radius = defaults::ENEMY_SPAWN_RADIUS_MIN
+            + ((h >> 16) & 0xFFFF) as f32 / 65535.0
+                * (defaults::ENEMY_SPAWN_RADIUS_MAX - defaults::ENEMY_SPAWN_RADIUS_MIN);
 
-    let offsets: [(f32, f32); 5] = [
-        (0.0, 0.0),
-        (
-            1.5 * right_x - 0.5 * forward_x,
-            1.5 * right_z - 0.5 * forward_z,
-        ),
-        (
-            -1.5 * right_x - 0.5 * forward_x,
-            -1.5 * right_z - 0.5 * forward_z,
-        ),
-        (
-            2.5 * right_x - 1.5 * forward_x,
-            2.5 * right_z - 1.5 * forward_z,
-        ),
-        (
-            -2.5 * right_x - 1.5 * forward_x,
-            -2.5 * right_z - 1.5 * forward_z,
-        ),
-    ];
-
-    for (ox, oz) in offsets {
         ctx.db.enemy().insert(Enemy {
             id: 0,
             enemy_type: "basic".to_string(),
-            x: base_x + ox,
+            x: x + angle.cos() * radius,
             y,
-            z: base_z + oz,
+            z: z + angle.sin() * radius,
             rotation_y: 0.0,
             animation_state: "Idle".to_string(),
             health: defaults::ENEMY_HEALTH,
@@ -443,7 +428,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     // Collect alive enemies
     let enemies: Vec<Enemy> = ctx.db.enemy().iter().filter(|e| e.health > 0.0).collect();
 
-    for enemy in enemies {
+    for enemy in &enemies {
         // Find nearest player (XZ distance)
         let mut nearest_dist = f32::MAX;
         let mut nearest_pos = (0.0_f32, 0.0_f32);
@@ -484,18 +469,49 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             new_z += dz * inv_dist * defaults::ENEMY_WALK_SPEED * dt;
         }
 
+        // Enemy-enemy separation — push apart to prevent stacking
+        let mut sep_x = 0.0_f32;
+        let mut sep_z = 0.0_f32;
+        for other in &enemies {
+            if other.id == enemy.id {
+                continue;
+            }
+            let dx = enemy.x - other.x;
+            let dz = enemy.z - other.z;
+            let dist = (dx * dx + dz * dz).sqrt();
+            if dist < defaults::ENEMY_SEPARATION_RADIUS && dist > 0.01 {
+                let inv = 1.0 / dist;
+                let weight = 1.0 - dist / defaults::ENEMY_SEPARATION_RADIUS;
+                sep_x += dx * inv * weight;
+                sep_z += dz * inv * weight;
+            }
+        }
+        let sep_len = (sep_x * sep_x + sep_z * sep_z).sqrt();
+        if sep_len > 0.01 {
+            let inv = 1.0 / sep_len;
+            new_x += sep_x * inv * defaults::ENEMY_SEPARATION_STRENGTH * dt;
+            new_z += sep_z * inv * defaults::ENEMY_SEPARATION_STRENGTH * dt;
+        }
+
         // Reset cooldown on attack
         if decision == combat::EnemyBehaviorKind::Attack {
             new_last_attack_time = now;
         }
 
         ctx.db.enemy().id().update(Enemy {
+            id: enemy.id,
+            enemy_type: enemy.enemy_type.clone(),
             x: new_x,
+            y: enemy.y,
             z: new_z,
             rotation_y: new_rotation_y,
             animation_state: decision.as_str().to_string(),
+            health: enemy.health,
+            max_health: enemy.max_health,
+            attack_damage: enemy.attack_damage,
+            attack_range: enemy.attack_range,
+            attack_speed: enemy.attack_speed,
             last_attack_time: new_last_attack_time,
-            ..enemy
         });
     }
 }

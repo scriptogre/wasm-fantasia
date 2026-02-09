@@ -3,11 +3,14 @@ use crate::asset_loading::Models;
 use crate::models::SpawnEnemy;
 use crate::player::{Animation, find_animation_player_descendant};
 use crate::rules::{Stat, Stats};
-use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
 use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::Start;
 use std::time::Duration;
 use wasm_fantasia_shared::combat::{defaults, enemy_ai_decision, EnemyBehaviorKind};
+
+/// Enemies beyond this distance from the camera have their animations paused.
+const ANIMATION_CULL_DISTANCE: f32 = 30.0;
+const ANIMATION_CULL_DISTANCE_SQ: f32 = ANIMATION_CULL_DISTANCE * ANIMATION_CULL_DISTANCE;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(spawn_enemy_in_front)
@@ -18,6 +21,8 @@ pub fn plugin(app: &mut App) {
                 enemy_ai
                     .run_if(in_state(Screen::Gameplay))
                     .run_if(not(is_paused)),
+                cull_enemy_animations
+                    .run_if(in_state(Screen::Gameplay)),
                 animate_enemies
                     .in_set(PostPhysicsAppSystems::PlayAnimations)
                     .run_if(in_state(Screen::Gameplay)),
@@ -63,19 +68,14 @@ fn spawn_enemy_in_front(
     }
 
     // Offline fallback: spawn locally
-    let right = player_transform.right();
-    let base_pos = pos + *forward * 5.0;
+    // TODO(server-abstraction): spawn logic is duplicated in server's spawn_enemies reducer.
+    let count = 80 + (rand::random::<u32>() % 41); // 80–120 enemies
 
-    let offsets = [
-        Vec3::ZERO,
-        *right * 1.5 + *forward * -0.5,
-        *right * -1.5 + *forward * -0.5,
-        *right * 2.5 + *forward * -1.5,
-        *right * -2.5 + *forward * -1.5,
-    ];
-
-    for (i, offset) in offsets.iter().enumerate() {
-        let spawn_pos = base_pos + *offset;
+    for i in 0..count {
+        let angle = rand::random::<f32>() * std::f32::consts::TAU;
+        let radius = defaults::ENEMY_SPAWN_RADIUS_MIN
+            + rand::random::<f32>() * (defaults::ENEMY_SPAWN_RADIUS_MAX - defaults::ENEMY_SPAWN_RADIUS_MIN);
+        let spawn_pos = pos + Vec3::new(angle.cos() * radius, 0.0, angle.sin() * radius);
 
         commands.spawn((
             Name::new(format!("TestEnemy_{}", i)),
@@ -86,14 +86,10 @@ fn spawn_enemy_in_front(
             Stats::new()
                 .with(Stat::MaxHealth, defaults::ENEMY_HEALTH)
                 .with(Stat::Health, defaults::ENEMY_HEALTH),
-            Collider::capsule(0.5, 1.0),
-            RigidBody::Kinematic,
-            LockedAxes::ROTATION_LOCKED,
-            Mass(500.0),
         ));
     }
 
-    debug!("Spawned 5 enemies locally");
+    debug!("Spawned {} enemies locally", count);
 }
 
 // =============================================================================
@@ -148,7 +144,6 @@ fn prepare_enemy_scene(
     mut enemy_q: Query<&mut EnemyAnimations>,
     mut commands: Commands,
     mut animation_graphs: ResMut<Assets<AnimationGraph>>,
-    mut animation_clips: ResMut<Assets<AnimationClip>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mesh_materials: Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
 ) {
@@ -188,12 +183,10 @@ fn prepare_enemy_scene(
 
     for anim in zombie_clips {
         if let Some(clip_handle) = gltf.named_animations.get(anim.clip_name()) {
-            if let Some(original_clip) = animation_clips.get(clip_handle) {
-                let clip = original_clip.clone();
-                let modified_handle = animation_clips.add(clip);
-                let node_index = graph.add_clip(modified_handle, 1.0, root_node);
-                enemy_animations.animations.insert(anim, node_index);
-            }
+            // Share the original clip handle — each AnimationPlayer tracks its own
+            // playback state independently, so the clip data itself can be shared.
+            let node_index = graph.add_clip(clip_handle.clone(), 1.0, root_node);
+            enemy_animations.animations.insert(anim, node_index);
         }
     }
 
@@ -296,6 +289,18 @@ fn enemy_ai(
     let player_pos = player_transform.translation;
     let dt = time.delta_secs();
 
+    // Collect alive enemy positions for separation (read-only pass)
+    let positions: Vec<(Entity, Vec3)> = enemies
+        .iter()
+        .filter_map(|(entity, transform, _, _, health)| {
+            if health.is_dead() {
+                None
+            } else {
+                Some((entity, transform.translation))
+            }
+        })
+        .collect();
+
     for (entity, mut transform, mut behavior, mut ai, health) in &mut enemies {
         // Skip server-driven enemies in multiplayer — the reconciler handles those
         #[cfg(feature = "multiplayer")]
@@ -339,9 +344,61 @@ fn enemy_ai(
             transform.translation += move_dir * defaults::ENEMY_WALK_SPEED * dt;
         }
 
+        // Enemy-enemy separation — push apart to prevent stacking
+        let mut separation = Vec3::ZERO;
+        for &(other_entity, other_pos) in &positions {
+            if other_entity == entity {
+                continue;
+            }
+            let diff = Vec3::new(
+                enemy_pos.x - other_pos.x,
+                0.0,
+                enemy_pos.z - other_pos.z,
+            );
+            let dist = diff.length();
+            if dist < defaults::ENEMY_SEPARATION_RADIUS && dist > 0.01 {
+                separation += diff.normalize() * (1.0 - dist / defaults::ENEMY_SEPARATION_RADIUS);
+            }
+        }
+        if separation.length() > 0.01 {
+            transform.translation +=
+                separation.normalize() * defaults::ENEMY_SEPARATION_STRENGTH * dt;
+        }
+
         // Reset cooldown on attack
         if decision == EnemyBehaviorKind::Attack {
             ai.attack_cooldown.reset();
+        }
+    }
+}
+
+// =============================================================================
+// Distance-based animation culling — pause animations for far enemies
+// =============================================================================
+
+fn cull_enemy_animations(
+    enemies: Query<(&Transform, &EnemyAnimations), With<Enemy>>,
+    camera: Query<&Transform, (With<SceneCamera>, Without<Enemy>)>,
+    mut animation_players: Query<&mut AnimationPlayer>,
+) {
+    let Ok(camera_transform) = camera.single() else {
+        return;
+    };
+    let camera_pos = camera_transform.translation;
+
+    for (transform, anims) in &enemies {
+        let Some(anim_entity) = anims.animation_player_entity else {
+            continue;
+        };
+        let Ok(mut anim_player) = animation_players.get_mut(anim_entity) else {
+            continue;
+        };
+
+        let distance_sq = transform.translation.distance_squared(camera_pos);
+        if distance_sq > ANIMATION_CULL_DISTANCE_SQ {
+            anim_player.pause_all();
+        } else {
+            anim_player.resume_all();
         }
     }
 }

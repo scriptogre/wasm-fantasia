@@ -553,10 +553,6 @@ fn reconcile(
                 Stats::new()
                     .with(Stat::MaxHealth, row.max_health)
                     .with(Stat::Health, row.health),
-                Collider::capsule(0.5, 1.0),
-                RigidBody::Kinematic,
-                LockedAxes::ROTATION_LOCKED,
-                Mass(500.0),
             ));
         } else {
             // Remote player: capsule mesh (TODO: player model for remotes)
