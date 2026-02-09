@@ -26,7 +26,7 @@ Bevy 0.17 3D action RPG targeting native and WebAssembly. Flat module architectu
 | `client/` | Bevy game client — all gameplay, rendering, UI, audio |
 | `shared/` | Pure functions shared between client and server (combat resolution, rules, RNG). No Bevy types. |
 | `server/` | SpacetimeDB module — authoritative game state, reducers |
-| `crates/spacetimedb-sdk/` | Local SpacetimeDB SDK fork |
+| `crates/spacetimedb-sdk/` | Local SpacetimeDB SDK fork (WASM compatibility patches) |
 
 ### Major Systems (all under `client/src/`)
 
@@ -129,6 +129,12 @@ The module that owns a domain concept owns its entity archetype.
 - `combat/enemy.rs` owns enemy bundles (Health, Stats, Combatant, Collider, mesh)
 - `player/` owns player bundles
 - Networking should not construct domain bundles — it fires spawn events, the owning module's observer builds the entity
+
+### SpacetimeDB
+
+When making changes to SpacetimeDB server modules, client networking, or SDK code, read https://spacetimedb.com/llms.txt to ensure you're using the current API correctly.
+
+The SDK at `crates/spacetimedb-sdk/` is a local fork with WASM patches (mutex safety, WebSocket split, credential storage). When upgrading SpacetimeDB versions, bump pins in both `server/Cargo.toml` and `crates/spacetimedb-sdk/Cargo.toml`, then verify the WASM patches still apply.
 
 ### Multiplayer Runtime
 

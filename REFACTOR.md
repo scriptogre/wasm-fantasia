@@ -8,24 +8,139 @@ The client has 10+ bespoke networking systems (spawn_remote_players, sync_npc_en
 
 One generic reconciler. The SpacetimeDB client cache is a local mirror of server state. Each frame, the reconciler diffs the cache against the ECS and patches what's different. No callbacks, no message queues, no per-entity-type sync systems. Like HTMX's morph — server describes the world, client renders it.
 
-## Shared Types
+## Server Tables
 
-`WorldEntity` and `CombatStats` are `#[spacetimedb::type]` structs embedded in every table that represents a game-world entity. The compiler guarantees all tables share the same fields.
+Flat tables. No embedded `#[spacetimedb::type]` structs — keeps DB access clean (`player.x` not `player.entity.x`). The reconciler constructs typed ECS components from flat fields in one place.
+
+### Player
 
 ```rust
-// shared/src/schema.rs
+#[spacetimedb::table(name = player, public)]
+pub struct Player {
+    #[primary_key]
+    pub identity: Identity,
+    pub name: Option<String>,
+    pub online: bool,
+    pub last_update: i64,
 
-#[spacetimedb::type]
+    // position
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub rotation_y: f32,
+
+    // animation
+    pub animation_state: String,
+    pub attack_sequence: u32,
+    pub attack_animation: String,
+
+    // health
+    pub health: f32,
+    pub max_health: f32,
+
+    // combat
+    pub attack_damage: f32,
+    pub crit_chance: f32,
+    pub crit_multiplier: f32,
+    pub attack_range: f32,
+    pub attack_arc: f32,
+    pub knockback_force: f32,
+    pub attack_speed: f32,
+    pub last_attack_time: i64,
+}
+```
+
+### Enemy
+
+Same shape minus identity/name/online. Enemies that can fight like players get the full combat stat set. Simpler enemies (e.g. training dummies) just leave stats at zero.
+
+```rust
+#[spacetimedb::table(name = enemy, public)]
+pub struct Enemy {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub enemy_type: String,
+
+    // position
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub rotation_y: f32,
+
+    // animation
+    pub animation_state: String,
+
+    // health
+    pub health: f32,
+    pub max_health: f32,
+
+    // combat
+    pub attack_damage: f32,
+    pub attack_range: f32,
+    pub attack_speed: f32,
+    pub last_attack_time: i64,
+}
+```
+
+### CombatEvent
+
+Ephemeral hit notification for VFX. Stripped to the minimum the client needs: where it happened, how much, was it a crit. No attacker identity, no target identity, no polymorphic FK.
+
+```rust
+#[spacetimedb::table(name = combat_event, public)]
+pub struct CombatEvent {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub damage: f32,
+    pub is_crit: bool,
+    pub timestamp: i64,
+}
+```
+
+### ActiveEffect
+
+Satellite table for dynamic, scriptable effects (buffs, debuffs, DoTs). Replaces hardcoded `stacks`/`stack_decay`/`last_hit_time` columns on Player. When Rhai/Lua scripting arrives, scripts insert/update/delete rows here. The reconciler picks them up automatically — just another table.
+
+```rust
+#[spacetimedb::table(name = active_effect, public)]
+pub struct ActiveEffect {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub owner: Identity,
+    pub effect_type: String,
+    pub magnitude: f32,
+    pub duration: f32,
+    pub timestamp: i64,
+}
+```
+
+The server's combat resolver queries this table for the attacker, finds relevant effects (e.g. `"stacking_damage"`), and applies them. No hardcoded buff columns on entity tables.
+
+**Limitation:** `owner` is `Identity`, so this only supports player-owned effects. When enemies need buffs, either add `owner_enemy_id: Option<u64>` or split into `player_effect`/`enemy_effect` tables. Cross that bridge when we get there.
+
+## Client Components
+
+The reconciler constructs these typed ECS components from flat DB fields. They exist only on the client — the server has no knowledge of them.
+
+```rust
+/// Target position for interpolation. The reconciler writes this;
+/// a separate system lerps Transform toward it each frame.
+#[derive(Component, Clone)]
 pub struct WorldEntity {
     pub x: f32,
     pub y: f32,
     pub z: f32,
     pub rotation_y: f32,
-    pub health: f32,
-    pub max_health: f32,
 }
 
-#[spacetimedb::type]
+/// Offensive combat stats. Queried by combat resolution.
+#[derive(Component, Clone)]
 pub struct CombatStats {
     pub attack_damage: f32,
     pub crit_chance: f32,
@@ -34,65 +149,15 @@ pub struct CombatStats {
     pub attack_arc: f32,
     pub knockback_force: f32,
     pub attack_speed: f32,
-    pub stacks: f32,
-    pub stack_decay: f32,
-    pub last_hit_time: i64,
     pub last_attack_time: i64,
-    pub animation_state: String,
-    pub attack_sequence: u32,
-    pub attack_animation: String,
 }
 ```
 
-## Server Tables
+`Health { current, max }` already exists as its own component — no new type needed.
 
-Separate tables for type safety and scoped queries. Each embeds `WorldEntity` + `CombatStats`.
+## ServerId
 
-```rust
-// server/src/lib.rs
-
-#[spacetimedb::table(name = player, public)]
-pub struct Player {
-    #[primary_key]
-    pub identity: Identity,
-    pub name: Option<String>,
-    pub online: bool,
-    pub last_update: i64,
-    pub entity: WorldEntity,
-    pub combat: CombatStats,
-}
-
-#[spacetimedb::table(name = enemy, public)]
-pub struct Enemy {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub enemy_type: EnemyKind,
-    pub entity: WorldEntity,
-    pub combat: CombatStats,
-}
-
-#[spacetimedb::table(name = combat_event, public)]
-pub struct CombatEvent {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub attacker: Identity,
-    pub target_player: Option<Identity>,
-    pub target_enemy_id: Option<u64>,
-    pub damage: f32,
-    pub is_crit: bool,
-    pub attacker_x: f32,
-    pub attacker_z: f32,
-    pub timestamp: i64,
-}
-```
-
-Adding a field to `WorldEntity` or `CombatStats` updates all tables at once. Adding a new entity table (e.g. destructible crates with just `entity: WorldEntity`) requires one new `.chain()` call in the reconciler.
-
-## Client: ServerId
-
-A component that links an ECS entity to a server table row. The only per-type enum in the system.
+Links an ECS entity to a server table row. The only per-type enum in the system.
 
 ```rust
 #[derive(Component, Clone, Hash, Eq, PartialEq)]
@@ -105,7 +170,7 @@ pub enum ServerId {
 
 ## The Reconciler
 
-One function. Every table is another `.chain()`. `WorldEntity` and `CombatStats` are stored as components directly — no intermediate proxy types.
+One function. Every table is another `.chain()`. The reconciler constructs `WorldEntity`, `CombatStats`, and `Health` from flat DB fields.
 
 The local player already exists (spawned by the player module). The reconciler patches its health from the server row and skips spawning a duplicate. Remote entities are spawned, patched, or despawned to match server state.
 
@@ -114,8 +179,8 @@ Combat events are just another table. Spawning an entity with `CombatEventData` 
 ```rust
 fn reconcile(
     conn: Res<SpacetimeDbConnection>,
-    mut remote_entities: Query<(Entity, &ServerId, &mut WorldEntity, &mut CombatStats)>,
-    mut local_health: Query<&mut Health, With<Player>>,
+    mut remote_entities: Query<(Entity, &ServerId, &mut WorldEntity, &mut CombatStats, &mut Health)>,
+    mut local_health: Query<&mut Health, (With<Player>, Without<ServerId>)>,
     mut combat_events: Query<(Entity, &ServerId), With<CombatEventData>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
@@ -124,21 +189,53 @@ fn reconcile(
     let mut seen = HashSet::new();
 
     // ── Collect all entity tables into one flat list ───
-    let rows: Vec<(ServerId, WorldEntity, CombatStats, &str, f32)> =
+    // Each row: (id, position, combat stats, health, max_health, mesh, collider_radius)
+    let rows: Vec<(ServerId, WorldEntity, CombatStats, f32, f32, &str, f32)> =
         conn.db.player().iter()
-            .map(|p| (ServerId::Player(p.identity), p.entity, p.combat, "player.glb", 0.4))
+            .filter(|p| p.online)
+            .map(|p| (
+                ServerId::Player(p.identity),
+                WorldEntity { x: p.x, y: p.y, z: p.z, rotation_y: p.rotation_y },
+                CombatStats {
+                    attack_damage: p.attack_damage,
+                    crit_chance: p.crit_chance,
+                    crit_multiplier: p.crit_multiplier,
+                    attack_range: p.attack_range,
+                    attack_arc: p.attack_arc,
+                    knockback_force: p.knockback_force,
+                    attack_speed: p.attack_speed,
+                    last_attack_time: p.last_attack_time,
+                },
+                p.health, p.max_health,
+                "player.glb", 0.4,
+            ))
         .chain(
             conn.db.enemy().iter()
-                .map(|e| (ServerId::Enemy(e.id), e.entity, e.combat, "enemy.glb", 0.5))
+                .map(|e| (
+                    ServerId::Enemy(e.id),
+                    WorldEntity { x: e.x, y: e.y, z: e.z, rotation_y: e.rotation_y },
+                    CombatStats {
+                        attack_damage: e.attack_damage,
+                        crit_chance: 0.0,
+                        crit_multiplier: 1.0,
+                        attack_range: e.attack_range,
+                        attack_arc: 180.0,
+                        knockback_force: 0.0,
+                        attack_speed: e.attack_speed,
+                        last_attack_time: e.last_attack_time,
+                    },
+                    e.health, e.max_health,
+                    "enemy.glb", 0.5,
+                ))
         )
         .collect();
 
     // ── Local player: patch health, skip spawning ─────
-    for (id, entity, _, _, _) in &rows {
+    for (id, _, _, health, _, _, _) in &rows {
         if let ServerId::Player(identity) = id {
             if Some(*identity) == my_id {
-                if let Ok(mut health) = local_health.single_mut() {
-                    health.current = entity.health;
+                if let Ok(mut h) = local_health.single_mut() {
+                    h.current = *health;
                 }
                 seen.insert(id.clone());
             }
@@ -146,25 +243,27 @@ fn reconcile(
     }
 
     // ── Patch or despawn existing remote entities ──────
-    for (bevy_entity, id, mut world_entity, mut combat_stats) in &mut remote_entities {
-        if let Some((_, entity, combat, _, _)) = rows.iter().find(|(rid, ..)| rid == id) {
+    for (bevy_entity, id, mut world_entity, mut combat_stats, mut health) in &mut remote_entities {
+        if let Some((_, we, cs, hp, max_hp, _, _)) = rows.iter().find(|(rid, ..)| rid == id) {
             seen.insert(id.clone());
-            *world_entity = entity.clone();
-            *combat_stats = combat.clone();
+            *world_entity = we.clone();
+            *combat_stats = cs.clone();
+            health.current = *hp;
+            health.max = *max_hp;
         } else {
             commands.entity(bevy_entity).despawn_recursive();
         }
     }
 
     // ── Spawn new remote entities ──────────────────────
-    for (id, entity, combat, mesh, radius) in &rows {
+    for (id, world_entity, combat_stats, health, max_health, mesh, radius) in &rows {
         if !seen.contains(id) {
             commands.spawn((
                 id.clone(),
-                entity.clone(),
-                combat.clone(),
-                Transform::from_xyz(entity.x, entity.y, entity.z),
-                Health::new(entity.max_health),
+                world_entity.clone(),
+                combat_stats.clone(),
+                Transform::from_xyz(world_entity.x, world_entity.y, world_entity.z),
+                Health::new(*max_health).with_current(*health),
                 Mesh3d(asset_server.load(*mesh)),
                 Collider::capsule(*radius, 1.0),
                 RigidBody::Dynamic,
@@ -197,8 +296,9 @@ fn reconcile(
                 CombatEventData {
                     damage: event.damage,
                     is_crit: event.is_crit,
-                    attacker_x: event.attacker_x,
-                    attacker_z: event.attacker_z,
+                    x: event.x,
+                    y: event.y,
+                    z: event.z,
                 },
             ));
         }
@@ -263,15 +363,23 @@ Client → server systems stay as-is:
 | `handle_remote_death` | reconciler (server deletes row → despawn) |
 | `sync_npc_enemies` | reconciler (one `.chain()`) |
 | `process_remote_combat_events` | reconciler (combat events as entities) |
+| `stacks`/`stack_decay` columns on Player | `ActiveEffect` satellite table |
 
 Also deleted: `networking/player.rs` entirely, most of `networking/combat.rs`.
 
 ## Adding a New Synced Entity Type
 
-1. Define the server table embedding `entity: WorldEntity` (and `combat: CombatStats` if it fights)
+1. Add the server table with position + health + combat columns as needed
 2. Add a `ServerId` variant
-3. Add one `.chain()` in the reconciler's row collection
+3. Add one `.chain()` in the reconciler's row collection, constructing `WorldEntity`/`CombatStats`/`Health` from the flat fields
 4. Reconciler body doesn't change
+
+## Adding a New Dynamic Effect
+
+1. Server inserts an `ActiveEffect` row (e.g. `effect_type: "stacking_damage"`)
+2. Server's combat resolver queries `active_effect` table for the attacker
+3. Client reconciler picks up the row automatically
+4. When Rhai/Lua scripting exists, scripts manage these rows instead of hardcoded Rust
 
 ## Verification
 

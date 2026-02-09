@@ -1,6 +1,6 @@
 [package]
 name = "spacetimedb-sdk"
-version = "1.11.2"
+version = "1.12.0"
 edition = "2021"
 description = "A Rust SDK for clients to interface with SpacetimeDB (with WASM support)"
 license-file = "LICENSE"
@@ -38,11 +38,11 @@ prometheus = "0.13.0"
 rand = "0.9"
 thiserror = "1.0.37"
 
-spacetimedb-client-api-messages = "=1.11.2"
-spacetimedb-data-structures = "=1.11.2"
-spacetimedb-lib = { version = "=1.11.2", default-features = false, features = ["serde", "metrics_impls"] }
-spacetimedb-metrics = "=1.11.2"
-spacetimedb-sats = "=1.11.2"
+spacetimedb-client-api-messages = "=1.12.0"
+spacetimedb-data-structures = "=1.12.0"
+spacetimedb-lib = { version = "=1.12.0", default-features = false, features = ["serde", "metrics_impls"] }
+spacetimedb-metrics = "=1.12.0"
+spacetimedb-sats = "=1.12.0"
 
 # WASM-optional deps
 getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
