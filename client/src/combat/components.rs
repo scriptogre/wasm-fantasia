@@ -121,3 +121,9 @@ pub struct PlayerCombatant;
 #[reflect(Component)]
 pub struct Enemy;
 
+/// Remaining knockback displacement to apply smoothly over frames.
+/// TODO(server-physics): Remove once Avian3d runs on the server — knockback
+/// becomes a physics impulse and the engine handles smooth movement natively.
+#[derive(Component, Debug)]
+pub struct KnockbackRemaining(pub Vec3);
+

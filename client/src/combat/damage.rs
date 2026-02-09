@@ -1,18 +1,24 @@
 use super::*;
-use avian3d::prelude::LinearVelocity;
-use bevy_tnua::prelude::*;
+
+/// Same interpolation speed as MP entity sync — knockback looks identical.
+/// TODO(server-physics): Remove once knockback is physics-based.
+const KNOCKBACK_LERP_SPEED: f32 = 12.0;
 
 pub fn plugin(app: &mut App) {
-    app.add_observer(on_damage).add_observer(on_death);
+    app.add_observer(on_damage)
+        .add_observer(on_death)
+        .add_systems(
+            Update,
+            drain_knockback.run_if(in_state(Screen::Gameplay)),
+        );
 }
 
 /// Observer: apply damage and knockback when [`DamageDealt`] is triggered.
-/// Server-owned entities (multiplayer): health is server-authoritative — we skip
-/// `take_damage` and let the reconciler handle it. VFX and knockback still fire
-/// for immediate feedback.
+/// Server-owned entities (multiplayer): health AND knockback are server-authoritative —
+/// the reconciler handles both. VFX still fires for immediate feedback.
 fn on_damage(
     on: On<DamageDealt>,
-    mut targets: Query<(&mut Health, Option<&mut TnuaController>)>,
+    mut targets: Query<(&mut Health, Option<&mut KnockbackRemaining>)>,
     #[cfg(feature = "multiplayer")] server_entities: Query<
         (),
         With<crate::networking::ServerId>,
@@ -21,20 +27,29 @@ fn on_damage(
 ) {
     let event = on.event();
 
-    let Ok((mut health, controller)) = targets.get_mut(event.target) else {
+    let Ok((mut health, knockback)) = targets.get_mut(event.target) else {
         return;
     };
 
-    // Server-owned entities: don't modify health locally, let reconciler handle it
+    // Server-owned entities: server handles health + knockback, reconciler propagates
     #[cfg(feature = "multiplayer")]
     let is_remote = server_entities.get(event.target).is_ok();
     #[cfg(not(feature = "multiplayer"))]
     let is_remote = false;
 
     let died = if is_remote {
-        false // Server decides death
+        false
     } else {
-        health.take_damage(event.damage)
+        let died = health.take_damage(event.damage);
+        // Queue knockback displacement — drained smoothly by drain_knockback
+        if let Some(mut kb) = knockback {
+            kb.0 += event.force;
+        } else {
+            commands
+                .entity(event.target)
+                .insert(KnockbackRemaining(event.force));
+        }
+        died
     };
 
     // Trigger hit feedback (VFX, damage numbers, screen shake, etc.) regardless
@@ -45,18 +60,6 @@ fn on_damage(
         is_crit: event.is_crit,
         feedback: event.feedback.clone(),
     });
-
-    // Apply force (knockback, launch, pull, etc.)
-    if let Some(mut controller) = controller {
-        controller.basis(TnuaBuiltinWalk {
-            desired_velocity: event.force,
-            ..default()
-        });
-    } else {
-        commands
-            .entity(event.target)
-            .insert(LinearVelocity(event.force));
-    }
 
     if died {
         commands.trigger(Died {
@@ -84,4 +87,23 @@ fn on_death(
     }
 
     commands.entity(event.entity).despawn();
+}
+
+/// Smoothly apply remaining knockback displacement each frame.
+/// Uses the same lerp speed as MP interpolation for visual consistency.
+/// TODO(server-physics): Delete — physics impulse + engine deceleration replaces this.
+fn drain_knockback(
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut KnockbackRemaining, &mut Transform)>,
+    mut commands: Commands,
+) {
+    let alpha = (time.delta_secs() * KNOCKBACK_LERP_SPEED).min(1.0);
+    for (entity, mut kb, mut transform) in &mut query {
+        let step = kb.0 * alpha;
+        transform.translation += step;
+        kb.0 -= step;
+        if kb.0.length_squared() < 0.0001 {
+            commands.entity(entity).remove::<KnockbackRemaining>();
+        }
+    }
 }

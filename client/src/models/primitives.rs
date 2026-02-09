@@ -12,7 +12,7 @@ macro_rules! markers {
     };
 }
 
-markers!(SceneCamera);
+markers!(SceneCamera, BlocksGameplay);
 
 #[macro_export]
 macro_rules! timers {

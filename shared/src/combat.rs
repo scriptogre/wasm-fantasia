@@ -8,7 +8,8 @@ pub mod defaults {
     pub const CRIT_MULTIPLIER: f32 = 2.5;
     pub const ATTACK_RANGE: f32 = 3.6;
     pub const ATTACK_ARC: f32 = 150.0;
-    pub const KNOCKBACK: f32 = 1.0;
+    /// Knockback displacement in meters per hit. Crits multiply this by CritMultiplier.
+    pub const KNOCKBACK: f32 = 0.3;
     pub const ATTACK_SPEED: f32 = 1.0;
     pub const STACK_DECAY: f32 = 2.5;
     pub const ATTACK_COOLDOWN_SECS: f32 = 0.42;
@@ -52,6 +53,24 @@ impl HitFeedback {
             rumble_duration: 60.0,
         }
     }
+}
+
+/// Compute the position displacement for a knockback hit.
+/// Both client (singleplayer) and server (multiplayer) call this to ensure
+/// identical knockback behavior. Returns the world-space offset to apply.
+///
+/// TODO(server-physics): Replace with physics impulse once Avian3d runs on the
+/// server. Both client and server will apply the same impulse; the physics
+/// engine handles the smooth displacement. Delete this function at that point.
+pub fn knockback_displacement(
+    radial_dir: glam::Vec2,
+    forward: glam::Vec2,
+    knockback: f32,
+    push: f32,
+    launch: f32,
+) -> glam::Vec3 {
+    let xz = radial_dir * knockback + forward * push;
+    glam::Vec3::new(xz.x, launch, xz.y)
 }
 
 /// 2D cone check on XZ plane. Returns true if target is within range and arc.

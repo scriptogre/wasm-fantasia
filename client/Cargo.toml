@@ -10,10 +10,8 @@ description = "Simple but comprehensive 3D RPG game template with gamepad suppor
 keywords = ["bevy", "game", "template", "devkit", "third person", "topdown", "gamedev"]
 
 [features]
-default = ["dev_native", "third_person"]
-web = ["bevy/webgpu", "third_person", "audio", "multiplayer"]
-custom_cursor  = []
-third_person = ["bevy_third_person_camera"]
+default = ["dev_native"]
+web = ["bevy/webgpu", "audio", "multiplayer"]
 audio = ["bevy_seedling", "bevy_shuffle_bag", "firewheel"]
 dev = [
     "bevy/bevy_dev_tools",
@@ -26,7 +24,6 @@ dev_native = [
     "enhanced",
     "audio",                        # Audio enabled for native builds
     "multiplayer",                  # Multiplayer enabled for native builds
-    "custom_cursor",
     "bevy-inspector-egui",
     "bevy_hanabi",                  # GPU particle effects (native only)
     "bevy/embedded_watcher",        # Enable embedded asset hot reloading for native dev builds.
@@ -107,7 +104,7 @@ bevy_shuffle_bag = { version = "^0.3", optional = true }                        
 firewheel = { version = "^0.9", optional = true }
 
 
-bevy_third_person_camera = { version = "^0.3", optional = true }                            # 3rd person camera
+bevy_third_person_camera = "^0.3"                                                           # 3rd person camera
 bevy_hanabi = { version = "0.17", default-features = false, features = ["3d"], optional = true }  # GPU particles
 spacetimedb-sdk = { path = "../crates/spacetimedb-sdk", optional = true }
 web-time = "1.1"

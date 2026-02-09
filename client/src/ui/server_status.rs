@@ -3,9 +3,7 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Table};
 
-use bevy_third_person_camera::ThirdPersonCamera;
-
-use crate::models::{is_multiplayer_mode, GoTo, Player, PlayerCtx, Screen};
+use crate::models::{is_multiplayer_mode, BlocksGameplay, GoTo, Screen};
 use crate::networking::generated::player_table::PlayerTableAccess;
 use crate::networking::{PingTracker, SpacetimeDbConnection, STALE_THRESHOLD_SECS};
 use crate::ui::colors::{NEUTRAL300, NEUTRAL950};
@@ -27,7 +25,9 @@ struct PlayersText;
 struct PingText;
 
 #[derive(Component)]
-struct ConnectingOverlay;
+struct ConnectingOverlay {
+    timeout: Timer,
+}
 
 // ── Plugin ──────────────────────────────────────────────────────────
 
@@ -42,7 +42,6 @@ pub fn plugin(app: &mut App) {
             tick_status,
             tick_players,
             tick_ping,
-            enforce_connecting_lock,
             dismiss_connecting_overlay,
         )
             .run_if(in_state(Screen::Gameplay).and(is_multiplayer_mode)),
@@ -57,10 +56,15 @@ const YELLOW: Color = Color::srgb(0.878, 0.780, 0.286);
 
 // ── Connecting overlay ───────────────────────────────────────────────
 
+const CONNECTING_TIMEOUT_SECS: f32 = 8.0;
+
 fn spawn_connecting_overlay(mut commands: Commands, font: Res<HudFont>) {
     commands
         .spawn((
-            ConnectingOverlay,
+            ConnectingOverlay {
+                timeout: Timer::from_seconds(CONNECTING_TIMEOUT_SECS, TimerMode::Once),
+            },
+            BlocksGameplay,
             DespawnOnExit(Screen::Gameplay),
             GlobalZIndex(200),
             ui_root("Connecting Overlay"),
@@ -84,47 +88,31 @@ fn cancel_connecting(_: On<Pointer<Click>>, mut commands: Commands) {
     commands.trigger(GoTo(Screen::Title));
 }
 
-/// While overlay is up: remove PlayerCtx (blocks WASD) and unlock cursor.
-/// When overlay is dismissed: restore both.
-fn enforce_connecting_lock(
-    overlay: Query<(), With<ConnectingOverlay>>,
-    player: Query<Entity, With<Player>>,
-    player_has_ctx: Query<(), (With<Player>, With<PlayerCtx>)>,
-    mut cam: Query<&mut ThirdPersonCamera>,
-    mut commands: Commands,
-) {
-    if overlay.single().is_ok() {
-        if player_has_ctx.single().is_ok() {
-            if let Ok(entity) = player.single() {
-                commands.entity(entity).remove::<PlayerCtx>();
-            }
-        }
-        if let Ok(mut cam) = cam.single_mut() {
-            cam.cursor_lock_active = false;
-        }
-    }
-}
-
+/// Despawn overlay on connection success or timeout.
+/// `sync_gameplay_lock` handles cursor/PlayerCtx when `BlocksGameplay` disappears.
 fn dismiss_connecting_overlay(
     conn: Option<Res<SpacetimeDbConnection>>,
-    overlay: Query<Entity, With<ConnectingOverlay>>,
-    player: Query<Entity, With<Player>>,
-    mut cam: Query<&mut ThirdPersonCamera>,
+    mut overlay: Query<(Entity, &mut ConnectingOverlay)>,
+    time: Res<Time>,
     mut commands: Commands,
 ) {
-    let Ok(entity) = overlay.single() else { return };
-    let Some(conn) = conn else { return };
-    if conn.conn.try_identity().is_none() {
+    let Ok((entity, mut overlay)) = overlay.single_mut() else {
+        return;
+    };
+
+    let connected = conn
+        .as_ref()
+        .is_some_and(|c| c.conn.try_identity().is_some());
+    overlay.timeout.tick(time.delta());
+    if !connected && !overlay.timeout.is_finished() {
         return;
     }
-    commands.entity(entity).despawn();
 
-    if let Ok(entity) = player.single() {
-        commands.entity(entity).insert(PlayerCtx);
+    if overlay.timeout.is_finished() && !connected {
+        warn!("Connection timed out — entering offline mode");
     }
-    if let Ok(mut cam) = cam.single_mut() {
-        cam.cursor_lock_active = true;
-    }
+
+    commands.entity(entity).despawn();
 }
 
 // ── Spawn ───────────────────────────────────────────────────────────

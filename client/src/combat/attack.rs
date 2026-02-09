@@ -211,12 +211,14 @@ fn on_attack_hit(
             continue;
         };
 
-        // Compute 3D force direction
+        // Shared knockback displacement — same function server uses
         let to_target = target_pos - attacker_pos;
-        let to_target_flat = Vec3::new(to_target.x, 0.0, to_target.z).normalize_or_zero();
-        let radial_dir = to_target_flat.normalize_or(forward_flat);
-        let force =
-            radial_dir * hit.knockback + forward_flat * hit.push + Vec3::Y * hit.launch;
+        let radial_2d = Vec2::new(to_target.x, to_target.z);
+        let fwd_2d = Vec2::new(forward_flat.x, forward_flat.z);
+        let radial_dir = radial_2d.normalize_or(fwd_2d);
+        let force = wasm_fantasia_shared::combat::knockback_displacement(
+            radial_dir, fwd_2d, hit.knockback, hit.push, hit.launch,
+        );
 
         commands.trigger(DamageDealt {
             source: attacker_entity,

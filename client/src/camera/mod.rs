@@ -6,16 +6,13 @@ use bevy::{
     render::view::Hdr,
 };
 
-#[cfg(feature = "third_person")]
 mod assist;
-#[cfg(feature = "third_person")]
 mod third_person;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_systems(Startup, spawn_camera);
 
-    #[cfg(feature = "third_person")]
     app.add_plugins((third_person::plugin, assist::plugin));
 }
 

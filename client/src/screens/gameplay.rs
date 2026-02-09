@@ -1,11 +1,16 @@
 //! The screen state for the main gameplay.
 use super::*;
 use bevy_seedling::prelude::*;
+use bevy_third_person_camera::ThirdPersonCamera;
 
 
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(Modals(Vec::default()))
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
+        .add_systems(
+            Update,
+            sync_gameplay_lock.run_if(in_state(Screen::Gameplay)),
+        )
         .add_observer(toggle_pause)
         .add_observer(trigger_menu_toggle_on_esc)
         .add_observer(toggle_mute);
@@ -13,12 +18,36 @@ pub(super) fn plugin(app: &mut App) {
 
 fn spawn_gameplay_ui() {}
 
+/// Declarative cursor/input lock. Runs every frame.
+/// Gameplay is blocked when: paused, or any entity with [`BlocksGameplay`] exists.
+/// When blocked: cursor unlocked, PlayerCtx removed.
+/// When unblocked: cursor locked, PlayerCtx restored.
+fn sync_gameplay_lock(
+    blockers: Query<(), With<BlocksGameplay>>,
+    state: Res<GameState>,
+    player: Query<Entity, With<Player>>,
+    mut cam: Query<&mut ThirdPersonCamera>,
+    mut commands: Commands,
+) {
+    let should_lock = !state.paused && blockers.is_empty();
+
+    if let Ok(mut cam) = cam.single_mut() {
+        cam.cursor_lock_active = should_lock;
+    }
+
+    if let Ok(entity) = player.single() {
+        if should_lock {
+            commands.entity(entity).insert(PlayerCtx);
+        } else {
+            commands.entity(entity).remove::<PlayerCtx>();
+        }
+    }
+}
+
 fn toggle_pause(
     _: On<TogglePause>,
     mut time: ResMut<Time<Virtual>>,
     mut state: ResMut<GameState>,
-    player: Query<Entity, With<Player>>,
-    mut commands: Commands,
     mode: Res<GameMode>,
 ) {
     let is_multiplayer = *mode == GameMode::Multiplayer;
@@ -32,14 +61,7 @@ fn toggle_pause(
     }
 
     state.paused = !state.paused;
-
-    if let Ok(entity) = player.single() {
-        if state.paused {
-            commands.entity(entity).remove::<PlayerCtx>();
-        } else {
-            commands.entity(entity).insert(PlayerCtx);
-        }
-    }
+    // PlayerCtx and cursor lock are handled by sync_gameplay_lock
 }
 
 fn toggle_mute(

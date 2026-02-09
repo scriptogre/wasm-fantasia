@@ -5,7 +5,6 @@ use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::*;
-#[cfg(feature = "third_person")]
 use bevy_third_person_camera::*;
 use bevy_tnua::prelude::*;
 use bevy_tnua::{TnuaAnimatingState, control_helpers::TnuaSimpleAirActionsCounter};
@@ -29,7 +28,6 @@ pub fn plugin(app: &mut App) {
         sound::plugin,
     ));
 
-    #[cfg(feature = "third_person")]
     app.add_plugins(ThirdPersonCameraPlugin).configure_sets(
         PostUpdate,
         bevy_third_person_camera::CameraSyncSet.before(TransformSystems::Propagate),
@@ -75,10 +73,9 @@ pub fn spawn_player(
             DespawnOnExit(Screen::Gameplay),
             pos,
             player,
-            // camera target component
-            #[cfg(feature = "third_person")]
             ThirdPersonCameraTarget,
-            PlayerCtx,
+            // PlayerCtx is NOT inserted here — sync_gameplay_lock adds it
+            // when no BlocksGameplay entities exist and the game isn't paused.
             // tnua character control bundles
             (
                 TnuaController::default(),

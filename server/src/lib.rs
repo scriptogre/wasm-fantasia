@@ -274,8 +274,18 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
             if hit.died {
                 ctx.db.enemy().delete(enemy);
             } else {
+                // TODO(server-physics): Replace with physics impulse once Avian3d
+                // runs server-side. The engine will handle displacement natively.
+                let radial = glam::Vec2::new(enemy.x - attacker.x, enemy.z - attacker.z);
+                let radial_dir = radial.normalize_or(fwd);
+                let disp = combat::knockback_displacement(
+                    radial_dir, fwd, hit.knockback, hit.push, hit.launch,
+                );
+
                 ctx.db.enemy().id().update(Enemy {
                     health: hit.new_health,
+                    x: enemy.x + disp.x,
+                    z: enemy.z + disp.z,
                     ..enemy
                 });
             }

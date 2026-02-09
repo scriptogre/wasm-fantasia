@@ -104,7 +104,8 @@ pub struct ReconnectTimer(pub Timer);
 impl Default for ReconnectTimer {
     fn default() -> Self {
         let mut timer = Timer::from_seconds(RECONNECT_INTERVAL_SECS, TimerMode::Repeating);
-        timer.tick(std::time::Duration::from_secs_f32(RECONNECT_INTERVAL_SECS));
+        // Pre-tick to almost done so the first real tick fires immediately
+        timer.tick(std::time::Duration::from_secs_f32(RECONNECT_INTERVAL_SECS - 0.01));
         Self(timer)
     }
 }
@@ -226,6 +227,10 @@ impl Plugin for NetworkingPlugin {
             .init_resource::<PingTracker>()
             .init_resource::<CombatEventTracker>()
             .add_systems(
+                OnEnter(Screen::Gameplay),
+                reset_reconnect_timer.run_if(is_multiplayer_mode),
+            )
+            .add_systems(
                 Update,
                 auto_connect.run_if(
                     in_state(Screen::Gameplay)
@@ -295,10 +300,10 @@ pub fn try_connect(
     config: &SpacetimeDbConfig,
     token: &SpacetimeDbToken,
 ) -> Option<SpacetimeDbConnection> {
-    info!("Connecting to SpacetimeDB at {}...", config.uri);
+    info!("Attempting SpacetimeDB connection to {}...", config.uri);
     match connection_builder!(config, token.0).build() {
         Ok(conn) => {
-            info!("Connected to SpacetimeDB server");
+            info!("Connection initiated — waiting for handshake");
             Some(SpacetimeDbConnection { conn })
         }
         Err(e) => {
@@ -306,6 +311,10 @@ pub fn try_connect(
             None
         }
     }
+}
+
+fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
+    *timer = ReconnectTimer::default();
 }
 
 fn disconnect_from_spacetimedb(
