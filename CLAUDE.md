@@ -65,6 +65,15 @@ Player is Dynamic RigidBody with capsule Collider. TnuaAvian3dSensorShape for gr
 - `dev_native` - Dev tools, inspector, asset hot-reloading (native)
 - `multiplayer` - Enables SpacetimeDB networking
 
+### Naming
+
+Full-length, explicit names. No abbreviations in struct fields, function names, component names, or resource names — except universally understood ones (`max`, `min`, `hp`, `id`, `fps`). Abbreviations are fine for very local variables (loop iterators, short-lived bindings).
+
+- `animation_state` not `anim_state`
+- `attack_sequence` not `attack_seq`
+- `rotation_y` not `rot_y`
+- `velocity_x` not `vel_x`
+
 ### Key Patterns
 
 1. **System Sets**: `PostPhysicsAppSystems` defines ordering: UserInput -> TickTimers -> ChangeUi -> PlaySounds -> PlayAnimations -> Update
