@@ -75,20 +75,62 @@ pub mod to {
     ) {
         state.reset();
         modals.clear();
+        commands.remove_resource::<ServerTarget>();
         commands.trigger(GoTo(Screen::Title));
     }
     pub fn settings(_: On<Pointer<Click>>, mut commands: Commands) {
         commands.trigger(GoTo(Screen::Settings));
     }
+
+    /// Native singleplayer: start a local SpacetimeDB subprocess, then connect.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn singleplayer(
         _: On<Pointer<Click>>,
         mut mode: ResMut<GameMode>,
+        mut commands: Commands,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
     ) {
         *mode = GameMode::Singleplayer;
+
+        #[cfg(feature = "multiplayer")]
+        {
+            // Start the local SpacetimeDB subprocess
+            let (server, state) = crate::networking::local_server::start();
+            let port = server.port;
+            commands.insert_resource(server);
+            commands.insert_resource(state);
+            commands.insert_resource(ServerTarget::Local { port });
+        }
+
         if resource_handles.is_all_done() {
+            #[cfg(feature = "multiplayer")]
+            next_screen.set(Screen::Connecting);
+            #[cfg(not(feature = "multiplayer"))]
             next_screen.set(Screen::Gameplay);
+        } else {
+            next_screen.set(Screen::Loading);
+        }
+    }
+
+    /// Web solo: private session on the remote server.
+    #[cfg(target_arch = "wasm32")]
+    #[cfg(feature = "multiplayer")]
+    pub fn solo(
+        _: On<Pointer<Click>>,
+        mut mode: ResMut<GameMode>,
+        mut commands: Commands,
+        config: Res<crate::networking::SpacetimeDbConfig>,
+        resource_handles: Res<ResourceHandles>,
+        mut next_screen: ResMut<NextState<Screen>>,
+    ) {
+        *mode = GameMode::Singleplayer;
+        commands.insert_resource(ServerTarget::Remote {
+            uri: config.uri.clone(),
+        });
+
+        if resource_handles.is_all_done() {
+            next_screen.set(Screen::Connecting);
         } else {
             next_screen.set(Screen::Loading);
         }
@@ -98,10 +140,16 @@ pub mod to {
     pub fn multiplayer(
         _: On<Pointer<Click>>,
         mut mode: ResMut<GameMode>,
+        mut commands: Commands,
+        config: Res<crate::networking::SpacetimeDbConfig>,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
     ) {
         *mode = GameMode::Multiplayer;
+        commands.insert_resource(ServerTarget::Remote {
+            uri: config.uri.clone(),
+        });
+
         if resource_handles.is_all_done() {
             next_screen.set(Screen::Connecting);
         } else {

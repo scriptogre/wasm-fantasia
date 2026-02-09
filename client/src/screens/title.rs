@@ -25,7 +25,18 @@ fn setup_menu(mut commands: Commands, mut state: ResMut<Session>) {
                 ..default()
             })
             .with_children(|buttons| {
+                // Native: "Singleplayer" starts a local SpacetimeDB subprocess
+                #[cfg(not(target_arch = "wasm32"))]
                 buttons.spawn(btn_big("Singleplayer", to::singleplayer));
+
+                // Web: "Solo" creates a private session on the remote server
+                #[cfg(target_arch = "wasm32")]
+                {
+                    #[cfg(feature = "multiplayer")]
+                    buttons.spawn(btn_big("Solo", to::solo));
+                    #[cfg(not(feature = "multiplayer"))]
+                    buttons.spawn(btn_big_disabled("Solo"));
+                }
 
                 #[cfg(feature = "multiplayer")]
                 buttons.spawn(btn_big("Multiplayer", to::multiplayer));

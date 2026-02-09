@@ -1,5 +1,7 @@
-//! Dedicated connecting screen for multiplayer — sits between Title and Gameplay.
+//! Dedicated connecting screen — sits between Title and Gameplay.
 //! Shows a console-style connection log with live status updates.
+//!
+//! Handles both local server startup (native SP) and remote connections (MP / web solo).
 
 use super::*;
 
@@ -57,11 +59,13 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                advance_local_server,
                 track_connection_state,
                 tick_connection,
                 tick_timeout,
                 update_log_display,
             )
+                .chain()
                 .run_if(in_state(Screen::Connecting)),
         );
 }
@@ -71,15 +75,31 @@ pub fn plugin(app: &mut App) {
 fn spawn_connecting_screen(
     mut commands: Commands,
     font: Res<HudFont>,
-    config: Res<SpacetimeDbConfig>,
+    server_target: Option<Res<ServerTarget>>,
+    mut config: ResMut<SpacetimeDbConfig>,
 ) {
     info!("Entering connecting screen");
 
     let mut log = ConnectionLog::default();
-    log.push(format!(
-        "Connecting to {} ({})...",
-        config.uri, config.module_name
-    ));
+
+    // Set the SpacetimeDbConfig URI from ServerTarget
+    match server_target.as_deref() {
+        Some(ServerTarget::Local { port }) => {
+            let uri = format!("ws://127.0.0.1:{port}");
+            config.uri = uri.clone();
+            log.push("Starting local SpacetimeDB server...");
+        }
+        Some(ServerTarget::Remote { uri }) => {
+            config.uri = uri.clone();
+            log.push(format!("Connecting to {} ({})...", uri, config.module_name));
+        }
+        None => {
+            log.push(format!(
+                "Connecting to {} ({})...",
+                config.uri, config.module_name
+            ));
+        }
+    }
 
     commands.insert_resource(log);
     commands.insert_resource(ConnectionTimeout(Timer::from_seconds(
@@ -142,6 +162,57 @@ fn cancel_connecting(_: On<Pointer<Click>>, mut commands: Commands) {
     commands.trigger(GoTo(Screen::Title));
 }
 
+// ── Local server state machine ──────────────────────────────────────
+
+/// Drive the local SpacetimeDB subprocess forward (native SP only).
+/// Once the server is ready, inserts the reconnect timer so `auto_connect` fires.
+#[allow(unused_variables, unused_mut)]
+fn advance_local_server(
+    mut log: ResMut<ConnectionLog>,
+    mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] mut server: Option<
+        ResMut<crate::networking::local_server::LocalServer>,
+    >,
+    #[cfg(not(target_arch = "wasm32"))] mut server_state: Option<
+        ResMut<crate::networking::local_server::LocalServerState>,
+    >,
+) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use crate::networking::local_server::{self, LocalServerState};
+
+        let (Some(ref mut server), Some(ref mut state)) = (server, server_state) else {
+            return;
+        };
+
+        let changed = local_server::advance(server, state);
+        if !changed {
+            return;
+        }
+
+        match state.as_ref() {
+            LocalServerState::WaitingForReady => {
+                log.push("Waiting for server to start...");
+            }
+            LocalServerState::Deploying => {
+                log.push("Server started. Deploying game module...");
+            }
+            LocalServerState::Ready => {
+                let uri = local_server::connection_uri(server);
+                log.push(format!("Module deployed. Connecting to {uri}..."));
+                // Kick off the reconnect timer so auto_connect fires
+                commands.insert_resource(ReconnectTimer::default());
+            }
+            LocalServerState::Failed(err) => {
+                log.push(format!("Local server error: {err}"));
+                // Go back to title after a brief pause
+                commands.trigger(GoTo(Screen::Title));
+            }
+            LocalServerState::Starting => {}
+        }
+    }
+}
+
 // ── Connection state tracking ───────────────────────────────────────
 
 fn track_connection_state(
@@ -151,7 +222,7 @@ fn track_connection_state(
     screen: Res<State<Screen>>,
     mut log: ResMut<ConnectionLog>,
 ) {
-    // First run: dump everything needs_connection checks
+    // First run: dump connection diagnostics
     if !log.showed_target {
         log.showed_target = true;
         let has_conn = conn.is_some();
@@ -163,12 +234,6 @@ fn track_connection_state(
             timer.0.elapsed_secs(),
             timer.0.duration().as_secs_f32(),
         ));
-        if *mode != GameMode::Multiplayer {
-            log.push(format!(
-                "WARNING: GameMode is {:?}, expected Multiplayer",
-                *mode
-            ));
-        }
         if has_conn {
             log.push("WARNING: stale SpacetimeDbConnection resource exists");
         }

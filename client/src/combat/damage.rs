@@ -14,8 +14,12 @@ pub fn plugin(app: &mut App) {
 }
 
 /// Observer: apply damage and knockback when [`DamageDealt`] is triggered.
-/// Server-owned entities (multiplayer): health AND knockback are server-authoritative —
+///
+/// Server-owned entities: health AND knockback are server-authoritative —
 /// the reconciler handles both. VFX still fires for immediate feedback.
+///
+/// The local player is the only entity whose health is mutated client-side
+/// (as a prediction — reconciler overwrites it from the server each frame).
 fn on_damage(
     on: On<DamageDealt>,
     mut targets: Query<(&mut Health, Option<&mut KnockbackRemaining>)>,
@@ -31,13 +35,14 @@ fn on_damage(
         return;
     };
 
-    // Server-owned entities: server handles health + knockback, reconciler propagates
+    // Server-owned entities: server handles health + knockback, reconciler propagates.
+    // Only the local player (no ServerId) gets client-side damage applied.
     #[cfg(feature = "multiplayer")]
-    let is_remote = server_entities.get(event.target).is_ok();
+    let is_server_owned = server_entities.get(event.target).is_ok();
     #[cfg(not(feature = "multiplayer"))]
-    let is_remote = false;
+    let is_server_owned = false;
 
-    let died = if is_remote {
+    let died = if is_server_owned {
         false
     } else {
         let died = health.take_damage(event.damage);

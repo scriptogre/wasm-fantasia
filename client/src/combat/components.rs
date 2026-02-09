@@ -182,23 +182,6 @@ pub struct EnemyAnimations {
     pub current_animation: Option<crate::player::Animation>,
 }
 
-/// Enemy AI state (singleplayer only).
-#[derive(Component)]
-pub struct EnemyAi {
-    pub attack_cooldown: Timer,
-}
-
-impl Default for EnemyAi {
-    fn default() -> Self {
-        Self {
-            attack_cooldown: Timer::from_seconds(
-                wasm_fantasia_shared::combat::defaults::ENEMY_ATTACK_COOLDOWN,
-                TimerMode::Once,
-            ),
-        }
-    }
-}
-
 /// Remaining knockback displacement to apply smoothly over frames.
 /// TODO(server-physics): Remove once Avian3d runs on the server — knockback
 /// becomes a physics impulse and the engine handles smooth movement natively.

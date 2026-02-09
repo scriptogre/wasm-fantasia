@@ -27,6 +27,17 @@ pub fn is_multiplayer_mode(mode: Res<GameMode>) -> bool {
     *mode == GameMode::Multiplayer
 }
 
+/// Describes where the SpacetimeDB instance lives.
+/// Inserted when the player picks a mode on the title screen;
+/// removed when returning to title.
+#[derive(Resource, Debug, Clone, PartialEq, Eq)]
+pub enum ServerTarget {
+    /// Native singleplayer — launch a local SpacetimeDB subprocess.
+    Local { port: u16 },
+    /// Multiplayer (all platforms) or web solo — connect to a remote server.
+    Remote { uri: String },
+}
+
 /// Runtime session flags — debug toggles, preferences, and transient state.
 /// Reset on return to title. Not persisted (see [`Settings`] for that).
 #[derive(Resource, Reflect, Debug, Clone)]
