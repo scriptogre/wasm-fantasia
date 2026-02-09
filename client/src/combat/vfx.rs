@@ -24,6 +24,7 @@ pub fn plugin(app: &mut App) {
 // ── Hit Flash ───────────────────────────────────────────────────────
 
 #[derive(Component)]
+#[component(storage = "SparseSet")]
 pub struct HitFlash {
     pub timer: f32,
     pub duration: f32,
@@ -97,6 +98,7 @@ pub struct ArcSlashAssets {
 }
 
 #[derive(Component)]
+#[component(storage = "SparseSet")]
 pub struct ArcSlash {
     pub timer: f32,
     pub duration: f32,
@@ -230,6 +232,7 @@ pub struct DebugHitboxAssets {
 }
 
 #[derive(Component)]
+#[component(storage = "SparseSet")]
 pub struct DebugHitbox {
     pub timer: f32,
     pub duration: f32,
@@ -335,6 +338,7 @@ fn setup_impact_assets(
 }
 
 #[derive(Component)]
+#[component(storage = "SparseSet")]
 pub struct ImpactVfx {
     pub timer: f32,
     pub duration: f32,
@@ -344,6 +348,7 @@ pub struct ImpactVfx {
 }
 
 #[derive(Component)]
+#[component(storage = "SparseSet")]
 pub struct ImpactBurst {
     pub timer: f32,
     pub duration: f32,

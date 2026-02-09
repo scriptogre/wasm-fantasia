@@ -45,7 +45,7 @@ fn soft_target_assist(
         return;
     };
 
-    if !attack_state.attacking {
+    if !attack_state.is_attacking() {
         return;
     }
 

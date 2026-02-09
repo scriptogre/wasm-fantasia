@@ -271,7 +271,7 @@ pub fn animating(
     // Dash takes visual priority over attack (attack hit still triggers via timer)
     let dashing = controller.action_name() == Some(TnuaBuiltinDash::NAME);
     if let Some(attack) = attack_state {
-        if attack.attacking && !dashing {
+        if attack.is_attacking() && !dashing {
             player.animation_state = AnimationState::Attack;
             // Keep TnuaAnimatingState in sync (for when attack ends)
             animating_state.update_by_discriminant(AnimationState::Attack);

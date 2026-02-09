@@ -19,6 +19,7 @@ bevy_third_person_camera = { git = "https://github.com/olekspickle/bevy_third_pe
 
 [profile.dev]
 opt-level = 1
+debug = 0
 [profile.dev.package."*"]
 opt-level = 3
 [profile.dev.package.wgpu-types]

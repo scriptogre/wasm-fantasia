@@ -91,22 +91,22 @@ fn tick_rules_system(time: Res<Time>, mut query: Query<(&OnTickRules, &mut Stats
 /// Syncs AttackState component fields to Stats so rules can react to attack phases.
 fn sync_attack_state_to_stats(mut query: Query<(&AttackState, &mut Stats)>) {
     for (attack_state, mut stats) in query.iter_mut() {
-        // Boolean: 1.0 = true, 0.0 = false
         stats.set(
             Stat::IsAttacking,
-            if attack_state.attacking { 1.0 } else { 0.0 },
+            if attack_state.is_attacking() { 1.0 } else { 0.0 },
         );
 
         stats.set(Stat::AttackProgress, attack_state.progress());
         stats.set(Stat::ComboCount, attack_state.attack_count as f32);
 
-        // Windup = attacking but hit hasn't triggered yet
-        let in_windup = attack_state.attacking && !attack_state.hit_triggered;
-        stats.set(Stat::InWindup, if in_windup { 1.0 } else { 0.0 });
-
-        // Recovery = attacking and hit has already triggered
-        let in_recovery = attack_state.attacking && attack_state.hit_triggered;
-        stats.set(Stat::InRecovery, if in_recovery { 1.0 } else { 0.0 });
+        stats.set(
+            Stat::InWindup,
+            if attack_state.in_windup() { 1.0 } else { 0.0 },
+        );
+        stats.set(
+            Stat::InRecovery,
+            if attack_state.in_recovery() { 1.0 } else { 0.0 },
+        );
     }
 }
 

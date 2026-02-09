@@ -86,19 +86,39 @@ fn tick_attack_state(
         let scaled_delta = time.delta().mul_f32(speed_mult);
         state.cooldown.tick(scaled_delta);
 
-        if state.attacking {
-            state.attack_time += time.delta_secs() * speed_mult;
+        let dt = time.delta_secs() * speed_mult;
 
-            if !state.hit_triggered && state.attack_time >= state.hit_time {
-                commands.trigger(AttackIntent { attacker: entity });
-                state.hit_triggered = true;
-            }
+        match &mut state.phase {
+            AttackPhase::Windup {
+                elapsed,
+                total_duration,
+                hit_time,
+            } => {
+                *elapsed += dt;
 
-            if state.attack_time >= state.attack_duration {
-                state.attacking = false;
-                state.attack_time = 0.0;
-                state.is_crit = false;
+                if *elapsed >= *hit_time {
+                    commands.trigger(AttackIntent { attacker: entity });
+                    let remaining_duration = *total_duration - *hit_time;
+                    let overshoot = *elapsed - *hit_time;
+                    state.phase = AttackPhase::Recovery {
+                        elapsed: overshoot,
+                        remaining_duration,
+                        total_duration: *total_duration,
+                    };
+                }
             }
+            AttackPhase::Recovery {
+                elapsed,
+                remaining_duration,
+                ..
+            } => {
+                *elapsed += dt;
+                if *elapsed >= *remaining_duration {
+                    state.phase = AttackPhase::Ready;
+                    state.is_crit = false;
+                }
+            }
+            AttackPhase::Ready => {}
         }
     }
 }

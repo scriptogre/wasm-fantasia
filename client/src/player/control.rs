@@ -86,8 +86,7 @@ pub fn plugin(app: &mut App) {
             (
                 movement.in_set(TnuaUserControlsSystems),
                 tick_input_buffer,
-                process_buffered_jump,
-                process_buffered_dash,
+                (process_buffered_jump, process_buffered_dash).after(tick_input_buffer),
             )
                 .run_if(in_state(Screen::Gameplay)),
         )
@@ -265,8 +264,8 @@ fn handle_dash(
 
     // Dash cancels any active attack
     if let Some(mut attack) = attack_state {
-        if attack.attacking {
-            attack.attacking = false;
+        if attack.is_attacking() {
+            attack.phase = AttackPhase::Ready;
         }
     }
 
@@ -310,8 +309,8 @@ fn process_buffered_dash(
 
     // Cancel attack if active
     if let Some(mut attack) = attack_state {
-        if attack.attacking {
-            attack.attacking = false;
+        if attack.is_attacking() {
+            attack.phase = AttackPhase::Ready;
         }
     }
 

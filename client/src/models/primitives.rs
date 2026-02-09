@@ -12,7 +12,12 @@ macro_rules! markers {
     };
 }
 
-markers!(SceneCamera, BlocksGameplay);
+markers!(SceneCamera);
+
+#[derive(Component, Reflect, Clone, Default)]
+#[component(storage = "SparseSet")]
+#[reflect(Component)]
+pub struct BlocksGameplay;
 
 #[macro_export]
 macro_rules! timers {

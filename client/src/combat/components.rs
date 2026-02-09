@@ -41,17 +41,30 @@ impl Default for Health {
     }
 }
 
+/// Phase of an attack's lifecycle. Ready → Windup → Recovery → Ready.
+#[derive(Reflect, Debug, Clone, Default, PartialEq)]
+pub enum AttackPhase {
+    #[default]
+    Ready,
+    Windup {
+        elapsed: f32,
+        total_duration: f32,
+        hit_time: f32,
+    },
+    Recovery {
+        elapsed: f32,
+        remaining_duration: f32,
+        total_duration: f32,
+    },
+}
+
 /// Tracks attack state for entities that can attack.
 #[derive(Component, Reflect, Debug, Clone, Default)]
 #[reflect(Component)]
 pub struct AttackState {
     pub cooldown: Timer,
-    pub attacking: bool,
-    pub attack_time: f32,
-    pub attack_duration: f32,
-    pub hit_time: f32,
+    pub phase: AttackPhase,
     pub attack_count: u32,
-    pub hit_triggered: bool,
     pub is_crit: bool,
 }
 
@@ -62,50 +75,78 @@ impl AttackState {
 
         Self {
             cooldown,
-            attacking: false,
-            attack_time: 0.0,
-            attack_duration: attack_timing::PUNCH_DURATION,
-            hit_time: attack_timing::PUNCH_DURATION * hit_timing::PUNCH_HIT_FRACTION,
+            phase: AttackPhase::Ready,
             attack_count: 0,
-            hit_triggered: false,
             is_crit: false,
         }
     }
 
+    pub fn is_attacking(&self) -> bool {
+        !matches!(self.phase, AttackPhase::Ready)
+    }
+
+    pub fn in_windup(&self) -> bool {
+        matches!(self.phase, AttackPhase::Windup { .. })
+    }
+
+    pub fn in_recovery(&self) -> bool {
+        matches!(self.phase, AttackPhase::Recovery { .. })
+    }
+
     pub fn can_attack(&self) -> bool {
-        self.cooldown.is_finished() && !self.attacking
+        self.cooldown.is_finished() && !self.is_attacking()
     }
 
     pub fn start_attack(&mut self, is_crit: bool) {
-        self.attacking = true;
-        self.attack_time = 0.0;
-        if is_crit {
-            self.attack_duration = attack_timing::HOOK_DURATION;
-            self.hit_time = attack_timing::HOOK_DURATION * hit_timing::HOOK_HIT_FRACTION;
+        let (total_duration, hit_time) = if is_crit {
+            (
+                attack_timing::HOOK_DURATION,
+                attack_timing::HOOK_DURATION * hit_timing::HOOK_HIT_FRACTION,
+            )
         } else {
-            self.attack_duration = attack_timing::PUNCH_DURATION;
-            self.hit_time = attack_timing::PUNCH_DURATION * hit_timing::PUNCH_HIT_FRACTION;
+            (
+                attack_timing::PUNCH_DURATION,
+                attack_timing::PUNCH_DURATION * hit_timing::PUNCH_HIT_FRACTION,
+            )
+        };
+        self.phase = AttackPhase::Windup {
+            elapsed: 0.0,
+            total_duration,
+            hit_time,
         };
         self.attack_count += 1;
-        self.hit_triggered = false;
         self.is_crit = is_crit;
         self.cooldown.reset();
     }
 
     pub fn progress(&self) -> f32 {
-        if self.attack_duration > 0.0 {
-            (self.attack_time / self.attack_duration).min(1.0)
-        } else {
-            1.0
+        match &self.phase {
+            AttackPhase::Ready => 0.0,
+            AttackPhase::Windup {
+                elapsed,
+                total_duration,
+                ..
+            } => {
+                if *total_duration > 0.0 {
+                    (*elapsed / *total_duration).min(1.0)
+                } else {
+                    1.0
+                }
+            }
+            AttackPhase::Recovery {
+                elapsed,
+                remaining_duration,
+                total_duration,
+            } => {
+                let hit_time = *total_duration - *remaining_duration;
+                if *total_duration > 0.0 {
+                    ((hit_time + *elapsed) / *total_duration).min(1.0)
+                } else {
+                    1.0
+                }
+            }
         }
     }
-}
-
-/// Marker for entities currently being knocked back.
-#[derive(Component, Reflect, Debug, Clone, Default)]
-#[reflect(Component)]
-pub struct Staggered {
-    pub duration: Timer,
 }
 
 /// Marker component for entities that can deal damage.
@@ -162,5 +203,6 @@ impl Default for EnemyAi {
 /// TODO(server-physics): Remove once Avian3d runs on the server — knockback
 /// becomes a physics impulse and the engine handles smooth movement natively.
 #[derive(Component, Debug)]
+#[component(storage = "SparseSet")]
 pub struct KnockbackRemaining(pub Vec3);
 

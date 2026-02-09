@@ -28,7 +28,6 @@ pub fn plugin(app: &mut App) {
 #[derive(Resource, Default)]
 pub struct HitStop {
     pub remaining: f32,
-    pub active: bool,
 }
 
 impl HitStop {
@@ -66,7 +65,6 @@ fn on_hit_stop(
 
     let adjusted = (duration * (1.0 - speed_reduction)).max(0.01);
     hit_stop.remaining = hit_stop.remaining.max(adjusted).min(HitStop::MAX_DURATION);
-    hit_stop.active = true;
     time.set_relative_speed(0.05);
 }
 
@@ -75,14 +73,13 @@ fn tick_hit_stop(
     mut hit_stop: ResMut<HitStop>,
     mut time: ResMut<Time<Virtual>>,
 ) {
-    if !hit_stop.active {
+    if hit_stop.remaining <= 0.0 {
         return;
     }
 
     hit_stop.remaining -= real_time.delta_secs();
 
     if hit_stop.remaining <= 0.0 {
-        hit_stop.active = false;
         hit_stop.remaining = 0.0;
         time.set_relative_speed(1.0);
     }
