@@ -35,7 +35,6 @@ pub fn add_new_modal(
         // Spawn persistent backdrop behind all modals
         commands.spawn((
             ModalBackdrop,
-            DespawnOnExit(Screen::Gameplay),
             ui_root("Modal Backdrop"),
             GlobalZIndex(199),
             BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),

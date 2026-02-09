@@ -154,7 +154,6 @@ fn update_target_indicator(
                 });
 
                 commands.spawn((
-                    DespawnOnExit(Screen::Gameplay),
                     TargetIndicator,
                     Mesh3d(mesh),
                     MeshMaterial3d(material),

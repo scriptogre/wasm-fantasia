@@ -67,7 +67,6 @@ fn spawn_enemy_in_front(
 
         commands.spawn((
             Name::new(format!("TestEnemy_{}", i)),
-            DespawnOnExit(Screen::Gameplay),
             Transform::from_translation(spawn_pos),
             Mesh3d(enemy_mesh.clone()),
             MeshMaterial3d(enemy_material),

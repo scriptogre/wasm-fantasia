@@ -13,7 +13,6 @@ pub fn click_spawn_settings(on: On<Pointer<Click>>, mut commands: Commands) {
 
 pub fn settings_modal() -> impl Bundle {
     (
-        DespawnOnExit(Screen::Gameplay),
         SettingsModal,
         settings_ui(),
     )
@@ -24,7 +23,6 @@ pub fn menu_modal() -> impl Bundle {
         .width(Vw(15.0))
         .padding(UiRect::axes(Vw(2.0), Vw(0.5)));
     (
-        DespawnOnExit(Screen::Gameplay),
         MenuModal,
         ui_root("In game menu"),
         GlobalZIndex(200),

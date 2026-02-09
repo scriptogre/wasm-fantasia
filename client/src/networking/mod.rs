@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use spacetimedb_sdk::DbContext;
 
 use crate::combat::{AttackState, Combatant, Enemy, Health};
-use crate::models::{is_multiplayer_mode, GameMode, Player as LocalPlayer, Screen};
+use crate::models::{is_multiplayer_mode, GameMode, GameplayCleanup, Player as LocalPlayer, Screen};
 use crate::player::Animation;
 use crate::rules::{Stat, Stats};
 use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
@@ -237,7 +237,9 @@ impl Plugin for NetworkingPlugin {
             )
             .add_systems(
                 OnExit(Screen::Gameplay),
-                disconnect_from_spacetimedb.run_if(is_multiplayer_mode),
+                disconnect_from_spacetimedb
+                    .run_if(is_multiplayer_mode)
+                    .before(GameplayCleanup),
             );
 
         app.add_observer(combat::send_attack_to_server)
@@ -525,7 +527,6 @@ fn reconcile(
         let mesh = meshes.add(Capsule3d::new(0.5, 1.0));
 
         let mut entity_commands = commands.spawn((
-            DespawnOnExit(Screen::Gameplay),
             Name::new(name),
             row.id.clone(),
             row.world.clone(),
@@ -558,7 +559,6 @@ fn reconcile(
         tracker.last_processed_id = event.id;
 
         commands.spawn((
-            DespawnOnExit(Screen::Gameplay),
             CombatEventData {
                 damage: event.damage,
                 is_crit: event.is_crit,

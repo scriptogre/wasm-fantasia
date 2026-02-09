@@ -6,7 +6,9 @@ use bevy_third_person_camera::ThirdPersonCamera;
 
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(Modals(Vec::default()))
+        .add_systems(PostStartup, mark_startup_entities_persistent)
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
+        .add_systems(OnExit(Screen::Gameplay), cleanup_gameplay_entities.in_set(GameplayCleanup))
         .add_systems(
             Update,
             (
@@ -17,6 +19,31 @@ pub(super) fn plugin(app: &mut App) {
         .add_observer(toggle_pause)
         .add_observer(trigger_menu_toggle_on_esc)
         .add_observer(toggle_mute);
+}
+
+/// Runs once after Startup — marks every existing entity as [`Persistent`]
+/// so it survives gameplay exit cleanup.
+fn mark_startup_entities_persistent(
+    all_entities: Query<Entity, Without<Persistent>>,
+    mut commands: Commands,
+) {
+    for entity in all_entities.iter() {
+        commands.entity(entity).insert(Persistent);
+    }
+}
+
+/// Nuclear cleanup on gameplay exit: despawn every root entity that wasn't
+/// marked [`Persistent`]. Filters out `ChildOf` to avoid double-despawn
+/// warnings (`despawn()` is recursive in Bevy 0.17), and `FirewheelNode`
+/// because bevy_seedling's audio graph holds internal references that
+/// outlive the ECS entity — let the audio system manage its own lifecycle.
+fn cleanup_gameplay_entities(
+    entities: Query<Entity, (Without<Persistent>, Without<ChildOf>, Without<FirewheelNode>)>,
+    mut commands: Commands,
+) {
+    for entity in entities.iter() {
+        commands.entity(entity).despawn();
+    }
 }
 
 fn spawn_gameplay_ui() {}

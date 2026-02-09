@@ -29,7 +29,6 @@ fn setup_animus_scene(
     // Spawn floor with collision
     commands.spawn((
         Name::new("AnimusFloor"),
-        DespawnOnExit(Screen::Gameplay),
         Mesh3d(floor_mesh),
         MeshMaterial3d(floor_material),
         Transform::from_translation(Vec3::ZERO),
@@ -65,7 +64,6 @@ fn setup_animus_scene(
 
         // Lines along X axis
         commands.spawn((
-            DespawnOnExit(Screen::Gameplay),
             Mesh3d(line_mesh.clone()),
             MeshMaterial3d(grid_material.clone()),
             Transform::from_translation(Vec3::new(offset, 0.005, 0.0)),
@@ -73,7 +71,6 @@ fn setup_animus_scene(
 
         // Lines along Z axis
         commands.spawn((
-            DespawnOnExit(Screen::Gameplay),
             Mesh3d(line_mesh_z.clone()),
             MeshMaterial3d(grid_material.clone()),
             Transform::from_translation(Vec3::new(0.0, 0.005, offset)),
@@ -87,7 +84,6 @@ fn setup_animus_scene(
     });
 
     commands.spawn((
-        DespawnOnExit(Screen::Gameplay),
         DirectionalLight {
             color: Color::WHITE,
             illuminance: 4000.0,

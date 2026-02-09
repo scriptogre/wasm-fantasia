@@ -3,7 +3,7 @@ use bevy::transform::TransformSystems;
 
 use crate::combat::components::{Enemy, Health};
 use crate::combat::{DamageDealt, Died, HitLanded};
-use crate::models::{SceneCamera, Screen};
+use crate::models::SceneCamera;
 use crate::ui::colors::{GRASS_GREEN, NEUTRAL450, NEUTRAL850, RED, SAND_YELLOW};
 
 pub fn plugin(app: &mut App) {
@@ -97,7 +97,6 @@ fn on_damage_number(
             world_pos,
             offset,
         },
-        DespawnOnExit(Screen::Gameplay),
         Text::new(format!("{}", damage)),
         text_font,
         TextColor(if is_crit { CRIT_COLOR } else { DAMAGE_COLOR }),
@@ -219,7 +218,6 @@ fn on_enemy_damaged(
 
     commands
         .spawn((
-            DespawnOnExit(Screen::Gameplay),
             EnemyHealthBar {
                 target: event.target,
                 visible_timer: VISIBILITY_DURATION,

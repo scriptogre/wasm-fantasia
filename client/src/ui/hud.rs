@@ -46,7 +46,6 @@ fn spawn_hud(mut commands: Commands, font: Res<HudFont>) {
     commands
         .spawn((
             PlayerHud,
-            DespawnOnExit(Screen::Gameplay),
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(32.0),

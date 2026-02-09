@@ -70,7 +70,6 @@ pub fn spawn_player(
 
     commands
         .spawn((
-            DespawnOnExit(Screen::Gameplay),
             pos,
             player,
             ThirdPersonCameraTarget,

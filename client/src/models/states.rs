@@ -6,6 +6,16 @@ pub fn plugin(app: &mut App) {
         .register_type::<Mood>();
 }
 
+/// Entities that survive gameplay exit. Applied to all Startup entities
+/// automatically; gameplay-spawned entities lack this and get cleaned up.
+#[derive(Component)]
+pub struct Persistent;
+
+/// System set for the nuclear gameplay cleanup. All `OnExit(Screen::Gameplay)`
+/// systems that need their target entities alive must run `.before(GameplayCleanup)`.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GameplayCleanup;
+
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GameMode {
     #[default]
