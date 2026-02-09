@@ -3,10 +3,11 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::DbContext;
 
-use crate::combat::{AttackState, Combatant, Enemy, Health};
+use crate::combat::{AttackState, Combatant, Enemy, EnemyBehavior, Health};
 use crate::models::{is_multiplayer_mode, GameMode, Player as LocalPlayer, Screen};
 use crate::player::Animation;
 use crate::rules::{Stat, Stats};
+use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
 use spacetimedb_sdk::Table;
 use std::collections::HashSet;
@@ -426,7 +427,13 @@ fn handle_connection_events(conn: Res<SpacetimeDbConnection>) {
 fn reconcile(
     conn: Res<SpacetimeDbConnection>,
     mut remote_entities: Query<
-        (Entity, &ServerId, &mut WorldEntity, &mut Health),
+        (
+            Entity,
+            &ServerId,
+            &mut WorldEntity,
+            &mut Health,
+            Option<&mut EnemyBehavior>,
+        ),
         Without<LocalPlayer>,
     >,
     mut local_health: Query<(&mut Health, &mut Stats), With<LocalPlayer>>,
@@ -444,6 +451,7 @@ fn reconcile(
         world: WorldEntity,
         health: f32,
         max_health: f32,
+        animation_state: String,
     }
 
     let rows: Vec<Row> = conn
@@ -462,6 +470,7 @@ fn reconcile(
             },
             health: p.health,
             max_health: p.max_health,
+            animation_state: String::new(),
         })
         .chain(conn.conn.db.enemy().iter().map(|e| Row {
             id: ServerId::Enemy(e.id),
@@ -473,6 +482,7 @@ fn reconcile(
             },
             health: e.health,
             max_health: e.max_health,
+            animation_state: e.animation_state.clone(),
         }))
         .collect();
 
@@ -492,12 +502,25 @@ fn reconcile(
     }
 
     // ── Patch or despawn existing remote entities ──────
-    for (bevy_entity, id, mut world_entity, mut health) in &mut remote_entities {
+    for (bevy_entity, id, mut world_entity, mut health, enemy_behavior) in &mut remote_entities {
         if let Some(row) = rows.iter().find(|r| &r.id == id) {
             seen.insert(id.clone());
             *world_entity = row.world.clone();
             health.current = row.health;
             health.max = row.max_health;
+
+            // Patch enemy behavior from server animation_state
+            if let Some(mut behavior) = enemy_behavior {
+                let kind = EnemyBehaviorKind::from_str(&row.animation_state);
+                let new_behavior = match kind {
+                    EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
+                    EnemyBehaviorKind::Chase => EnemyBehavior::Chase,
+                    EnemyBehaviorKind::Attack => EnemyBehavior::Attack,
+                };
+                if *behavior != new_behavior {
+                    *behavior = new_behavior;
+                }
+            }
         } else {
             commands.entity(bevy_entity).despawn();
         }
@@ -509,43 +532,52 @@ fn reconcile(
             continue;
         }
 
-        let (name, is_enemy) = match &row.id {
-            ServerId::Player(id) => (format!("RemotePlayer_{id:?}"), false),
-            ServerId::Enemy(id) => (format!("Enemy_{id}"), true),
+        let is_enemy = matches!(&row.id, ServerId::Enemy(_));
+        let name = match &row.id {
+            ServerId::Player(id) => format!("RemotePlayer_{id:?}"),
+            ServerId::Enemy(id) => format!("Enemy_{id}"),
         };
 
-        let material = materials.add(StandardMaterial {
-            base_color: if is_enemy {
-                crate::ui::colors::HEALTH_RED
-            } else {
-                Color::srgb(0.2, 0.6, 1.0)
-            },
-            ..default()
-        });
-        let mesh = meshes.add(Capsule3d::new(0.5, 1.0));
-
-        let mut entity_commands = commands.spawn((
-            DespawnOnExit(Screen::Gameplay),
-            Name::new(name),
-            row.id.clone(),
-            row.world.clone(),
-            Transform::from_xyz(row.world.x, row.world.y, row.world.z),
-            Health::new(row.max_health),
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
-            Collider::capsule(0.5, 1.0),
-            RigidBody::Dynamic,
-            LockedAxes::ROTATION_LOCKED,
-            Mass(500.0),
-        ));
-
         if is_enemy {
-            entity_commands.insert((
+            // Enemy: On<Add, Enemy> observer attaches GLTF model + animations
+            commands.spawn((
+                DespawnOnExit(Screen::Gameplay),
+                Name::new(name),
+                row.id.clone(),
+                row.world.clone(),
+                Transform::from_xyz(row.world.x, row.world.y, row.world.z),
+                Health::new(row.max_health),
                 Enemy,
                 Combatant,
                 Stats::new()
                     .with(Stat::MaxHealth, row.max_health)
                     .with(Stat::Health, row.health),
+                Collider::capsule(0.5, 1.0),
+                RigidBody::Kinematic,
+                LockedAxes::ROTATION_LOCKED,
+                Mass(500.0),
+            ));
+        } else {
+            // Remote player: capsule mesh (TODO: player model for remotes)
+            let material = materials.add(StandardMaterial {
+                base_color: Color::srgb(0.2, 0.6, 1.0),
+                ..default()
+            });
+            let mesh = meshes.add(Capsule3d::new(0.5, 1.0));
+
+            commands.spawn((
+                DespawnOnExit(Screen::Gameplay),
+                Name::new(name),
+                row.id.clone(),
+                row.world.clone(),
+                Transform::from_xyz(row.world.x, row.world.y, row.world.z),
+                Health::new(row.max_health),
+                Mesh3d(mesh),
+                MeshMaterial3d(material),
+                Collider::capsule(0.5, 1.0),
+                RigidBody::Dynamic,
+                LockedAxes::ROTATION_LOCKED,
+                Mass(500.0),
             ));
         }
     }

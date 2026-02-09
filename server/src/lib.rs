@@ -1,5 +1,7 @@
-use spacetimedb::Table;
-use wasm_fantasia_shared::combat::{self, defaults, resolve_combat, CombatInput, HitTarget};
+use spacetimedb::{Table, TimeDuration};
+use wasm_fantasia_shared::combat::{
+    self, defaults, enemy_ai_decision, resolve_combat, CombatInput, HitTarget,
+};
 use wasm_fantasia_shared::presets;
 use wasm_fantasia_shared::rules::{Stat, Stats};
 
@@ -92,6 +94,28 @@ pub struct ActiveEffect {
     pub magnitude: f32,
     pub duration: f32,
     pub timestamp: i64,
+}
+
+/// Scheduled tick for server-side game logic (enemy AI, etc.).
+#[spacetimedb::table(name = tick_schedule, scheduled(game_tick))]
+pub struct TickSchedule {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: spacetimedb::ScheduleAt,
+}
+
+/// Server tick interval: 100ms (10 ticks/second).
+const TICK_INTERVAL_MICROS: i64 = 100_000;
+
+#[spacetimedb::reducer(init)]
+pub fn init(ctx: &spacetimedb::ReducerContext) {
+    // Schedule repeating game tick
+    ctx.db.tick_schedule().insert(TickSchedule {
+        scheduled_id: 0,
+        scheduled_at: TimeDuration::from_micros(TICK_INTERVAL_MICROS).into(),
+    });
+    spacetimedb::log::info!("Server initialized — game tick scheduled at {}ms interval", TICK_INTERVAL_MICROS / 1000);
 }
 
 #[spacetimedb::reducer]
@@ -379,10 +403,99 @@ pub fn spawn_enemies(
             animation_state: "Idle".to_string(),
             health: defaults::ENEMY_HEALTH,
             max_health: defaults::ENEMY_HEALTH,
-            attack_damage: 0.0,
-            attack_range: 0.0,
+            attack_damage: defaults::ENEMY_ATTACK_DAMAGE,
+            attack_range: defaults::ENEMY_ATTACK_RANGE,
             attack_speed: 1.0,
             last_attack_time: 0,
+        });
+    }
+}
+
+// =============================================================================
+// Server-side enemy AI tick
+// =============================================================================
+//
+// TODO(server-abstraction): This reducer duplicates the movement + facing logic
+// that also lives in the client's `enemy_ai` system (combat/enemy.rs). When the
+// SP/MP backend trait lands, both code paths collapse into a single
+// `GameServer::tick_enemies` implementation. The shared decision function
+// `enemy_ai_decision()` (shared/src/combat.rs) already centralises the
+// state-machine; what remains duplicated is the movement application and facing.
+
+/// Periodic server tick — drives enemy AI for multiplayer.
+#[spacetimedb::reducer]
+pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
+    let dt = TICK_INTERVAL_MICROS as f32 / 1_000_000.0;
+    let now = ctx.timestamp.to_micros_since_unix_epoch();
+
+    // Collect alive online players for distance checks
+    let players: Vec<Player> = ctx
+        .db
+        .player()
+        .iter()
+        .filter(|p| p.online && p.health > 0.0)
+        .collect();
+
+    if players.is_empty() {
+        return;
+    }
+
+    // Collect alive enemies
+    let enemies: Vec<Enemy> = ctx.db.enemy().iter().filter(|e| e.health > 0.0).collect();
+
+    for enemy in enemies {
+        // Find nearest player (XZ distance)
+        let mut nearest_dist = f32::MAX;
+        let mut nearest_pos = (0.0_f32, 0.0_f32);
+        for p in &players {
+            let dx = p.x - enemy.x;
+            let dz = p.z - enemy.z;
+            let dist = (dx * dx + dz * dz).sqrt();
+            if dist < nearest_dist {
+                nearest_dist = dist;
+                nearest_pos = (p.x, p.z);
+            }
+        }
+
+        // Check attack cooldown
+        let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
+        let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
+
+        let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
+
+        let mut new_x = enemy.x;
+        let mut new_z = enemy.z;
+        let mut new_rotation_y = enemy.rotation_y;
+        let mut new_last_attack_time = enemy.last_attack_time;
+
+        // Face the player when not idle
+        if decision != combat::EnemyBehaviorKind::Idle && nearest_dist > 0.01 {
+            let dx = nearest_pos.0 - enemy.x;
+            let dz = nearest_pos.1 - enemy.z;
+            new_rotation_y = f32::atan2(-dx, -dz);
+        }
+
+        // Move toward player when chasing
+        if decision == combat::EnemyBehaviorKind::Chase && nearest_dist > 0.01 {
+            let dx = nearest_pos.0 - enemy.x;
+            let dz = nearest_pos.1 - enemy.z;
+            let inv_dist = 1.0 / nearest_dist;
+            new_x += dx * inv_dist * defaults::ENEMY_WALK_SPEED * dt;
+            new_z += dz * inv_dist * defaults::ENEMY_WALK_SPEED * dt;
+        }
+
+        // Reset cooldown on attack
+        if decision == combat::EnemyBehaviorKind::Attack {
+            new_last_attack_time = now;
+        }
+
+        ctx.db.enemy().id().update(Enemy {
+            x: new_x,
+            z: new_z,
+            rotation_y: new_rotation_y,
+            animation_state: decision.as_str().to_string(),
+            last_attack_time: new_last_attack_time,
+            ..enemy
         });
     }
 }

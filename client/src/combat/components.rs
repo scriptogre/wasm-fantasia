@@ -3,7 +3,9 @@ use bevy::prelude::*;
 pub use wasm_fantasia_shared::combat::{attack_timing, hit_timing};
 
 pub fn plugin(app: &mut App) {
-    app.register_type::<Health>().register_type::<AttackState>();
+    app.register_type::<Health>()
+        .register_type::<AttackState>()
+        .register_type::<EnemyBehavior>();
 }
 
 /// Health component for any entity that can take damage.
@@ -120,6 +122,41 @@ pub struct PlayerCombatant;
 #[derive(Component, Reflect, Debug, Clone, Default)]
 #[reflect(Component)]
 pub struct Enemy;
+
+/// Current behavior state for enemy AI and animation.
+#[derive(Component, Default, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[reflect(Component)]
+pub enum EnemyBehavior {
+    #[default]
+    Idle,
+    Chase,
+    Attack,
+}
+
+/// Tracks the enemy's animation graph and currently playing clip.
+#[derive(Component, Default)]
+pub struct EnemyAnimations {
+    pub animations: std::collections::HashMap<crate::player::Animation, AnimationNodeIndex>,
+    pub animation_player_entity: Option<Entity>,
+    pub current_animation: Option<crate::player::Animation>,
+}
+
+/// Enemy AI state (singleplayer only).
+#[derive(Component)]
+pub struct EnemyAi {
+    pub attack_cooldown: Timer,
+}
+
+impl Default for EnemyAi {
+    fn default() -> Self {
+        Self {
+            attack_cooldown: Timer::from_seconds(
+                wasm_fantasia_shared::combat::defaults::ENEMY_ATTACK_COOLDOWN,
+                TimerMode::Once,
+            ),
+        }
+    }
+}
 
 /// Remaining knockback displacement to apply smoothly over frames.
 /// TODO(server-physics): Remove once Avian3d runs on the server — knockback
