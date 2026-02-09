@@ -14,6 +14,59 @@ pub mod defaults {
     pub const STACK_DECAY: f32 = 2.5;
     pub const ATTACK_COOLDOWN_SECS: f32 = 0.42;
     pub const ENEMY_HEALTH: f32 = 500.0;
+    pub const ENEMY_DETECTION_RANGE: f32 = 15.0;
+    pub const ENEMY_ATTACK_RANGE: f32 = 2.0;
+    pub const ENEMY_WALK_SPEED: f32 = 2.0;
+    pub const ENEMY_ATTACK_COOLDOWN: f32 = 2.0;
+    pub const ENEMY_ATTACK_DAMAGE: f32 = 10.0;
+}
+
+/// Pure decision function for enemy AI state machine.
+/// Both client (singleplayer) and server (multiplayer) call this to ensure
+/// identical behavior logic. The caller handles movement/DB writes.
+///
+/// TODO(server-abstraction): When the SP/MP backend trait lands, this moves
+/// into the shared `GameServer` trait impl and the callers disappear.
+/// Search for `TODO(server-abstraction)` to find all marked locations.
+pub fn enemy_ai_decision(distance: f32, attack_cooldown_ready: bool) -> EnemyBehaviorKind {
+    if distance > defaults::ENEMY_DETECTION_RANGE {
+        EnemyBehaviorKind::Idle
+    } else if distance > defaults::ENEMY_ATTACK_RANGE {
+        EnemyBehaviorKind::Chase
+    } else if attack_cooldown_ready {
+        EnemyBehaviorKind::Attack
+    } else {
+        EnemyBehaviorKind::Idle
+    }
+}
+
+/// Shared enum for enemy AI decisions. Mirrors the client `EnemyBehavior`
+/// component and the server `animation_state` string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnemyBehaviorKind {
+    Idle,
+    Chase,
+    Attack,
+}
+
+impl EnemyBehaviorKind {
+    /// Convert to the string representation used in server DB rows.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "Idle",
+            Self::Chase => "Chase",
+            Self::Attack => "Attack",
+        }
+    }
+
+    /// Parse from the server DB string representation.
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "Chase" => Self::Chase,
+            "Attack" => Self::Attack,
+            _ => Self::Idle,
+        }
+    }
 }
 
 /// Attack timing constants (at 1.0x speed)

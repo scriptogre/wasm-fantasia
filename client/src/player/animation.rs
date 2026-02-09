@@ -46,6 +46,9 @@ pub enum Animation {
     PunchJab,
     PunchCross,
     MeleeHook,
+    ZombieIdle,
+    ZombieWalkForward,
+    ZombieScratch,
 }
 
 impl Animation {
@@ -66,6 +69,9 @@ impl Animation {
         Self::PunchJab,
         Self::PunchCross,
         Self::MeleeHook,
+        Self::ZombieIdle,
+        Self::ZombieWalkForward,
+        Self::ZombieScratch,
     ];
 
     /// Maps to the clip name inside the GLTF file.
@@ -86,6 +92,9 @@ impl Animation {
             Self::PunchJab => "Punch_Jab",
             Self::PunchCross => "Punch_Cross",
             Self::MeleeHook => "Melee_Hook",
+            Self::ZombieIdle => "Zombie_Idle_Loop",
+            Self::ZombieWalkForward => "Zombie_Walk_Fwd_Loop",
+            Self::ZombieScratch => "Zombie_Scratch",
         }
     }
 
