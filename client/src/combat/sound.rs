@@ -1,6 +1,6 @@
 use crate::asset_loading::AudioSources;
 use crate::combat::HitLanded;
-use crate::models::{GameState, Settings};
+use crate::models::{Session, Settings};
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
 use rand::Rng;
@@ -11,12 +11,12 @@ pub fn plugin(app: &mut App) {
 
 fn punch_sound(
     _on: On<HitLanded>,
-    state: Res<GameState>,
+    state: Res<Session>,
     settings: Res<Settings>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
 ) {
-    if state.muted || state.paused {
+    if state.muted {
         return;
     }
 

@@ -9,7 +9,10 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
         .add_systems(
             Update,
-            sync_gameplay_lock.run_if(in_state(Screen::Gameplay)),
+            (
+                sync_gameplay_lock.run_if(in_state(Screen::Gameplay)),
+                sync_virtual_time,
+            ),
         )
         .add_observer(toggle_pause)
         .add_observer(trigger_menu_toggle_on_esc)
@@ -18,18 +21,18 @@ pub(super) fn plugin(app: &mut App) {
 
 fn spawn_gameplay_ui() {}
 
-/// Declarative cursor/input lock. Runs every frame.
+/// Declarative cursor/input lock. Runs every frame during gameplay.
 /// Gameplay is blocked when: paused, or any entity with [`BlocksGameplay`] exists.
 /// When blocked: cursor unlocked, PlayerCtx removed.
 /// When unblocked: cursor locked, PlayerCtx restored.
 fn sync_gameplay_lock(
     blockers: Query<(), With<BlocksGameplay>>,
-    state: Res<GameState>,
+    session: Res<Session>,
     player: Query<Entity, With<Player>>,
     mut cam: Query<&mut ThirdPersonCamera>,
     mut commands: Commands,
 ) {
-    let should_lock = !state.paused && blockers.is_empty();
+    let should_lock = !session.paused && blockers.is_empty();
 
     if let Ok(mut cam) = cam.single_mut() {
         cam.cursor_lock_active = should_lock;
@@ -44,41 +47,42 @@ fn sync_gameplay_lock(
     }
 }
 
-fn toggle_pause(
-    _: On<TogglePause>,
-    mut time: ResMut<Time<Virtual>>,
-    mut state: ResMut<GameState>,
+/// Keeps `Time<Virtual>` in sync with `session.paused`.
+/// Runs globally so leaving gameplay with time paused always cleans up.
+fn sync_virtual_time(
+    session: Res<Session>,
     mode: Res<GameMode>,
+    mut time: ResMut<Time<Virtual>>,
 ) {
-    let is_multiplayer = *mode == GameMode::Multiplayer;
-
-    if time.is_paused() || state.paused {
-        if !is_multiplayer {
+    let should_pause = session.paused && *mode != GameMode::Multiplayer;
+    if should_pause != time.is_paused() {
+        if should_pause {
+            time.pause();
+        } else {
             time.unpause();
         }
-    } else if !is_multiplayer {
-        time.pause();
     }
+}
 
-    state.paused = !state.paused;
-    // PlayerCtx and cursor lock are handled by sync_gameplay_lock
+fn toggle_pause(_: On<TogglePause>, mut session: ResMut<Session>) {
+    session.paused = !session.paused;
 }
 
 fn toggle_mute(
     _: On<ToggleMute>,
     settings: ResMut<Settings>,
-    mut state: ResMut<GameState>,
+    mut session: ResMut<Session>,
     mut music: Single<&mut VolumeNode, (With<MusicPool>, Without<SfxBus>)>,
     mut sfx: Single<&mut VolumeNode, (With<SfxBus>, Without<MusicPool>)>,
 ) {
-    if state.muted {
+    if session.muted {
         music.volume = settings.music();
         sfx.volume = settings.sfx();
     } else {
         music.volume = Volume::SILENT;
         sfx.volume = Volume::SILENT;
     }
-    state.muted = !state.muted;
+    session.muted = !session.muted;
 }
 
 // ============================ UI ============================

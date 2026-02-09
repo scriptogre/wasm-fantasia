@@ -11,7 +11,7 @@ pub fn plugin(app: &mut App) {
 fn movement_sound(
     on: On<Fire<Navigate>>,
     time: Res<Time>,
-    state: Res<GameState>,
+    state: Res<Session>,
     settings: Res<Settings>,
     tnua: Query<&TnuaController, With<Player>>,
     crouch: Single<&Action<Crouch>>,
@@ -19,7 +19,7 @@ fn movement_sound(
     mut sources: ResMut<AudioSources>,
     mut step_timer: Query<&mut StepTimer, With<Player>>,
 ) -> Result {
-    if state.muted || state.paused {
+    if state.muted {
         return Ok(());
     }
 
@@ -48,13 +48,13 @@ fn movement_sound(
 
 fn jump_sound(
     _: On<Start<Jump>>,
-    state: Res<GameState>,
+    state: Res<Session>,
     settings: Res<Settings>,
     // jump_timer: Query<&JumpTimer, With<Player>>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
 ) -> Result {
-    if state.muted || state.paused {
+    if state.muted {
         return Ok(());
     }
 
@@ -70,13 +70,13 @@ fn jump_sound(
 
 fn dash_sound(
     _: On<Start<Dash>>,
-    state: Res<GameState>,
+    state: Res<Session>,
     settings: Res<Settings>,
     // jump_timer: Query<&JumpTimer, With<Player>>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
 ) -> Result {
-    if state.muted || state.paused {
+    if state.muted {
         return Ok(());
     }
 

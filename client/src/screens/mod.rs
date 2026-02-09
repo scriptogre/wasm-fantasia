@@ -2,6 +2,8 @@
 use crate::*;
 use bevy::ui::Val::*;
 
+#[cfg(feature = "multiplayer")]
+mod connecting;
 mod gameplay;
 mod loading;
 mod settings;
@@ -18,17 +20,21 @@ pub fn plugin(app: &mut App) {
         title::plugin,
         settings::plugin,
         gameplay::plugin,
-    ))
-    .add_systems(Update, track_last_screen.run_if(state_changed::<Screen>))
-    .add_observer(on_back)
-    .add_observer(on_go_to);
+    ));
+
+    #[cfg(feature = "multiplayer")]
+    app.add_plugins(connecting::plugin);
+
+    app.add_systems(Update, track_last_screen.run_if(state_changed::<Screen>))
+        .add_observer(on_back)
+        .add_observer(on_go_to);
 }
 
 // TODO: figure out how to make it a cool observer
 // mut transitions: On<StateTransitionEvent<Screen>>,
 fn track_last_screen(
     mut transitions: MessageReader<StateTransitionEvent<Screen>>,
-    mut state: ResMut<GameState>,
+    mut state: ResMut<Session>,
 ) {
     let Some(transition) = transitions.read().last() else {
         return;
@@ -64,7 +70,7 @@ pub mod to {
     pub fn title(
         _: On<Pointer<Click>>,
         mut commands: Commands,
-        mut state: ResMut<GameState>,
+        mut state: ResMut<Session>,
         mut modals: ResMut<Modals>,
     ) {
         state.reset();
@@ -76,11 +82,11 @@ pub mod to {
     }
     pub fn singleplayer(
         _: On<Pointer<Click>>,
-        mut commands: Commands,
+        mut mode: ResMut<GameMode>,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
     ) {
-        commands.insert_resource(GameMode::Singleplayer);
+        *mode = GameMode::Singleplayer;
         if resource_handles.is_all_done() {
             next_screen.set(Screen::Gameplay);
         } else {
@@ -91,13 +97,13 @@ pub mod to {
     #[cfg(feature = "multiplayer")]
     pub fn multiplayer(
         _: On<Pointer<Click>>,
-        mut commands: Commands,
+        mut mode: ResMut<GameMode>,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
     ) {
-        commands.insert_resource(GameMode::Multiplayer);
+        *mode = GameMode::Multiplayer;
         if resource_handles.is_all_done() {
-            next_screen.set(Screen::Gameplay);
+            next_screen.set(Screen::Connecting);
         } else {
             next_screen.set(Screen::Loading);
         }

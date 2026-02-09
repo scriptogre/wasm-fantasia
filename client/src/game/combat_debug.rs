@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
-use crate::models::{GameState, Player as LocalPlayer};
+use crate::models::{Player as LocalPlayer, Session};
 use crate::rules::{Stat, Stats};
 use crate::ui::{colors, size};
 
@@ -140,16 +140,16 @@ fn spawn_panel(mut commands: Commands) {
 
 fn toggle_overlay(
     input: Res<ButtonInput<KeyCode>>,
-    mut game_state: ResMut<GameState>,
+    mut session: ResMut<Session>,
     mut log: ResMut<DebugLog>,
     mut panel: Query<&mut Visibility, With<DebugPanel>>,
 ) {
     if input.just_pressed(KeyCode::F4) {
-        game_state.diagnostics = !game_state.diagnostics;
+        session.diagnostics = !session.diagnostics;
         log.dirty = true;
     }
 
-    let should_show = game_state.diagnostics && !game_state.paused;
+    let should_show = session.diagnostics && !session.paused;
     if let Ok(mut vis) = panel.single_mut() {
         *vis = if should_show {
             Visibility::Visible
@@ -269,7 +269,7 @@ fn spawn_body(commands: &mut Commands, panel: Entity, text: impl Into<String>) {
 // ── Render ───────────────────────────────────────────────────────────
 
 fn update_overlay(
-    game_state: Res<GameState>,
+    session: Res<Session>,
     mut log: ResMut<DebugLog>,
     fonts: Option<Res<Fonts>>,
     panel: Query<Entity, With<DebugPanel>>,
@@ -284,7 +284,7 @@ fn update_overlay(
         return;
     };
 
-    if !game_state.diagnostics {
+    if !session.diagnostics {
         return;
     }
 

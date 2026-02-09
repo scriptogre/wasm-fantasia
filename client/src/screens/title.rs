@@ -6,7 +6,7 @@ pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::Title), setup_menu);
 }
 
-fn setup_menu(mut commands: Commands, mut state: ResMut<GameState>) {
+fn setup_menu(mut commands: Commands, mut state: ResMut<Session>) {
     commands
         .spawn((
             DespawnOnExit(Screen::Title),

@@ -51,7 +51,7 @@ fn stop_soundtrack(mut commands: Commands, music_pb: Res<MusicPlaybacks>) {
 
 fn trigger_mood_change(
     collisions: Collisions,
-    state: ResMut<GameState>,
+    state: ResMut<Session>,
     zones: Query<(Entity, &Mood)>,
     mut commands: Commands,
     mut player: Query<Entity, With<Player>>,
@@ -86,14 +86,14 @@ fn trigger_mood_change(
     }
 }
 
-/// Every time the current mood in GameState resource changes,
+/// Every time the current mood in Session resource changes,
 /// this system is run to trigger the song change
 fn change_mood(
     on: On<ChangeMood>,
     settings: Res<Settings>,
     music_pb: ResMut<MusicPlaybacks>,
     mut commands: Commands,
-    mut state: ResMut<GameState>,
+    mut state: ResMut<Session>,
     mut sources: ResMut<AudioSources>,
 ) {
     let mut rng = rand::rng();

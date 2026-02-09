@@ -10,12 +10,8 @@ pub fn plugin(app: &mut App) {
         Update,
         apply_separation_force
             .run_if(in_state(Screen::Gameplay))
-            .run_if(not(game_paused)),
+            .run_if(not(is_paused)),
     );
-}
-
-fn game_paused(state: Res<crate::models::GameState>) -> bool {
-    state.paused
 }
 
 /// Apply separation force to prevent player from climbing on enemies.

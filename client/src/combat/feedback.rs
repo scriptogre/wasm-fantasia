@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
 use crate::combat::HitLanded;
-use crate::models::{GameState, Player, SceneCamera};
+use crate::models::{Session, Player, SceneCamera};
 use crate::rules::{Stat, Stats};
 
 pub fn plugin(app: &mut App) {
@@ -117,13 +117,13 @@ fn on_screen_shake(
 
 fn apply_camera_shake(
     time: Res<Time>,
-    game_state: Res<GameState>,
+    session: Res<Session>,
     mut shake: ResMut<ScreenShake>,
     mut camera: Query<&mut Transform, With<SceneCamera>>,
 ) {
     shake.trauma = (shake.trauma - ScreenShake::DECAY * time.delta_secs()).max(0.0);
 
-    if !game_state.screen_shake || shake.trauma <= 0.0 {
+    if !session.screen_shake || shake.trauma <= 0.0 {
         return;
     }
 

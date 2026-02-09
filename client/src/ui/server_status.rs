@@ -3,12 +3,11 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Table};
 
-use crate::models::{is_multiplayer_mode, BlocksGameplay, GoTo, Screen};
+use crate::models::{is_multiplayer_mode, Screen};
 use crate::networking::generated::player_table::PlayerTableAccess;
 use crate::networking::{PingTracker, SpacetimeDbConnection, STALE_THRESHOLD_SECS};
-use crate::ui::colors::{NEUTRAL300, NEUTRAL950};
+use crate::ui::colors::NEUTRAL300;
 use crate::ui::hud::HudFont;
-use crate::ui::{btn_small, ui_root};
 
 // ── Components ──────────────────────────────────────────────────────
 
@@ -24,26 +23,16 @@ struct PlayersText;
 #[derive(Component)]
 struct PingText;
 
-#[derive(Component)]
-struct ConnectingOverlay {
-    timeout: Timer,
-}
-
 // ── Plugin ──────────────────────────────────────────────────────────
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(Screen::Gameplay),
-        (spawn_connecting_overlay, spawn_status_hud).run_if(is_multiplayer_mode),
+        spawn_status_hud.run_if(is_multiplayer_mode),
     )
     .add_systems(
         Update,
-        (
-            tick_status,
-            tick_players,
-            tick_ping,
-            dismiss_connecting_overlay,
-        )
+        (tick_status, tick_players, tick_ping)
             .run_if(in_state(Screen::Gameplay).and(is_multiplayer_mode)),
     );
 }
@@ -53,67 +42,6 @@ pub fn plugin(app: &mut App) {
 const GREEN: Color = Color::srgb(0.286, 0.878, 0.373);
 const RED: Color = Color::srgb(0.816, 0.125, 0.125);
 const YELLOW: Color = Color::srgb(0.878, 0.780, 0.286);
-
-// ── Connecting overlay ───────────────────────────────────────────────
-
-const CONNECTING_TIMEOUT_SECS: f32 = 8.0;
-
-fn spawn_connecting_overlay(mut commands: Commands, font: Res<HudFont>) {
-    commands
-        .spawn((
-            ConnectingOverlay {
-                timeout: Timer::from_seconds(CONNECTING_TIMEOUT_SECS, TimerMode::Once),
-            },
-            BlocksGameplay,
-            DespawnOnExit(Screen::Gameplay),
-            GlobalZIndex(200),
-            ui_root("Connecting Overlay"),
-            BackgroundColor(NEUTRAL950.with_alpha(0.95)),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new("CONNECTING..."),
-                TextFont {
-                    font: font.0.clone(),
-                    font_size: 18.0,
-                    ..default()
-                },
-                TextColor(NEUTRAL300),
-            ));
-            parent.spawn(btn_small("Cancel", cancel_connecting));
-        });
-}
-
-fn cancel_connecting(_: On<Pointer<Click>>, mut commands: Commands) {
-    commands.trigger(GoTo(Screen::Title));
-}
-
-/// Despawn overlay on connection success or timeout.
-/// `sync_gameplay_lock` handles cursor/PlayerCtx when `BlocksGameplay` disappears.
-fn dismiss_connecting_overlay(
-    conn: Option<Res<SpacetimeDbConnection>>,
-    mut overlay: Query<(Entity, &mut ConnectingOverlay)>,
-    time: Res<Time>,
-    mut commands: Commands,
-) {
-    let Ok((entity, mut overlay)) = overlay.single_mut() else {
-        return;
-    };
-
-    let connected = conn
-        .as_ref()
-        .is_some_and(|c| c.conn.try_identity().is_some());
-    overlay.timeout.tick(time.delta());
-    if !connected && !overlay.timeout.is_finished() {
-        return;
-    }
-
-    if overlay.timeout.is_finished() && !connected {
-        warn!("Connection timed out — entering offline mode");
-    }
-
-    commands.entity(entity).despawn();
-}
 
 // ── Spawn ───────────────────────────────────────────────────────────
 

@@ -97,6 +97,7 @@ fn on_damage_number(
             world_pos,
             offset,
         },
+        DespawnOnExit(Screen::Gameplay),
         Text::new(format!("{}", damage)),
         text_font,
         TextColor(if is_crit { CRIT_COLOR } else { DAMAGE_COLOR }),

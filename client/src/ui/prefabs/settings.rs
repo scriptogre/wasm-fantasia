@@ -60,7 +60,7 @@ pub fn save_settings(
 
 // TAB CHANGING
 fn update_tab_content(
-    game_state: Res<GameState>,
+    session: Res<Session>,
     active_tab: Res<ActiveTab>,
     tab_bar: Query<&Children, With<TabBar>>,
     mut tab_content: Query<(Entity, &Children), With<TabContent>>,
@@ -131,7 +131,7 @@ fn update_tab_content(
                         commands.spawn(audio_grid()).insert(ChildOf(e));
                     }
                     UiTab::Video => {
-                        commands.spawn(video_grid(&game_state)).insert(ChildOf(e));
+                        commands.spawn(video_grid(&session)).insert(ChildOf(e));
                     }
                 }
             }
@@ -320,7 +320,7 @@ fn update_button_text(
 #[cfg(not(target_arch = "wasm32"))]
 fn click_toggle_diagnostics(
     _: On<Pointer<Click>>,
-    mut state: ResMut<GameState>,
+    mut state: ResMut<Session>,
     buttons: Query<Entity, With<DiagnosticsLabel>>,
     children_q: Query<&Children>,
     mut text_q: Query<&mut Text>,
@@ -337,7 +337,7 @@ fn click_toggle_diagnostics(
 fn click_toggle_debug_ui(
     _: On<Pointer<Click>>,
     mut commands: Commands,
-    mut state: ResMut<GameState>,
+    mut state: ResMut<Session>,
     buttons: Query<Entity, With<DebugUiLabel>>,
     children_q: Query<&Children>,
     mut text_q: Query<&mut Text>,
@@ -353,7 +353,7 @@ fn click_toggle_debug_ui(
 
 fn click_toggle_screen_shake(
     _: On<Pointer<Click>>,
-    mut state: ResMut<GameState>,
+    mut state: ResMut<Session>,
     buttons: Query<Entity, With<ScreenShakeLabel>>,
     children_q: Query<&Children>,
     mut text_q: Query<&mut Text>,
@@ -464,7 +464,7 @@ fn bottom_row() -> impl Bundle {
     )
 }
 
-fn video_grid(state: &GameState) -> impl Bundle {
+fn video_grid(state: &Session) -> impl Bundle {
     let screen_shake_label = if state.screen_shake { "on" } else { "off" };
 
     #[cfg(not(target_arch = "wasm32"))]

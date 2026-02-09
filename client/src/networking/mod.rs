@@ -227,16 +227,13 @@ impl Plugin for NetworkingPlugin {
             .init_resource::<PingTracker>()
             .init_resource::<CombatEventTracker>()
             .add_systems(
-                OnEnter(Screen::Gameplay),
+                OnEnter(Screen::Connecting),
                 reset_reconnect_timer.run_if(is_multiplayer_mode),
             )
+            .add_systems(Update, auto_connect)
             .add_systems(
-                Update,
-                auto_connect.run_if(
-                    in_state(Screen::Gameplay)
-                        .and(is_multiplayer_mode)
-                        .and(not(resource_exists::<SpacetimeDbConnection>)),
-                ),
+                OnExit(Screen::Connecting),
+                disconnect_on_cancel.run_if(is_multiplayer_mode),
             )
             .add_systems(
                 OnExit(Screen::Gameplay),
@@ -317,10 +314,30 @@ fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
     *timer = ReconnectTimer::default();
 }
 
+/// Clean up connection if we leave the connecting screen without a completed handshake
+/// (cancel or timeout). If the handshake succeeded, we're transitioning to Gameplay
+/// and want to keep the connection alive.
+fn disconnect_on_cancel(
+    conn: Option<Res<SpacetimeDbConnection>>,
+    mut commands: Commands,
+) {
+    let Some(conn) = conn else { return };
+    if conn.conn.try_identity().is_some() {
+        // Handshake completed — heading to Gameplay, keep connection alive
+        return;
+    }
+    if let Err(e) = conn.conn.disconnect() {
+        warn!("SpacetimeDB disconnect error on cancel: {e:?}");
+    }
+    commands.remove_resource::<SpacetimeDbConnection>();
+    commands.remove_resource::<HandshakeStart>();
+}
+
 fn disconnect_from_spacetimedb(
     conn: Option<Res<SpacetimeDbConnection>>,
     mut commands: Commands,
     mut ping: ResMut<PingTracker>,
+    mut mode: ResMut<GameMode>,
 ) {
     if let Some(conn) = conn {
         if let Err(e) = conn.conn.disconnect() {
@@ -329,7 +346,7 @@ fn disconnect_from_spacetimedb(
         commands.remove_resource::<SpacetimeDbConnection>();
     }
     *ping = PingTracker::default();
-    commands.insert_resource(GameMode::default());
+    *mode = GameMode::default();
 }
 
 fn auto_connect(
@@ -338,7 +355,17 @@ fn auto_connect(
     mut timer: ResMut<ReconnectTimer>,
     time: Res<Time>,
     mut commands: Commands,
+    state: Res<State<Screen>>,
+    mode: Res<GameMode>,
+    conn: Option<Res<SpacetimeDbConnection>>,
 ) {
+    if !matches!(state.get(), Screen::Connecting | Screen::Gameplay)
+        || *mode != GameMode::Multiplayer
+        || conn.is_some()
+    {
+        return;
+    }
+
     timer.0.tick(time.delta());
     if !timer.0.just_finished() {
         return;
@@ -346,7 +373,9 @@ fn auto_connect(
     if let Some(conn) = try_connect(&config, &token) {
         commands.insert_resource(conn);
         commands.insert_resource(HandshakeStart(Instant::now()));
-        info!("Auto-connect succeeded");
+        info!("auto_connect: connection initiated");
+    } else {
+        warn!("auto_connect: try_connect returned None");
     }
 }
 
@@ -496,6 +525,7 @@ fn reconcile(
         let mesh = meshes.add(Capsule3d::new(0.5, 1.0));
 
         let mut entity_commands = commands.spawn((
+            DespawnOnExit(Screen::Gameplay),
             Name::new(name),
             row.id.clone(),
             row.world.clone(),
@@ -528,6 +558,7 @@ fn reconcile(
         tracker.last_processed_id = event.id;
 
         commands.spawn((
+            DespawnOnExit(Screen::Gameplay),
             CombatEventData {
                 damage: event.damage,
                 is_crit: event.is_crit,

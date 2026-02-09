@@ -1,7 +1,7 @@
 use super::*;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<GameState>()
+    app.init_resource::<Session>()
         .init_resource::<GameMode>()
         .register_type::<Mood>();
 }
@@ -17,9 +17,11 @@ pub fn is_multiplayer_mode(mode: Res<GameMode>) -> bool {
     *mode == GameMode::Multiplayer
 }
 
+/// Runtime session flags — debug toggles, preferences, and transient state.
+/// Reset on return to title. Not persisted (see [`Settings`] for that).
 #[derive(Resource, Reflect, Debug, Clone)]
 #[reflect(Resource)]
-pub struct GameState {
+pub struct Session {
     pub last_screen: Screen,
     pub current_mood: Mood,
 
@@ -30,7 +32,7 @@ pub struct GameState {
     pub muted: bool,
 }
 
-impl Default for GameState {
+impl Default for Session {
     fn default() -> Self {
         Self {
             last_screen: Screen::Title,
@@ -44,11 +46,15 @@ impl Default for GameState {
     }
 }
 
-impl GameState {
+impl Session {
     pub fn reset(&mut self) {
         self.paused = false;
         self.muted = false;
     }
+}
+
+pub fn is_paused(session: Res<Session>) -> bool {
+    session.paused
 }
 
 /// The game's main screen states.
@@ -64,6 +70,8 @@ pub enum Screen {
     Settings,
     // Here the menu is drawn and waiting for player interaction
     Title,
+    // MP connection handshake — between Title and Gameplay
+    Connecting,
     // During this State the actual game logic is executed
     Gameplay,
 }

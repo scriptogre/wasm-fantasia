@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn click_to_menu(_: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<GameState>) {
+pub fn click_to_menu(_: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<Session>) {
     state.reset();
     commands.trigger(GoTo(Screen::Title));
 }

@@ -42,7 +42,7 @@ pub struct SettingsChanged;
 fn back(
     on: On<Start<Escape>>,
     screen: Res<State<Screen>>,
-    states: Res<GameState>,
+    states: Res<Session>,
     mut commands: Commands,
 ) {
     match screen.get() {

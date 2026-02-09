@@ -150,7 +150,7 @@ pub fn spawn_player(
 struct DebugCollider;
 
 fn sync_debug_colliders(
-    state: Res<GameState>,
+    state: Res<Session>,
     mut colliders: Query<&mut Visibility, With<DebugCollider>>,
 ) {
     let vis = if state.debug_ui {

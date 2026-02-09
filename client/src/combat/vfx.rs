@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::combat::{AttackIntent, HitLanded, VFX_ARC_DEGREES, VFX_RANGE};
-use crate::models::GameState;
+use crate::models::{Screen, Session};
 
 pub fn plugin(app: &mut App) {
     app.add_observer(on_hit_flash)
@@ -188,6 +188,7 @@ fn on_phantom_fist(
     let pos = tf.translation + Vec3::Y * 0.8;
 
     commands.spawn((
+        DespawnOnExit(Screen::Gameplay),
         ArcSlash {
             timer: 0.0,
             duration: 0.15,
@@ -266,12 +267,12 @@ fn setup_debug_hitbox_assets(
 
 fn on_debug_hitbox(
     on: On<AttackIntent>,
-    game_state: Res<GameState>,
+    session: Res<Session>,
     transforms: Query<&Transform>,
     assets: Option<Res<DebugHitboxAssets>>,
     mut commands: Commands,
 ) {
-    if !game_state.debug_ui {
+    if !session.debug_ui {
         return;
     }
 
@@ -286,6 +287,7 @@ fn on_debug_hitbox(
     let pos = tf.translation + Vec3::Y * 0.1;
 
     commands.spawn((
+        DespawnOnExit(Screen::Gameplay),
         DebugHitbox {
             timer: 0.0,
             duration: 0.5,
@@ -381,6 +383,7 @@ fn on_impact_vfx(
         let rotation = Quat::from_rotation_arc(Vec3::Z, dir);
 
         commands.spawn((
+            DespawnOnExit(Screen::Gameplay),
             Mesh3d(assets.mesh.clone()),
             MeshMaterial3d(assets.material.clone()),
             Transform::from_translation(impact_pos)
@@ -397,6 +400,7 @@ fn on_impact_vfx(
     }
 
     commands.spawn((
+        DespawnOnExit(Screen::Gameplay),
         Mesh3d(assets.mesh.clone()),
         MeshMaterial3d(assets.material.clone()),
         Transform::from_translation(impact_pos).with_scale(Vec3::splat(0.1)),
