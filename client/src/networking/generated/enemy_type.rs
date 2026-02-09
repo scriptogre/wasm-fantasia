@@ -6,19 +6,22 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub struct PlayerInput {
+pub struct Enemy {
     pub id: u64,
-    pub identity: __sdk::Identity,
-    pub sequence: u32,
-    pub forward: f32,
-    pub right: f32,
-    pub jump: bool,
-    pub sprint: bool,
-    pub crouch: bool,
-    pub yaw: f32,
-    pub timestamp: i64,
+    pub enemy_type: String,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub rotation_y: f32,
+    pub animation_state: String,
+    pub health: f32,
+    pub max_health: f32,
+    pub attack_damage: f32,
+    pub attack_range: f32,
+    pub attack_speed: f32,
+    pub last_attack_time: i64,
 }
 
-impl __sdk::InModule for PlayerInput {
+impl __sdk::InModule for Enemy {
     type Module = super::RemoteModule;
 }

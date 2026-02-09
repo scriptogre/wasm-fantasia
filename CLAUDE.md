@@ -4,13 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build Commands
 
-**Native Development**
-- `just` - Run native dev build with dev_native features
-- `just build` - Build native release
+**Development**
+- `just` - Start SpacetimeDB, deploy module, run native dev build
+- `just web` - Start SpacetimeDB, deploy module, run WASM dev server
+- `just spacetimedb` - Only start SpacetimeDB and deploy module
 - `just check` - Pre-commit checks: clippy, fmt, machete, web compilation check
 
-**Multiplayer**
-- `just mp` - Start SpacetimeDB server, deploy module, launch two game clients
+**Release**
+- `just build` - Native release build
+- `just web-build` - WASM release build
 
 **Testing**
 - `cargo test` - Run all tests (currently minimal)

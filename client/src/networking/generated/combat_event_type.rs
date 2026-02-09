@@ -8,13 +8,11 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[sats(crate = __lib)]
 pub struct CombatEvent {
     pub id: u64,
-    pub attacker: __sdk::Identity,
-    pub target_player: Option<__sdk::Identity>,
-    pub target_npc_id: Option<u64>,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
     pub damage: f32,
     pub is_crit: bool,
-    pub attacker_x: f32,
-    pub attacker_z: f32,
     pub timestamp: i64,
 }
 

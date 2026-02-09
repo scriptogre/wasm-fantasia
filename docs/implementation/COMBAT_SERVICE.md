@@ -142,4 +142,4 @@ Intentionally simple. Will be replaced by avian3d-core when MOVEMENT.md work beg
 
 1. `cargo check` on all three crates
 2. `just` — native build, attack enemies, verify damage/crit/stacking/death/knockback
-3. `just mp` — multiplayer, verify knockback syncs across clients
+3. `just` (with two clients) — multiplayer, verify knockback syncs across clients

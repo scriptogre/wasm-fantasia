@@ -6,15 +6,15 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub struct NpcEnemy {
+pub struct ActiveEffect {
     pub id: u64,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub health: f32,
-    pub max_health: f32,
+    pub owner: __sdk::Identity,
+    pub effect_type: String,
+    pub magnitude: f32,
+    pub duration: f32,
+    pub timestamp: i64,
 }
 
-impl __sdk::InModule for NpcEnemy {
+impl __sdk::InModule for ActiveEffect {
     type Module = super::RemoteModule;
 }

@@ -22,26 +22,18 @@ Session-based MMO prototype. Bevy 0.17 + SpacetimeDB multiplayer, targeting nati
 - [Rust](https://rustup.rs/) (latest stable)
 - [just](https://github.com/casey/just) (command runner)
 - [Bevy CLI](https://github.com/TheBevyFlock/bevy_cli) (for web builds)
-- [SpacetimeDB](https://spacetimedb.com/install) (for multiplayer, auto-installed by `just mp`)
+- [SpacetimeDB](https://spacetimedb.com/install) (for multiplayer, auto-installed by `just`)
 - Linux users: install [Bevy's Linux dependencies](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)
 
 ## Getting started
 
 ```bash
-just              # Run native dev build
-just mp           # Start SpacetimeDB server + two clients
+just              # Start SpacetimeDB, deploy module, run native dev build
+just web          # Start SpacetimeDB, deploy module, run WASM dev server
+just spacetimedb  # Only start SpacetimeDB and deploy module
 just build        # Native release build
-just check        # Clippy + fmt + machete + web compilation check
-just web          # Run WASM dev server
-just web-mp       # Start SpacetimeDB server + WASM dev server
 just web-build    # Full web release bundle
-```
-
-### SpacetimeDB server
-
-```bash
-cd server
-spacetimedb publish wasm-fantasia
+just check        # Clippy + fmt + machete + web compilation check
 ```
 
 ## Project structure

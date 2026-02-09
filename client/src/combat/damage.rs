@@ -7,19 +7,15 @@ pub fn plugin(app: &mut App) {
 }
 
 /// Observer: apply damage and knockback when [`DamageDealt`] is triggered.
-/// For remote players (multiplayer), health is server-authoritative — we skip
-/// `take_damage` and let the networking sync handle it. VFX and knockback still fire
+/// Server-owned entities (multiplayer): health is server-authoritative — we skip
+/// `take_damage` and let the reconciler handle it. VFX and knockback still fire
 /// for immediate feedback.
 fn on_damage(
     on: On<DamageDealt>,
     mut targets: Query<(&mut Health, Option<&mut TnuaController>)>,
-    #[cfg(feature = "multiplayer")] remote_players: Query<
+    #[cfg(feature = "multiplayer")] server_entities: Query<
         (),
-        With<crate::networking::player::RemotePlayer>,
-    >,
-    #[cfg(feature = "multiplayer")] server_enemies: Query<
-        (),
-        With<crate::networking::combat::ServerEnemy>,
+        With<crate::networking::ServerId>,
     >,
     mut commands: Commands,
 ) {
@@ -29,10 +25,9 @@ fn on_damage(
         return;
     };
 
-    // Server-owned entities: don't modify health locally, let sync handle it
+    // Server-owned entities: don't modify health locally, let reconciler handle it
     #[cfg(feature = "multiplayer")]
-    let is_remote =
-        remote_players.get(event.target).is_ok() || server_enemies.get(event.target).is_ok();
+    let is_remote = server_entities.get(event.target).is_ok();
     #[cfg(not(feature = "multiplayer"))]
     let is_remote = false;
 
@@ -53,13 +48,11 @@ fn on_damage(
 
     // Apply force (knockback, launch, pull, etc.)
     if let Some(mut controller) = controller {
-        // Player uses Tnua
         controller.basis(TnuaBuiltinWalk {
             desired_velocity: event.force,
             ..default()
         });
     } else {
-        // Enemies use direct velocity
         commands
             .entity(event.target)
             .insert(LinearVelocity(event.force));
@@ -74,27 +67,21 @@ fn on_damage(
 }
 
 /// Observer: handle entity death.
-/// Remote players (multiplayer) are handled by the networking layer, not despawned locally.
+/// Server-owned entities are handled by the reconciler, not despawned locally.
 fn on_death(
     on: On<Died>,
-    #[cfg(feature = "multiplayer")] remote_players: Query<
+    #[cfg(feature = "multiplayer")] server_entities: Query<
         (),
-        With<crate::networking::player::RemotePlayer>,
-    >,
-    #[cfg(feature = "multiplayer")] server_enemies: Query<
-        (),
-        With<crate::networking::combat::ServerEnemy>,
+        With<crate::networking::ServerId>,
     >,
     mut commands: Commands,
 ) {
     let event = on.event();
 
-    // Don't despawn server-owned entities — server owns their lifecycle
     #[cfg(feature = "multiplayer")]
-    if remote_players.get(event.entity).is_ok() || server_enemies.get(event.entity).is_ok() {
+    if server_entities.get(event.entity).is_ok() {
         return;
     }
 
-    // For now, just despawn. Later: death animation, loot, etc.
     commands.entity(event.entity).despawn();
 }

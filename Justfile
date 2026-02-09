@@ -1,32 +1,31 @@
-# Run native dev build (singleplayer)
-default:
+# Run native dev build
+default: spacetimedb
     cargo run -p wasm_fantasia --features dev_native
 
-# Multiplayer: start server, publish module, launch two clients
-spacetime := env('HOME') / ".local/bin/spacetime"
-mp:
+
+# Run WASM dev server
+web: spacetimedb
     #!/usr/bin/env bash
     set -euo pipefail
+    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
+    command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
+    cd client && rustup run nightly bevy run --yes --no-default-features --features web web -U multi-threading --host 0.0.0.0 --open
 
-    # Ensure SpacetimeDB is installed
+
+spacetime := env('HOME') / ".local/bin/spacetime"
+
+# Ensure SpacetimeDB is running and module is deployed
+spacetimedb:
+    #!/usr/bin/env bash
+    set -euo pipefail
     command -v "{{spacetime}}" &>/dev/null || \
         (echo "Installing SpacetimeDB..." && curl -sSf https://install.spacetimedb.com | sh)
-
-    # Start server
-    "{{spacetime}}" start --pg-port 5432 &
+    if ! "{{spacetime}}" start --pg-port 5432 2>/dev/null & then true; fi
     sleep 2
-
-    # Deploy module (always wipe data for clean start)
     "{{spacetime}}" publish wasm-fantasia \
         --project-path server \
         --yes \
         --delete-data
-
-    # Launch two game clients
-    cargo run -p wasm_fantasia --features dev_native &
-    cargo run -p wasm_fantasia --features dev_native &
-
-    # Print Postgres connection string (after clients start so it's visible)
     TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
     echo ""
     echo "═══════════════════════════════════════════════════════════════════"
@@ -34,11 +33,17 @@ mp:
     echo "═══════════════════════════════════════════════════════════════════"
     echo ""
 
-    wait
-
 # Native release build
 build:
     cargo build -p wasm_fantasia --release
+
+# WASM release build
+web-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
+    command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
+    cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
 
 # Pre-commit checks: lint + web compilation
 check:
@@ -47,49 +52,7 @@ check:
     cargo machete
     cargo check -p wasm_fantasia --profile ci --no-default-features --features web --target wasm32-unknown-unknown
 
-# Run WASM dev server
-web:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
-    command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
-    cd client && rustup run nightly bevy run --yes --no-default-features --features web web -U multi-threading --host 0.0.0.0 --open
-
-# WASM multiplayer: start server, deploy module, launch WASM dev server
-web-mp:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    # Ensure SpacetimeDB is installed
-    command -v "{{spacetime}}" &>/dev/null || \
-        (echo "Installing SpacetimeDB..." && curl -sSf https://install.spacetimedb.com | sh)
-
-    # Start server
-    "{{spacetime}}" start --pg-port 5432 &
-    sleep 2
-
-    # Deploy module (always wipe data for clean start)
-    "{{spacetime}}" publish wasm-fantasia \
-        --project-path server \
-        --yes \
-        --delete-data
-
-    # Ensure WASM toolchain and bevy CLI
-    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
-    command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
-
-    # Launch WASM dev server (open browser, then open a second tab manually)
-    cd client && rustup run nightly bevy run --yes --no-default-features --features web web -U multi-threading --host 0.0.0.0 --open
-
-# Build WASM release
-web-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
-    command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
-    cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
-
-# Analyze web build sizes (WASM sections + assets). Pass "release" to also build+analyze release WASM.
+# Analyze web build sizes
 web-size *args:
     python3 client/web_size.py {{args}}
 

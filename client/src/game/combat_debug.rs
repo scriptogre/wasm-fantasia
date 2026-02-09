@@ -13,7 +13,7 @@ use crate::networking::SpacetimeDbConnection;
 #[cfg(feature = "multiplayer")]
 use crate::networking::generated::combat_event_table::CombatEventTableAccess;
 #[cfg(feature = "multiplayer")]
-use crate::networking::generated::npc_enemy_table::NpcEnemyTableAccess;
+use crate::networking::generated::enemy_table::EnemyTableAccess;
 #[cfg(feature = "multiplayer")]
 use crate::networking::generated::player_table::PlayerTableAccess;
 #[cfg(feature = "multiplayer")]
@@ -354,12 +354,12 @@ fn update_overlay(
         spawn_body(&mut commands, panel_entity, body.trim_end());
 
         // NPCs
-        let npcs: Vec<_> = conn.conn.db.npc_enemy().iter().collect();
-        if !npcs.is_empty() {
-            let alive = npcs.iter().filter(|n| n.health > 0.0).count();
-            spawn_title(&mut commands, panel_entity, &fonts, format!("NPCs  {} alive / {} dead", alive, npcs.len() - alive));
+        let enemies: Vec<_> = conn.conn.db.enemy().iter().collect();
+        if !enemies.is_empty() {
+            let alive = enemies.iter().filter(|n| n.health > 0.0).count();
+            spawn_title(&mut commands, panel_entity, &fonts, format!("Enemies  {} alive / {} dead", alive, enemies.len() - alive));
         } else {
-            spawn_title(&mut commands, panel_entity, &fonts, "NPCs  none");
+            spawn_title(&mut commands, panel_entity, &fonts, "Enemies  none");
         }
 
         // Server events
@@ -369,14 +369,7 @@ fn update_overlay(
             let mut body = String::new();
             for evt in events.iter().rev().take(3).rev() {
                 let crit = if evt.is_crit { " CRIT" } else { "" };
-                let target = if evt.target_player.is_some() {
-                    "player".to_string()
-                } else if let Some(nid) = evt.target_npc_id {
-                    format!("npc #{nid}")
-                } else {
-                    "?".to_string()
-                };
-                let _ = writeln!(body, "{:.0} dmg -> {target}{crit}", evt.damage);
+                let _ = writeln!(body, "{:.0} dmg at ({:.1}, {:.1}){crit}", evt.damage, evt.x, evt.z);
             }
             spawn_body(&mut commands, panel_entity, body.trim_end());
         }

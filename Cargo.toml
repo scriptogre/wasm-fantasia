@@ -37,7 +37,3 @@ lto = "thin"
 opt-level = "s"
 codegen-units = 1
 strip = true
-
-[profile.wasm-release]
-inherits = "release"
-strip = "debuginfo"

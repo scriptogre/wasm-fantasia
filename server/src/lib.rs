@@ -3,30 +3,31 @@ use wasm_fantasia_shared::combat::{self, defaults, resolve_combat, CombatInput, 
 use wasm_fantasia_shared::presets;
 use wasm_fantasia_shared::rules::{Stat, Stats};
 
-/// Player state stored on the server (authoritative)
+/// Player state stored on the server (authoritative).
 #[spacetimedb::table(name = player, public)]
 pub struct Player {
     #[primary_key]
     pub identity: spacetimedb::Identity,
     pub name: Option<String>,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub rot_y: f32,
-    pub vel_x: f32,
-    pub vel_z: f32,
-    pub on_ground: bool,
-    pub anim_state: String,
-    pub attack_seq: u32,
-    pub attack_anim: String,
     pub online: bool,
     pub last_update: i64,
 
-    // Combat - health
+    // Position
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub rotation_y: f32,
+
+    // Animation
+    pub animation_state: String,
+    pub attack_sequence: u32,
+    pub attack_animation: String,
+
+    // Health
     pub health: f32,
     pub max_health: f32,
 
-    // Combat - offensive stats
+    // Combat
     pub attack_damage: f32,
     pub crit_chance: f32,
     pub crit_multiplier: f32,
@@ -34,69 +35,64 @@ pub struct Player {
     pub attack_arc: f32,
     pub knockback_force: f32,
     pub attack_speed: f32,
-
-    // Combat - stacking state
-    pub stacks: f32,
-    pub stack_decay: f32,
-    pub last_hit_time: i64,
-
-    // Combat - cooldown
     pub last_attack_time: i64,
 }
 
-/// Ephemeral hit result. Inserted by attack_hit, consumed by clients for VFX.
-#[spacetimedb::table(name = combat_event, public)]
-pub struct CombatEvent {
+/// Server-authoritative enemy.
+#[spacetimedb::table(name = enemy, public)]
+pub struct Enemy {
     #[primary_key]
     #[auto_inc]
     pub id: u64,
-    pub attacker: spacetimedb::Identity,
-    pub target_player: Option<spacetimedb::Identity>,
-    pub target_npc_id: Option<u64>,
-    pub damage: f32,
-    pub is_crit: bool,
-    pub attacker_x: f32,
-    pub attacker_z: f32,
-    pub timestamp: i64,
+    pub enemy_type: String,
+
+    // Position
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub rotation_y: f32,
+
+    // Animation
+    pub animation_state: String,
+
+    // Health
+    pub health: f32,
+    pub max_health: f32,
+
+    // Combat
+    pub attack_damage: f32,
+    pub attack_range: f32,
+    pub attack_speed: f32,
+    pub last_attack_time: i64,
 }
 
-/// Server-authoritative NPC enemy.
-#[spacetimedb::table(name = npc_enemy, public)]
-pub struct NpcEnemy {
+/// Ephemeral hit notification. Inserted by attack_hit, consumed by clients for VFX.
+#[spacetimedb::table(name = combat_event, public)]
+pub struct CombatEvent {
     #[primary_key]
     #[auto_inc]
     pub id: u64,
     pub x: f32,
     pub y: f32,
     pub z: f32,
-    pub health: f32,
-    pub max_health: f32,
-}
-
-/// Client input state
-#[spacetimedb::table(name = player_input, public)]
-#[derive(Clone)]
-pub struct PlayerInput {
-    #[primary_key]
-    #[auto_inc]
-    pub id: u64,
-    pub identity: spacetimedb::Identity,
-    pub sequence: u32,
-    pub forward: f32,
-    pub right: f32,
-    pub jump: bool,
-    pub sprint: bool,
-    pub crouch: bool,
-    pub yaw: f32,
+    pub damage: f32,
+    pub is_crit: bool,
     pub timestamp: i64,
 }
 
-/// Movement constants (should match client-side Tnua config)
-const MOVE_SPEED: f32 = 6.0;
-const SPRINT_MULTIPLIER: f32 = 1.6;
-const CROUCH_MULTIPLIER: f32 = 0.3;
-const GRAVITY: f32 = 20.0;
-const DT: f32 = 1.0 / 60.0;
+/// Dynamic effect (buff, debuff, DoT). Managed by combat reducers now,
+/// by Rhai/Lua scripts later.
+#[spacetimedb::table(name = active_effect, public)]
+pub struct ActiveEffect {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub owner: spacetimedb::Identity,
+    pub effect_type: String,
+    pub magnitude: f32,
+    pub duration: f32,
+    pub timestamp: i64,
+}
 
 #[spacetimedb::reducer]
 pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>) {
@@ -115,13 +111,10 @@ pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>) {
             x: 0.0,
             y: 1.0,
             z: 0.0,
-            rot_y: 0.0,
-            vel_x: 0.0,
-            vel_z: 0.0,
-            on_ground: true,
-            anim_state: "Idle".to_string(),
-            attack_seq: 0,
-            attack_anim: String::new(),
+            rotation_y: 0.0,
+            animation_state: "Idle".to_string(),
+            attack_sequence: 0,
+            attack_animation: String::new(),
             online: true,
             last_update: now,
             health: defaults::HEALTH,
@@ -133,122 +126,32 @@ pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>) {
             attack_arc: defaults::ATTACK_ARC,
             knockback_force: defaults::KNOCKBACK,
             attack_speed: defaults::ATTACK_SPEED,
-            stacks: 0.0,
-            stack_decay: defaults::STACK_DECAY,
-            last_hit_time: 0,
             last_attack_time: 0,
         });
     }
 }
 
-#[spacetimedb::reducer]
-pub fn send_input(
-    ctx: &spacetimedb::ReducerContext,
-    sequence: u32,
-    forward: f32,
-    right: f32,
-    jump: bool,
-    sprint: bool,
-    crouch: bool,
-    yaw: f32,
-) {
-    ctx.db.player_input().insert(PlayerInput {
-        id: 0,
-        identity: ctx.sender,
-        sequence,
-        forward,
-        right,
-        jump,
-        sprint,
-        crouch,
-        yaw,
-        timestamp: ctx.timestamp.to_micros_since_unix_epoch(),
-    });
-}
-
-#[spacetimedb::reducer]
-pub fn game_tick(ctx: &spacetimedb::ReducerContext) {
-    for input in ctx.db.player_input().iter() {
-        if let Some(mut player) = ctx.db.player().identity().find(input.identity) {
-            let mut speed = MOVE_SPEED;
-            if input.sprint {
-                speed *= SPRINT_MULTIPLIER;
-            }
-            if input.crouch {
-                speed *= CROUCH_MULTIPLIER;
-            }
-
-            let yaw_sin = input.yaw.sin();
-            let yaw_cos = input.yaw.cos();
-
-            let move_x = input.forward * yaw_sin + input.right * yaw_cos;
-            let move_z = input.forward * yaw_cos - input.right * yaw_sin;
-
-            player.vel_x = move_x * speed;
-            player.vel_z = move_z * speed;
-
-            if !player.on_ground {
-                player.y -= GRAVITY * DT;
-            }
-
-            if input.jump && player.on_ground {
-                player.y += 0.1;
-                player.on_ground = false;
-            }
-
-            if player.y <= 1.0 {
-                player.y = 1.0;
-                player.on_ground = true;
-            }
-
-            player.x += player.vel_x * DT;
-            player.z += player.vel_z * DT;
-
-            player.anim_state = if !player.on_ground {
-                "Jump".to_string()
-            } else if input.crouch {
-                "Crouch".to_string()
-            } else if input.sprint && (input.forward.abs() > 0.1 || input.right.abs() > 0.1) {
-                "Run".to_string()
-            } else if input.forward.abs() > 0.1 || input.right.abs() > 0.1 {
-                "Walk".to_string()
-            } else {
-                "Idle".to_string()
-            };
-
-            if input.forward.abs() > 0.01 || input.right.abs() > 0.01 {
-                player.rot_y = yaw_sin.atan2(input.forward * yaw_cos - input.right * yaw_sin);
-            }
-
-            player.last_update = ctx.timestamp.to_micros_since_unix_epoch();
-            ctx.db.player().identity().update(player);
-        }
-
-        ctx.db.player_input().delete(input);
-    }
-}
-
-/// Client state relay
+/// Client state relay.
 #[spacetimedb::reducer]
 pub fn update_position(
     ctx: &spacetimedb::ReducerContext,
     x: f32,
     y: f32,
     z: f32,
-    rot_y: f32,
-    anim_state: String,
-    attack_seq: u32,
-    attack_anim: String,
+    rotation_y: f32,
+    animation_state: String,
+    attack_sequence: u32,
+    attack_animation: String,
 ) {
     if let Some(player) = ctx.db.player().identity().find(ctx.sender) {
         ctx.db.player().identity().update(Player {
             x,
             y,
             z,
-            rot_y,
-            anim_state,
-            attack_seq,
-            attack_anim,
+            rotation_y,
+            animation_state,
+            attack_sequence,
+            attack_animation,
             last_update: ctx.timestamp.to_micros_since_unix_epoch(),
             ..player
         });
@@ -279,26 +182,36 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         ctx.db.combat_event().delete(event);
     }
 
-    // Cooldown check using shared function
+    // Cooldown check
     if !combat::can_attack(attacker.last_attack_time, now, attacker.attack_speed) {
         return;
     }
 
-    // Lazy stacking decay (server uses timestamp check, not frame-by-frame tick)
-    let decay_elapsed = (now - attacker.last_hit_time) as f64 / 1_000_000.0;
-    let decayed_stacks =
-        combat::decay_stacks(attacker.stacks, decay_elapsed, attacker.stack_decay);
-    let decayed_speed = if decayed_stacks == 0.0 && attacker.stacks > 0.0 {
-        1.0
+    // Read stacking buff from active_effect table
+    let stacking_effect = ctx
+        .db
+        .active_effect()
+        .iter()
+        .find(|e| e.owner == ctx.sender && e.effect_type == "stacking_damage");
+
+    let (stacks, last_hit_time) = if let Some(ref effect) = stacking_effect {
+        let decay_elapsed = (now - effect.timestamp) as f64 / 1_000_000.0;
+        let decayed = combat::decay_stacks(effect.magnitude, decay_elapsed, defaults::STACK_DECAY);
+        (decayed, effect.timestamp)
     } else {
+        (0.0, 0_i64)
+    };
+
+    let effective_speed = if stacks > 0.0 {
         attacker.attack_speed
+    } else {
+        1.0
     };
 
     let rules = presets::default_player_rules();
 
     let half_arc_cos = (attacker.attack_arc / 2.0_f32).to_radians().cos();
-    // Bevy's forward is -local_z: for Quat::from_rotation_y(rot_y), forward = (-sin(rot_y), -cos(rot_y))
-    let fwd = glam::Vec2::new(-attacker.rot_y.sin(), -attacker.rot_y.cos());
+    let fwd = glam::Vec2::new(-attacker.rotation_y.sin(), -attacker.rotation_y.cos());
     let origin = glam::Vec2::new(attacker.x, attacker.z);
 
     let attacker_stats = Stats::new()
@@ -308,13 +221,13 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .with(Stat::Knockback, attacker.knockback_force)
         .with(Stat::AttackRange, attacker.attack_range)
         .with(Stat::AttackArc, attacker.attack_arc)
-        .with(Stat::Custom("Stacks".into()), decayed_stacks)
-        .with(Stat::AttackSpeed, decayed_speed);
+        .with(Stat::Custom("Stacks".into()), stacks)
+        .with(Stat::AttackSpeed, effective_speed);
 
-    // Build target list from NPC enemies
-    let enemy_targets: Vec<NpcEnemy> = ctx
+    // Build target list from enemies
+    let enemy_targets: Vec<Enemy> = ctx
         .db
-        .npc_enemy()
+        .enemy()
         .iter()
         .filter(|e| e.health > 0.0)
         .collect();
@@ -341,24 +254,27 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
 
     // Apply results to DB
     for hit in &output.hits {
+        // Combat event at the target's position for VFX
+        let target_enemy = enemy_targets.iter().find(|e| e.id == hit.target_id);
+        let (hit_x, hit_y, hit_z) = target_enemy
+            .map(|e| (e.x, e.y, e.z))
+            .unwrap_or((attacker.x, attacker.y, attacker.z));
+
         ctx.db.combat_event().insert(CombatEvent {
             id: 0,
-            attacker: ctx.sender,
-            target_player: None,
-            target_npc_id: Some(hit.target_id),
+            x: hit_x,
+            y: hit_y,
+            z: hit_z,
             damage: hit.damage,
             is_crit: hit.is_crit,
-            attacker_x: attacker.x,
-            attacker_z: attacker.z,
             timestamp: now,
         });
 
-        // Look up current enemy state from DB (not the Vec — avoids borrow issues)
-        if let Some(enemy) = ctx.db.npc_enemy().id().find(hit.target_id) {
+        if let Some(enemy) = ctx.db.enemy().id().find(hit.target_id) {
             if hit.died {
-                ctx.db.npc_enemy().delete(enemy);
+                ctx.db.enemy().delete(enemy);
             } else {
-                ctx.db.npc_enemy().id().update(NpcEnemy {
+                ctx.db.enemy().id().update(Enemy {
                     health: hit.new_health,
                     ..enemy
                 });
@@ -366,15 +282,37 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         }
     }
 
+    // Update attacker state
+    let new_stacks = output.attacker_stats.get(&Stat::Custom("Stacks".into()));
+    let new_speed = output.attacker_stats.get(&Stat::AttackSpeed);
+
+    // Persist stacking buff to active_effect
+    if new_stacks > 0.0 || stacking_effect.is_some() {
+        if let Some(effect) = stacking_effect {
+            if new_stacks > 0.0 {
+                ctx.db.active_effect().id().update(ActiveEffect {
+                    magnitude: new_stacks,
+                    timestamp: if output.hit_any { now } else { last_hit_time },
+                    ..effect
+                });
+            } else {
+                ctx.db.active_effect().delete(effect);
+            }
+        } else if new_stacks > 0.0 {
+            ctx.db.active_effect().insert(ActiveEffect {
+                id: 0,
+                owner: ctx.sender,
+                effect_type: "stacking_damage".to_string(),
+                magnitude: new_stacks,
+                duration: -1.0,
+                timestamp: now,
+            });
+        }
+    }
+
     ctx.db.player().identity().update(Player {
         last_attack_time: now,
-        last_hit_time: if output.hit_any {
-            now
-        } else {
-            attacker.last_hit_time
-        },
-        stacks: output.attacker_stats.get(&Stat::Custom("Stacks".into())),
-        attack_speed: output.attacker_stats.get(&Stat::AttackSpeed),
+        attack_speed: new_speed,
         last_update: now,
         ..attacker
     });
@@ -421,13 +359,20 @@ pub fn spawn_enemies(
     ];
 
     for (ox, oz) in offsets {
-        ctx.db.npc_enemy().insert(NpcEnemy {
+        ctx.db.enemy().insert(Enemy {
             id: 0,
+            enemy_type: "basic".to_string(),
             x: base_x + ox,
             y,
             z: base_z + oz,
+            rotation_y: 0.0,
+            animation_state: "Idle".to_string(),
             health: defaults::ENEMY_HEALTH,
             max_health: defaults::ENEMY_HEALTH,
+            attack_damage: 0.0,
+            attack_range: 0.0,
+            attack_speed: 1.0,
+            last_attack_time: 0,
         });
     }
 }
@@ -444,12 +389,23 @@ pub fn respawn(ctx: &spacetimedb::ReducerContext) {
     }
 
     let now = ctx.timestamp.to_micros_since_unix_epoch();
+
+    // Clear stacking buff on respawn
+    let stacking: Vec<ActiveEffect> = ctx
+        .db
+        .active_effect()
+        .iter()
+        .filter(|e| e.owner == ctx.sender)
+        .collect();
+    for effect in stacking {
+        ctx.db.active_effect().delete(effect);
+    }
+
     ctx.db.player().identity().update(Player {
         health: player.max_health,
         x: 0.0,
         y: 1.0,
         z: 0.0,
-        stacks: 0.0,
         attack_speed: 1.0,
         last_update: now,
         ..player

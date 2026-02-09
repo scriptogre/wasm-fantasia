@@ -6,42 +6,42 @@
 #![allow(unused, clippy::all)]
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
+pub mod active_effect_table;
+pub mod active_effect_type;
 pub mod attack_hit_reducer;
 pub mod combat_event_table;
 pub mod combat_event_type;
-pub mod game_tick_reducer;
+pub mod enemy_table;
+pub mod enemy_type;
 pub mod join_game_reducer;
 pub mod leave_game_reducer;
-pub mod npc_enemy_table;
-pub mod npc_enemy_type;
-pub mod player_input_table;
-pub mod player_input_type;
+pub mod on_disconnect_reducer;
 pub mod player_table;
 pub mod player_type;
 pub mod respawn_reducer;
-pub mod send_input_reducer;
 pub mod spawn_enemies_reducer;
 pub mod update_position_reducer;
 
-pub use attack_hit_reducer::{AttackHitCallbackId, attack_hit, set_flags_for_attack_hit};
+pub use active_effect_table::*;
+pub use active_effect_type::ActiveEffect;
+pub use attack_hit_reducer::{attack_hit, set_flags_for_attack_hit, AttackHitCallbackId};
 pub use combat_event_table::*;
 pub use combat_event_type::CombatEvent;
-pub use game_tick_reducer::{GameTickCallbackId, game_tick, set_flags_for_game_tick};
-pub use join_game_reducer::{JoinGameCallbackId, join_game, set_flags_for_join_game};
-pub use leave_game_reducer::{LeaveGameCallbackId, leave_game, set_flags_for_leave_game};
-pub use npc_enemy_table::*;
-pub use npc_enemy_type::NpcEnemy;
-pub use player_input_table::*;
-pub use player_input_type::PlayerInput;
+pub use enemy_table::*;
+pub use enemy_type::Enemy;
+pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
+pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
+pub use on_disconnect_reducer::{
+    on_disconnect, set_flags_for_on_disconnect, OnDisconnectCallbackId,
+};
 pub use player_table::*;
 pub use player_type::Player;
-pub use respawn_reducer::{RespawnCallbackId, respawn, set_flags_for_respawn};
-pub use send_input_reducer::{SendInputCallbackId, send_input, set_flags_for_send_input};
+pub use respawn_reducer::{respawn, set_flags_for_respawn, RespawnCallbackId};
 pub use spawn_enemies_reducer::{
-    SpawnEnemiesCallbackId, set_flags_for_spawn_enemies, spawn_enemies,
+    set_flags_for_spawn_enemies, spawn_enemies, SpawnEnemiesCallbackId,
 };
 pub use update_position_reducer::{
-    UpdatePositionCallbackId, set_flags_for_update_position, update_position,
+    set_flags_for_update_position, update_position, UpdatePositionCallbackId,
 };
 
 #[derive(Clone, PartialEq, Debug)]
@@ -53,21 +53,12 @@ pub use update_position_reducer::{
 
 pub enum Reducer {
     AttackHit,
-    GameTick,
     JoinGame {
         name: Option<String>,
     },
     LeaveGame,
+    OnDisconnect,
     Respawn,
-    SendInput {
-        sequence: u32,
-        forward: f32,
-        right: f32,
-        jump: bool,
-        sprint: bool,
-        crouch: bool,
-        yaw: f32,
-    },
     SpawnEnemies {
         x: f32,
         y: f32,
@@ -79,10 +70,10 @@ pub enum Reducer {
         x: f32,
         y: f32,
         z: f32,
-        rot_y: f32,
-        anim_state: String,
-        attack_seq: u32,
-        attack_anim: String,
+        rotation_y: f32,
+        animation_state: String,
+        attack_sequence: u32,
+        attack_animation: String,
     },
 }
 
@@ -94,11 +85,10 @@ impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::AttackHit => "attack_hit",
-            Reducer::GameTick => "game_tick",
             Reducer::JoinGame { .. } => "join_game",
             Reducer::LeaveGame => "leave_game",
+            Reducer::OnDisconnect => "on_disconnect",
             Reducer::Respawn => "respawn",
-            Reducer::SendInput { .. } => "send_input",
             Reducer::SpawnEnemies { .. } => "spawn_enemies",
             Reducer::UpdatePosition { .. } => "update_position",
             _ => unreachable!(),
@@ -112,13 +102,6 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
             "attack_hit" => Ok(
                 __sdk::parse_reducer_args::<attack_hit_reducer::AttackHitArgs>(
                     "attack_hit",
-                    &value.args,
-                )?
-                .into(),
-            ),
-            "game_tick" => Ok(
-                __sdk::parse_reducer_args::<game_tick_reducer::GameTickArgs>(
-                    "game_tick",
                     &value.args,
                 )?
                 .into(),
@@ -137,18 +120,15 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
                 )?
                 .into(),
             ),
+            "on_disconnect" => Ok(__sdk::parse_reducer_args::<
+                on_disconnect_reducer::OnDisconnectArgs,
+            >("on_disconnect", &value.args)?
+            .into()),
             "respawn" => Ok(__sdk::parse_reducer_args::<respawn_reducer::RespawnArgs>(
                 "respawn",
                 &value.args,
             )?
             .into()),
-            "send_input" => Ok(
-                __sdk::parse_reducer_args::<send_input_reducer::SendInputArgs>(
-                    "send_input",
-                    &value.args,
-                )?
-                .into(),
-            ),
             "spawn_enemies" => Ok(__sdk::parse_reducer_args::<
                 spawn_enemies_reducer::SpawnEnemiesArgs,
             >("spawn_enemies", &value.args)?
@@ -171,10 +151,10 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct DbUpdate {
+    active_effect: __sdk::TableUpdate<ActiveEffect>,
     combat_event: __sdk::TableUpdate<CombatEvent>,
-    npc_enemy: __sdk::TableUpdate<NpcEnemy>,
+    enemy: __sdk::TableUpdate<Enemy>,
     player: __sdk::TableUpdate<Player>,
-    player_input: __sdk::TableUpdate<PlayerInput>,
 }
 
 impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
@@ -183,18 +163,18 @@ impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
         let mut db_update = DbUpdate::default();
         for table_update in raw.tables {
             match &table_update.table_name[..] {
+                "active_effect" => db_update
+                    .active_effect
+                    .append(active_effect_table::parse_table_update(table_update)?),
                 "combat_event" => db_update
                     .combat_event
                     .append(combat_event_table::parse_table_update(table_update)?),
-                "npc_enemy" => db_update
-                    .npc_enemy
-                    .append(npc_enemy_table::parse_table_update(table_update)?),
+                "enemy" => db_update
+                    .enemy
+                    .append(enemy_table::parse_table_update(table_update)?),
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
-                "player_input" => db_update
-                    .player_input
-                    .append(player_input_table::parse_table_update(table_update)?),
 
                 unknown => {
                     return Err(__sdk::InternalError::unknown_name(
@@ -221,18 +201,18 @@ impl __sdk::DbUpdate for DbUpdate {
     ) -> AppliedDiff<'_> {
         let mut diff = AppliedDiff::default();
 
+        diff.active_effect = cache
+            .apply_diff_to_table::<ActiveEffect>("active_effect", &self.active_effect)
+            .with_updates_by_pk(|row| &row.id);
         diff.combat_event = cache
             .apply_diff_to_table::<CombatEvent>("combat_event", &self.combat_event)
             .with_updates_by_pk(|row| &row.id);
-        diff.npc_enemy = cache
-            .apply_diff_to_table::<NpcEnemy>("npc_enemy", &self.npc_enemy)
+        diff.enemy = cache
+            .apply_diff_to_table::<Enemy>("enemy", &self.enemy)
             .with_updates_by_pk(|row| &row.id);
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
             .with_updates_by_pk(|row| &row.identity);
-        diff.player_input = cache
-            .apply_diff_to_table::<PlayerInput>("player_input", &self.player_input)
-            .with_updates_by_pk(|row| &row.id);
 
         diff
     }
@@ -242,10 +222,10 @@ impl __sdk::DbUpdate for DbUpdate {
 #[allow(non_snake_case)]
 #[doc(hidden)]
 pub struct AppliedDiff<'r> {
+    active_effect: __sdk::TableAppliedDiff<'r, ActiveEffect>,
     combat_event: __sdk::TableAppliedDiff<'r, CombatEvent>,
-    npc_enemy: __sdk::TableAppliedDiff<'r, NpcEnemy>,
+    enemy: __sdk::TableAppliedDiff<'r, Enemy>,
     player: __sdk::TableAppliedDiff<'r, Player>,
-    player_input: __sdk::TableAppliedDiff<'r, PlayerInput>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
 
@@ -259,18 +239,18 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         event: &EventContext,
         callbacks: &mut __sdk::DbCallbacks<RemoteModule>,
     ) {
+        callbacks.invoke_table_row_callbacks::<ActiveEffect>(
+            "active_effect",
+            &self.active_effect,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<CombatEvent>(
             "combat_event",
             &self.combat_event,
             event,
         );
-        callbacks.invoke_table_row_callbacks::<NpcEnemy>("npc_enemy", &self.npc_enemy, event);
+        callbacks.invoke_table_row_callbacks::<Enemy>("enemy", &self.enemy, event);
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
-        callbacks.invoke_table_row_callbacks::<PlayerInput>(
-            "player_input",
-            &self.player_input,
-            event,
-        );
     }
 }
 
@@ -443,7 +423,6 @@ impl DbConnection {
     /// This is a low-level primitive exposed for power users who need significant control over scheduling.
     /// Most applications should call [`Self::run_threaded`] to spawn a thread
     /// which advances the connection automatically.
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn advance_one_message_blocking(&self) -> __sdk::Result<()> {
         self.imp.advance_one_message_blocking()
     }
@@ -469,7 +448,6 @@ impl DbConnection {
     }
 
     /// Spawn a thread which processes WebSocket messages as they are received.
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn run_threaded(&self) -> std::thread::JoinHandle<()> {
         self.imp.run_threaded()
     }
@@ -477,12 +455,6 @@ impl DbConnection {
     /// Run an `async` loop which processes WebSocket messages when polled.
     pub async fn run_async(&self) -> __sdk::Result<()> {
         self.imp.run_async().await
-    }
-
-    /// Spawn a background async task that processes messages (WASM only).
-    #[cfg(target_arch = "wasm32")]
-    pub fn run_background_task(&self) {
-        self.imp.run_background_task()
     }
 }
 
@@ -542,21 +514,21 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
 /// either a [`DbConnection`] or an [`EventContext`] and operate on either.
 pub trait RemoteDbContext:
     __sdk::DbContext<
-        DbView = RemoteTables,
-        Reducers = RemoteReducers,
-        SetReducerFlags = SetReducerFlags,
-        SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
-    >
+    DbView = RemoteTables,
+    Reducers = RemoteReducers,
+    SetReducerFlags = SetReducerFlags,
+    SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
+>
 {
 }
 impl<
-    Ctx: __sdk::DbContext<
+        Ctx: __sdk::DbContext<
             DbView = RemoteTables,
             Reducers = RemoteReducers,
             SetReducerFlags = SetReducerFlags,
             SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
         >,
-> RemoteDbContext for Ctx
+    > RemoteDbContext for Ctx
 {
 }
 
@@ -998,9 +970,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type SubscriptionHandle = SubscriptionHandle;
 
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
+        active_effect_table::register_table(client_cache);
         combat_event_table::register_table(client_cache);
-        npc_enemy_table::register_table(client_cache);
+        enemy_table::register_table(client_cache);
         player_table::register_table(client_cache);
-        player_input_table::register_table(client_cache);
     }
 }

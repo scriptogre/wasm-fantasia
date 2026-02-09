@@ -6,6 +6,13 @@ use super::combat_event_type::CombatEvent;
 use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 /// Table handle for the table `combat_event`.
+///
+/// Obtain a handle from the [`CombatEventTableAccess::combat_event`] method on [`super::RemoteTables`],
+/// like `ctx.db.combat_event()`.
+///
+/// Users are encouraged not to explicitly reference this type,
+/// but to directly chain method calls,
+/// like `ctx.db.combat_event().on_insert(...)`.
 pub struct CombatEventTableHandle<'ctx> {
     imp: __sdk::TableHandle<CombatEvent>,
     ctx: std::marker::PhantomData<&'ctx super::RemoteTables>,
@@ -17,6 +24,7 @@ pub struct CombatEventTableHandle<'ctx> {
 /// Implemented for [`super::RemoteTables`].
 pub trait CombatEventTableAccess {
     #[allow(non_snake_case)]
+    /// Obtain a [`CombatEventTableHandle`], which mediates access to the table `combat_event`.
     fn combat_event(&self) -> CombatEventTableHandle<'_>;
 }
 
@@ -75,7 +83,6 @@ pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::Remote
     let _table = client_cache.get_or_make_table::<CombatEvent>("combat_event");
     _table.add_unique_constraint::<u64>("id", |row| &row.id);
 }
-
 pub struct CombatEventUpdateCallbackId(__sdk::CallbackId);
 
 impl<'ctx> __sdk::TableWithPrimaryKey for CombatEventTableHandle<'ctx> {
@@ -104,13 +111,20 @@ pub(super) fn parse_table_update(
     })
 }
 
-/// Access to the `id` unique index on the table `combat_event`.
+/// Access to the `id` unique index on the table `combat_event`,
+/// which allows point queries on the field of the same name
+/// via the [`CombatEventIdUnique::find`] method.
+///
+/// Users are encouraged not to explicitly reference this type,
+/// but to directly chain method calls,
+/// like `ctx.db.combat_event().id().find(...)`.
 pub struct CombatEventIdUnique<'ctx> {
     imp: __sdk::UniqueConstraintHandle<CombatEvent, u64>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
 impl<'ctx> CombatEventTableHandle<'ctx> {
+    /// Get a handle on the `id` unique index on the table `combat_event`.
     pub fn id(&self) -> CombatEventIdUnique<'ctx> {
         CombatEventIdUnique {
             imp: self.imp.get_unique_constraint::<u64>("id"),
@@ -120,6 +134,8 @@ impl<'ctx> CombatEventTableHandle<'ctx> {
 }
 
 impl<'ctx> CombatEventIdUnique<'ctx> {
+    /// Find the subscribed row whose `id` column value is equal to `col_val`,
+    /// if such a row is present in the client cache.
     pub fn find(&self, col_val: &u64) -> Option<CombatEvent> {
         self.imp.find(col_val)
     }

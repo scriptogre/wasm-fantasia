@@ -385,6 +385,6 @@ Also deleted: `networking/player.rs` entirely, most of `networking/combat.rs`.
 
 1. `just check` — clippy, fmt, machete, web compilation pass
 2. `just` — SP: spawn enemies, hit them, VFX plays, health drains, they die
-3. `just mp` — MP: enemies visible on both clients, remote attacks show VFX, health syncs
+3. `just` (with two clients) — MP: enemies visible on both clients, remote attacks show VFX, health syncs
 4. `grep -r "networking" client/src/combat/` — zero results
 5. `grep -r "cfg.*multiplayer" client/src/combat/` — zero results

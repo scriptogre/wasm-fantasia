@@ -50,3 +50,19 @@ pub enum AnimationState {
     KnockBack,
     Attack,
 }
+
+impl AnimationState {
+    /// Lossy mapping to a simplified server animation name.
+    /// Blend weights and sub-states are collapsed to broad categories.
+    pub fn server_name(&self) -> &'static str {
+        match self {
+            Self::StandIdle | Self::CrouchIdle => "Idle",
+            Self::Run(_) | Self::Climb(_) => "Walk",
+            Self::Sprint(_) | Self::SlideStart | Self::SlideLoop | Self::SlideExit => "Run",
+            Self::Crouch(_) => "Crouch",
+            Self::JumpStart | Self::JumpLoop | Self::WallJump => "Jump",
+            Self::Fall | Self::JumpLand | Self::WallSlide => "Fall",
+            Self::Attack | Self::KnockBack => "Idle",
+        }
+    }
+}

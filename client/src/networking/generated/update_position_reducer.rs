@@ -10,10 +10,10 @@ pub(super) struct UpdatePositionArgs {
     pub x: f32,
     pub y: f32,
     pub z: f32,
-    pub rot_y: f32,
-    pub anim_state: String,
-    pub attack_seq: u32,
-    pub attack_anim: String,
+    pub rotation_y: f32,
+    pub animation_state: String,
+    pub attack_sequence: u32,
+    pub attack_animation: String,
 }
 
 impl From<UpdatePositionArgs> for super::Reducer {
@@ -22,10 +22,10 @@ impl From<UpdatePositionArgs> for super::Reducer {
             x: args.x,
             y: args.y,
             z: args.z,
-            rot_y: args.rot_y,
-            anim_state: args.anim_state,
-            attack_seq: args.attack_seq,
-            attack_anim: args.attack_anim,
+            rotation_y: args.rotation_y,
+            animation_state: args.animation_state,
+            attack_sequence: args.attack_sequence,
+            attack_animation: args.attack_animation,
         }
     }
 }
@@ -51,10 +51,10 @@ pub trait update_position {
         x: f32,
         y: f32,
         z: f32,
-        rot_y: f32,
-        anim_state: String,
-        attack_seq: u32,
-        attack_anim: String,
+        rotation_y: f32,
+        animation_state: String,
+        attack_sequence: u32,
+        attack_animation: String,
     ) -> __sdk::Result<()>;
     /// Register a callback to run whenever we are notified of an invocation of the reducer `update_position`.
     ///
@@ -65,17 +65,9 @@ pub trait update_position {
     /// to cancel the callback.
     fn on_update_position(
         &self,
-        callback: impl FnMut(
-            &super::ReducerEventContext,
-            &f32,
-            &f32,
-            &f32,
-            &f32,
-            &String,
-            &u32,
-            &String,
-        ) + Send
-        + 'static,
+        callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &String, &u32, &String)
+            + Send
+            + 'static,
     ) -> UpdatePositionCallbackId;
     /// Cancel a callback previously registered by [`Self::on_update_position`],
     /// causing it not to run in the future.
@@ -88,10 +80,10 @@ impl update_position for super::RemoteReducers {
         x: f32,
         y: f32,
         z: f32,
-        rot_y: f32,
-        anim_state: String,
-        attack_seq: u32,
-        attack_anim: String,
+        rotation_y: f32,
+        animation_state: String,
+        attack_sequence: u32,
+        attack_animation: String,
     ) -> __sdk::Result<()> {
         self.imp.call_reducer(
             "update_position",
@@ -99,26 +91,18 @@ impl update_position for super::RemoteReducers {
                 x,
                 y,
                 z,
-                rot_y,
-                anim_state,
-                attack_seq,
-                attack_anim,
+                rotation_y,
+                animation_state,
+                attack_sequence,
+                attack_animation,
             },
         )
     }
     fn on_update_position(
         &self,
-        mut callback: impl FnMut(
-            &super::ReducerEventContext,
-            &f32,
-            &f32,
-            &f32,
-            &f32,
-            &String,
-            &u32,
-            &String,
-        ) + Send
-        + 'static,
+        mut callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &String, &u32, &String)
+            + Send
+            + 'static,
     ) -> UpdatePositionCallbackId {
         UpdatePositionCallbackId(self.imp.on_reducer(
             "update_position",
@@ -132,10 +116,10 @@ impl update_position for super::RemoteReducers {
                                     x,
                                     y,
                                     z,
-                                    rot_y,
-                                    anim_state,
-                                    attack_seq,
-                                    attack_anim,
+                                    rotation_y,
+                                    animation_state,
+                                    attack_sequence,
+                                    attack_animation,
                                 },
                             ..
                         },
@@ -144,7 +128,16 @@ impl update_position for super::RemoteReducers {
                 else {
                     unreachable!()
                 };
-                callback(ctx, x, y, z, rot_y, anim_state, attack_seq, attack_anim)
+                callback(
+                    ctx,
+                    x,
+                    y,
+                    z,
+                    rotation_y,
+                    animation_state,
+                    attack_sequence,
+                    attack_animation,
+                )
             }),
         ))
     }
