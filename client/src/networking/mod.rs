@@ -203,10 +203,7 @@ impl Plugin for NetworkingPlugin {
                 reset_reconnect_timer.run_if(resource_exists::<ServerTarget>),
             )
             .add_systems(Update, auto_connect)
-            .add_systems(
-                OnExit(Screen::Connecting),
-                disconnect_on_cancel.run_if(resource_exists::<ServerTarget>),
-            )
+            .add_systems(OnExit(Screen::Connecting), cleanup_connecting_exit)
             .add_systems(
                 OnExit(Screen::Gameplay),
                 (
@@ -239,12 +236,12 @@ impl Plugin for NetworkingPlugin {
 // =============================================================================
 
 macro_rules! connection_builder {
-    ($config:expr, $token:expr) => {{
+    ($uri:expr, $module_name:expr, $token:expr) => {{
         let token_store = $token.clone();
         let stored = $token.lock().unwrap().clone();
         DbConnection::builder()
-            .with_uri(&$config.uri)
-            .with_module_name(&$config.module_name)
+            .with_uri($uri)
+            .with_module_name($module_name)
             .with_token(stored)
             .on_connect(move |conn, identity, token| {
                 info!("Connected to SpacetimeDB with identity: {:?}", identity);
@@ -270,11 +267,12 @@ macro_rules! connection_builder {
 }
 
 pub fn try_connect(
-    config: &SpacetimeDbConfig,
+    uri: &str,
+    module_name: &str,
     token: &SpacetimeDbToken,
 ) -> Option<SpacetimeDbConnection> {
-    info!("Attempting SpacetimeDB connection to {}...", config.uri);
-    match connection_builder!(config, token.0).build() {
+    info!("Attempting SpacetimeDB connection to {uri}...");
+    match connection_builder!(uri, module_name, token.0).build() {
         Ok(conn) => {
             info!("Connection initiated — waiting for handshake");
             Some(SpacetimeDbConnection { conn })
@@ -290,23 +288,31 @@ fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
     *timer = ReconnectTimer::default();
 }
 
-/// Clean up connection if we leave the connecting screen without a completed handshake
-/// (cancel or timeout). If the handshake succeeded, we're transitioning to Gameplay
-/// and want to keep the connection alive.
-fn disconnect_on_cancel(
+/// Clean up when leaving the Connecting screen without a completed handshake.
+fn cleanup_connecting_exit(
     conn: Option<Res<SpacetimeDbConnection>>,
     mut commands: Commands,
 ) {
-    let Some(conn) = conn else { return };
-    if conn.conn.try_identity().is_some() {
-        // Handshake completed — heading to Gameplay, keep connection alive
-        return;
+    if conn
+        .as_ref()
+        .is_some_and(|c| c.conn.try_identity().is_some())
+    {
+        return; // heading to Gameplay — keep everything
     }
-    if let Err(e) = conn.conn.disconnect() {
-        warn!("SpacetimeDB disconnect error on cancel: {e:?}");
+
+    if let Some(conn) = conn {
+        let _ = conn.conn.disconnect();
+        commands.remove_resource::<SpacetimeDbConnection>();
+        commands.remove_resource::<HandshakeStart>();
     }
-    commands.remove_resource::<SpacetimeDbConnection>();
-    commands.remove_resource::<HandshakeStart>();
+
+    // Remove local server so stale LocalServerState::Failed doesn't block
+    // the next auto_connect attempt.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        commands.remove_resource::<local_server::LocalServer>();
+        commands.remove_resource::<local_server::LocalServerState>();
+    }
 }
 
 fn disconnect_from_spacetimedb(
@@ -342,10 +348,8 @@ fn auto_connect(
         Res<local_server::LocalServerState>,
     >,
 ) {
-    if !matches!(state.get(), Screen::Connecting | Screen::Gameplay)
-        || server_target.is_none()
-        || conn.is_some()
-    {
+    let Some(target) = server_target else { return };
+    if !matches!(state.get(), Screen::Connecting | Screen::Gameplay) || conn.is_some() {
         return;
     }
 
@@ -361,7 +365,13 @@ fn auto_connect(
     if !timer.0.just_finished() {
         return;
     }
-    if let Some(conn) = try_connect(&config, &token) {
+
+    // Derive URI from ServerTarget — never from mutable config
+    let uri = match target.as_ref() {
+        ServerTarget::Local { port } => format!("ws://127.0.0.1:{port}"),
+        ServerTarget::Remote { uri } => uri.clone(),
+    };
+    if let Some(conn) = try_connect(&uri, &config.module_name, &token) {
         commands.insert_resource(conn);
         commands.insert_resource(HandshakeStart(Instant::now()));
         info!("auto_connect: connection initiated");

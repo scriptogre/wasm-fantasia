@@ -21,6 +21,7 @@ pub struct LocalServer {
     process: Option<Child>,
     pub port: u16,
     spacetime_binary: PathBuf,
+    data_dir: Option<PathBuf>,
 }
 
 /// Progress of the local server lifecycle.
@@ -101,6 +102,7 @@ pub fn start() -> (LocalServer, LocalServerState) {
                 process: None,
                 port: 0,
                 spacetime_binary: PathBuf::new(),
+                data_dir: None,
             },
             LocalServerState::Failed(
                 "SpacetimeDB CLI not found. Install from https://install.spacetimedb.com \
@@ -116,16 +118,30 @@ pub fn start() -> (LocalServer, LocalServerState) {
                 process: None,
                 port: 0,
                 spacetime_binary: binary,
+                data_dir: None,
             },
             LocalServerState::Failed("Could not find an available port.".to_string()),
         );
     };
 
+    // Use a unique temp data directory so the pid file doesn't conflict
+    // with any other running SpacetimeDB instance.
+    let data_dir = std::env::temp_dir().join(format!("spacetimedb-wf-{port}"));
+    let _ = std::fs::create_dir_all(&data_dir);
+
     let listen_addr = format!("127.0.0.1:{port}");
     info!("Starting local SpacetimeDB on {listen_addr}");
 
+    let data_dir_str = data_dir.to_string_lossy().to_string();
     let result = Command::new(&binary)
-        .args(["start", "--listen-addr", &listen_addr, "--in-memory"])
+        .args([
+            "start",
+            "--listen-addr",
+            &listen_addr,
+            "--in-memory",
+            "--data-dir",
+            &data_dir_str,
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn();
@@ -136,6 +152,7 @@ pub fn start() -> (LocalServer, LocalServerState) {
                 process: Some(child),
                 port,
                 spacetime_binary: binary,
+                data_dir: Some(data_dir),
             },
             LocalServerState::Starting,
         ),
@@ -144,6 +161,7 @@ pub fn start() -> (LocalServer, LocalServerState) {
                 process: None,
                 port,
                 spacetime_binary: binary,
+                data_dir: Some(data_dir),
             },
             LocalServerState::Failed(format!("Failed to start SpacetimeDB: {e}")),
         ),
@@ -260,6 +278,9 @@ fn shutdown(server: &mut LocalServer) {
             Err(e) => warn!("Error waiting for SpacetimeDB to exit: {e}"),
         }
         server.process = None;
+    }
+    if let Some(ref dir) = server.data_dir {
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
 

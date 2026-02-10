@@ -76,21 +76,17 @@ fn spawn_connecting_screen(
     mut commands: Commands,
     font: Res<HudFont>,
     server_target: Option<Res<ServerTarget>>,
-    mut config: ResMut<SpacetimeDbConfig>,
+    config: Res<SpacetimeDbConfig>,
 ) {
     info!("Entering connecting screen");
 
     let mut log = ConnectionLog::default();
 
-    // Set the SpacetimeDbConfig URI from ServerTarget
     match server_target.as_deref() {
-        Some(ServerTarget::Local { port }) => {
-            let uri = format!("ws://127.0.0.1:{port}");
-            config.uri = uri.clone();
+        Some(ServerTarget::Local { .. }) => {
             log.push("Starting local SpacetimeDB server...");
         }
         Some(ServerTarget::Remote { uri }) => {
-            config.uri = uri.clone();
             log.push(format!("Connecting to {} ({})...", uri, config.module_name));
         }
         None => {

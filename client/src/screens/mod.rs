@@ -76,8 +76,6 @@ pub mod to {
         state.reset();
         modals.clear();
         commands.remove_resource::<ServerTarget>();
-        // Reset config so stale local URIs don't leak into multiplayer
-        commands.insert_resource(crate::networking::SpacetimeDbConfig::default());
         commands.trigger(GoTo(Screen::Title));
     }
     pub fn settings(_: On<Pointer<Click>>, mut commands: Commands) {

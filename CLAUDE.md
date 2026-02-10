@@ -91,6 +91,7 @@ Full-length, explicit names. No abbreviations in struct fields, function names, 
 - bevy_skein stores enum discriminants, not strings — library updates may break saved scenes
 - Player rotation is locked on X/Z but free on Y (LockedAxes::ROTATION_LOCKED.unlock_rotation_y())
 - TNUA movement is in FixedUpdate schedule, not Update
+- Always regenerate SpacetimeDB bindings via `just generate`, never `spacetime generate` directly — the recipe patches WASM-incompatible methods (`advance_one_message_blocking`, `run_threaded`) that the codegen emits but our SDK fork removes
 
 ## Architecture Conventions
 
