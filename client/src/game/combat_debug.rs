@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
-use crate::models::{Player as LocalPlayer, Session};
+use crate::models::{Player as LocalPlayer, Screen, Session};
 use crate::rules::{Stat, Stats};
 use crate::ui::{colors, size};
 
@@ -100,7 +100,7 @@ impl DebugLog {
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<DebugLog>()
-        .add_systems(Startup, spawn_panel)
+        .add_systems(OnEnter(Screen::Gameplay), spawn_panel)
         .add_observer(observe_damage)
         .add_observer(observe_death)
         .add_systems(

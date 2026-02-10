@@ -1,7 +1,13 @@
 use super::*;
 
-pub fn click_to_menu(_: On<Pointer<Click>>, mut commands: Commands, mut state: ResMut<Session>) {
+pub fn click_to_menu(
+    _: On<Pointer<Click>>,
+    mut commands: Commands,
+    mut state: ResMut<Session>,
+    mut modals: ResMut<Modals>,
+) {
     state.reset();
+    modals.clear();
     commands.trigger(GoTo(Screen::Title));
 }
 pub fn click_spawn_settings(on: On<Pointer<Click>>, mut commands: Commands) {
@@ -12,10 +18,7 @@ pub fn click_spawn_settings(on: On<Pointer<Click>>, mut commands: Commands) {
 }
 
 pub fn settings_modal() -> impl Bundle {
-    (
-        SettingsModal,
-        settings_ui(),
-    )
+    (SettingsModal, settings_ui())
 }
 
 pub fn menu_modal() -> impl Bundle {
