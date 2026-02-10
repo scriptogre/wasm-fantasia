@@ -21,13 +21,14 @@ Currently, singleplayer and multiplayer are two completely different code paths.
 | 1 — Local Subprocess Manager | **Done** | `networking/local_server.rs` — start, health-check, deploy, shutdown |
 | 2 — SP Connects to Local DB | **Done** | Title screen flows, connecting screen, generalized run conditions |
 | 3 — Remove Client-Side SP Logic | **Done** | Deleted `enemy_ai`, `EnemyAi`, SP spawn fallback, lag simulator |
-| 4 — Web Solo Sessions | **Not started** | Server-side session isolation needed |
-| 5 — Distribution & Polish | **Not started** | Binary bundling, pre-compiled WASM module |
+| 4 — Web Solo Sessions | **Done** | `world_id` isolation on all tables, scoped AI/spawning/subscriptions |
+| 5 — Distribution & Polish | **Done** | Binary bundling, pre-compiled WASM deploy, server prewarm |
 
 ### Verified
 - Native singleplayer (local SpacetimeDB subprocess) — tested, working
 - Native multiplayer (remote SpacetimeDB) — tested, working
 - SP → MP → SP transitions — no stale URI leaks
+- Resume / New Game from title screen — server persists, instant reconnect
 - Web compilation (`just check` + `just web`) — passes
 - `cargo check --features multiplayer` — zero warnings
 
@@ -37,6 +38,8 @@ Currently, singleplayer and multiplayer are two completely different code paths.
 - Renamed `is_remote` → `is_server_owned` in damage.rs for clarity
 - cfg-gated WASM-incompatible methods in generated SpacetimeDB bindings
 - Added `just generate` recipe for safe binding regeneration
+- Composable button API (`btn`/`btn_disabled` replace `btn_big`/`btn_small`/`btn_tiny`)
+- Fixed game rendering/unpausing during Gameplay → Title transition
 
 ---
 
@@ -83,11 +86,11 @@ Resources:
 - `LocalServerState` — Starting → WaitingForReady → Deploying → Ready / Failed
 
 Key operations:
-1. **Binary discovery**: `SPACETIMEDB_PATH` env → `~/.local/bin/spacetime` → system PATH
+1. **Binary discovery**: Adjacent to executable → `SPACETIMEDB_PATH` env → `~/.local/bin/spacetime` → system PATH
 2. **Port selection**: `TcpListener::bind("127.0.0.1:0")` for random available port
 3. **Start**: `spacetime start --listen-addr 127.0.0.1:<port> --in-memory --data-dir <temp>`
 4. **Health check**: Port probe — if `TcpListener::bind` fails, port is occupied = server listening
-5. **Deploy**: `spacetime publish wasm-fantasia --project-path server --yes --delete-data -s http://addr`
+5. **Deploy**: `spacetime publish wasm-fantasia --bin-path <wasm>` (pre-compiled) or `--project-path server` (dev)
 6. **Shutdown**: `child.kill()` + `child.wait()`, also in `Drop` impl
 
 Gated with `#[cfg(not(target_arch = "wasm32"))]`. Registered as plugin inside `NetworkingPlugin`.
@@ -103,13 +106,15 @@ Gated with `#[cfg(not(target_arch = "wasm32"))]`. Registered as plugin inside `N
 ### Title screen changes
 
 **Native**: "Singleplayer" → `GameMode::Singleplayer` + `ServerTarget::Local` → starts local server → `Screen::Connecting`
+**Native (resume)**: "Resume" / "New Game" split buttons when server already running
 **WASM**: "Solo" → `GameMode::Singleplayer` + `ServerTarget::Remote` → `Screen::Connecting`
 **Both**: "Multiplayer" → `GameMode::Multiplayer` + `ServerTarget::Remote` → `Screen::Connecting`
 
 ### Connecting screen
 
-Now handles both local server startup and remote connections:
+Handles both local server startup and remote connections:
 - `advance_local_server` system drives `LocalServerState` (native only)
+- Detects already-running server and skips straight to connecting
 - `spawn_connecting_screen` reads `ServerTarget` to set URI and initial log message
 - Systems chained: advance_local_server → track_connection_state → tick_connection → tick_timeout → update_log_display
 
@@ -122,9 +127,9 @@ Now handles both local server startup and remote connections:
 
 ### Cleanup on exit
 
-- `disconnect_from_spacetimedb` + `remove_server_target` on gameplay exit
-- `shutdown_local_server` on gameplay exit (removes `LocalServer` + `LocalServerState`)
-- `to::title` removes `ServerTarget`
+- SP with running server: connection and server preserved for resume
+- MP or failed server: full cleanup (disconnect, remove resources)
+- `to::title` removes `ServerTarget`; session reset deferred to `OnEnter(Title)`
 
 **Files changed**: `client/src/screens/title.rs`, `client/src/screens/mod.rs`, `client/src/screens/connecting.rs`, `client/src/networking/mod.rs`
 
@@ -150,57 +155,56 @@ Now handles both local server startup and remote connections:
 
 ---
 
-## Phase 4: Web Solo Sessions (Server-Side) — NOT STARTED
+## Phase 4: Web Solo Sessions (Server-Side) — DONE
 
 **Goal**: Support "Solo" mode on web where the player gets a private session on the remote server.
 
-### 4A: Server-side session isolation
+### 4A: Server-side world isolation
 
 `server/src/lib.rs`:
-- Add a `session_id` field to `Player` table
-- `join_game` reducer accepts an optional `session_id`
-- Solo players get a unique session ID; multiplayer players share one
-- Enemy spawning scoped to session: enemies belong to the session that spawned them
-- `game_tick` AI only chases players in the same session
-- Subscription queries filter by session
+- `world_id` field on `Player`, `Enemy`, and `CombatEvent` tables
+- `join_game` reducer accepts `world_id` parameter
+- Solo players use their identity hex as world_id; multiplayer uses `"shared"`
+- Enemy spawning scoped to world: enemies inherit spawner's `world_id`
+- `game_tick` groups players and enemies by `world_id`, AI only chases within same world
+- Solo disconnect cleans up all enemies and combat events for that world
 
-### 4B: Client sends session mode
+### 4B: Client sends world_id
 
 `client/src/networking/mod.rs`:
-- When calling `join_game`, pass `GameMode` so the server knows whether to create a private session or join the shared world
+- Connection builder computes `world_id` from `GameMode` and identity
+- Subscription queries filter all tables by `world_id` via WHERE clauses
 
-**Files**: `server/src/lib.rs`, `client/src/networking/mod.rs`
+**Files changed**: `server/src/lib.rs`, `client/src/networking/mod.rs`
 
 ---
 
-## Phase 5: Distribution & Polish — NOT STARTED
+## Phase 5: Distribution & Polish — DONE
 
 **Goal**: Native release builds are self-contained.
 
 ### 5A: Bundle SpacetimeDB binary
 
-- macOS: Include in app bundle `Contents/MacOS/`
-- Linux/Windows: Include alongside game executable
-- `LocalServer` discovers binary relative to executable path first, then system PATH
+- `find_spacetime_binary()` checks adjacent to game executable first, then env/PATH fallbacks
+- Works for macOS, Linux, Windows bundled distributions
 
 ### 5B: Pre-compile server module
 
-Build step: `cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release`
-- Copy `.wasm` to `assets/server/wasm_fantasia_module.wasm`
-- `LocalServer::deploy()` uses `spacetime publish --bin-path` instead of `--project-path`
+- `spawn_deploy()` checks for `wasm_fantasia_module.wasm` adjacent to executable
+- Uses `--bin-path` if found, falls back to `--project-path server` for dev workflow
 - Eliminates Rust toolchain requirement on player machines
 
 ### 5C: Justfile targets
 
-- `just bundle-native` — client + server module + SpacetimeDB binary
-- `just bundle-web` — existing `web-build` (unchanged)
+- `just bundle-native` — builds server WASM module + native client + copies spacetime binary + assets to `dist/native/`
 
 ### 5D: Startup time optimization
 
-- Start local server during asset loading (parallel)
-- Keep server running across SP sessions (redeploy with `--delete-data` on new game)
+- Local server prewarmed during loading screen (`OnEnter(Screen::Loading)`)
+- Server persists across SP sessions — resume reconnects instantly
+- New Game kills old server and starts fresh
 
-**Files**: `Justfile`, `client/src/networking/local_server.rs`
+**Files changed**: `Justfile`, `client/src/networking/local_server.rs`
 
 ---
 
@@ -215,7 +219,7 @@ Phase 2 (SP Uses Local DB) ─── done
     │
     ├── Phase 3 (Delete Client-Side SP Logic) ─── done
     │
-    ├── Phase 4 (Web Solo Sessions) ─── not started, server-side work
+    ├── Phase 4 (Web Solo Sessions) ─── done
     │
-    └── Phase 5 (Distribution) ─── not started, release packaging
+    └── Phase 5 (Distribution) ─── done
 ```
