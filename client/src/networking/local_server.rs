@@ -25,13 +25,36 @@ pub struct LocalServer {
 }
 
 /// Progress of the local server lifecycle.
-#[derive(Resource, Debug, Clone, PartialEq, Eq)]
+#[derive(Resource)]
 pub enum LocalServerState {
     Starting,
     WaitingForReady,
-    Deploying,
+    Deploying(DeployProcess),
     Ready,
     Failed(String),
+}
+
+/// Owns the `spacetime publish` subprocess. Kills it on drop so cancelled
+/// deploys don't leave orphaned processes.
+pub struct DeployProcess(Child);
+
+impl Drop for DeployProcess {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+impl std::fmt::Debug for LocalServerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Starting => write!(f, "Starting"),
+            Self::WaitingForReady => write!(f, "WaitingForReady"),
+            Self::Deploying(_) => write!(f, "Deploying"),
+            Self::Ready => write!(f, "Ready"),
+            Self::Failed(e) => write!(f, "Failed({e})"),
+        }
+    }
 }
 
 // =============================================================================
@@ -190,6 +213,39 @@ pub fn start() -> (LocalServer, LocalServerState) {
     }
 }
 
+/// Spawn the `spacetime publish` command as a non-blocking subprocess.
+fn spawn_deploy(server: &LocalServer) -> Result<DeployProcess, String> {
+    let listen_addr = format!("127.0.0.1:{}", server.port);
+
+    // Use pre-compiled WASM if adjacent to the executable, otherwise
+    // fall back to --project-path for dev workflow.
+    let bin_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.join("wasm_fantasia_module.wasm")))
+        .filter(|p| p.exists());
+
+    let mut cmd = Command::new(&server.spacetime_binary);
+    cmd.args([
+        "publish",
+        "wasm-fantasia",
+        "--yes",
+        "--delete-data",
+        "-s",
+        &format!("http://{listen_addr}"),
+    ]);
+    if let Some(ref wasm_path) = bin_path {
+        cmd.args(["--bin-path", &wasm_path.to_string_lossy()]);
+    } else {
+        cmd.args(["--project-path", "server"]);
+    }
+
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map(DeployProcess)
+        .map_err(|e| format!("Failed to run spacetime publish: {e}"))
+}
+
 /// Drive the local server state machine forward.
 ///
 /// Call each frame while state is not `Ready` or `Failed`.
@@ -200,7 +256,11 @@ pub fn advance(server: &mut LocalServer, state: &mut LocalServerState) -> bool {
             // Port occupied = server is listening
             if TcpListener::bind(format!("127.0.0.1:{}", server.port)).is_err() {
                 info!("Local SpacetimeDB listening on port {}", server.port);
-                *state = LocalServerState::Deploying;
+                info!("Deploying game module to local server at 127.0.0.1:{}", server.port);
+                match spawn_deploy(server) {
+                    Ok(child) => *state = LocalServerState::Deploying(child),
+                    Err(e) => *state = LocalServerState::Failed(e),
+                }
                 return true;
             }
 
@@ -228,7 +288,7 @@ pub fn advance(server: &mut LocalServer, state: &mut LocalServerState) -> bool {
                 }
             }
 
-            if *state == LocalServerState::Starting {
+            if matches!(state, LocalServerState::Starting) {
                 *state = LocalServerState::WaitingForReady;
                 return true;
             }
@@ -236,52 +296,34 @@ pub fn advance(server: &mut LocalServer, state: &mut LocalServerState) -> bool {
             false
         }
 
-        LocalServerState::Deploying => {
-            let listen_addr = format!("127.0.0.1:{}", server.port);
-            info!("Deploying game module to local server at {listen_addr}");
+        LocalServerState::Deploying(deploy) => {
+            match deploy.0.try_wait() {
+                Ok(Some(status)) => {
+                    let mut stdout_buf = String::new();
+                    let mut stderr_buf = String::new();
+                    if let Some(ref mut out) = deploy.0.stdout {
+                        use std::io::Read;
+                        let _ = out.read_to_string(&mut stdout_buf);
+                    }
+                    if let Some(ref mut err) = deploy.0.stderr {
+                        use std::io::Read;
+                        let _ = err.read_to_string(&mut stderr_buf);
+                    }
 
-            // Use pre-compiled WASM if adjacent to the executable, otherwise
-            // fall back to --project-path for dev workflow.
-            let bin_path = std::env::current_exe()
-                .ok()
-                .and_then(|exe| exe.parent().map(|d| d.join("wasm_fantasia_module.wasm")))
-                .filter(|p| p.exists());
-
-            let mut cmd = Command::new(&server.spacetime_binary);
-            cmd.args([
-                "publish",
-                "wasm-fantasia",
-                "--yes",
-                "--delete-data",
-                "-s",
-                &format!("http://{listen_addr}"),
-            ]);
-            if let Some(ref wasm_path) = bin_path {
-                cmd.args(["--bin-path", &wasm_path.to_string_lossy()]);
-            } else {
-                cmd.args(["--project-path", "server"]);
-            }
-
-            let result = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output();
-
-            match result {
-                Ok(output) if output.status.success() => {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    info!("Module deployed successfully: {stdout}");
-                    *state = LocalServerState::Ready;
+                    if status.success() {
+                        info!("Module deployed successfully: {stdout_buf}");
+                        *state = LocalServerState::Ready;
+                    } else {
+                        *state = LocalServerState::Failed(format!(
+                            "Module deploy failed:\nstdout: {stdout_buf}\nstderr: {stderr_buf}"
+                        ));
+                    }
                     true
                 }
-                Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    *state = LocalServerState::Failed(format!(
-                        "Module deploy failed:\nstdout: {stdout}\nstderr: {stderr}"
-                    ));
-                    true
-                }
+                Ok(None) => false, // Still running
                 Err(e) => {
                     *state =
-                        LocalServerState::Failed(format!("Failed to run spacetime publish: {e}"));
+                        LocalServerState::Failed(format!("Error polling deploy process: {e}"));
                     true
                 }
             }

@@ -179,7 +179,7 @@ fn advance_local_server(
             LocalServerState::WaitingForReady => {
                 log.push("Waiting for server to start...");
             }
-            LocalServerState::Deploying => {
+            LocalServerState::Deploying(_) => {
                 log.push("Server started. Deploying game module...");
             }
             LocalServerState::Ready => {

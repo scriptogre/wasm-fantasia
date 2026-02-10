@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
 use crate::combat::HitLanded;
-use crate::models::{Session, Player, SceneCamera};
+use crate::models::{Player, SceneCamera, Session};
 use crate::rules::{Stat, Stats};
 
 pub fn plugin(app: &mut App) {

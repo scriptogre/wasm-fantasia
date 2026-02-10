@@ -153,7 +153,9 @@ fn tick_name(
     player: Query<Option<&Name>, With<Player>>,
     mut names: Query<&mut Text, With<HudPlayerName>>,
 ) {
-    let Ok(name_opt) = player.single() else { return };
+    let Ok(name_opt) = player.single() else {
+        return;
+    };
     let display = name_opt.map(|n| n.as_str()).unwrap_or("PLAYER");
 
     if let Ok(mut text) = names.single_mut() {

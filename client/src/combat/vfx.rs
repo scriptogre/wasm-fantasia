@@ -110,12 +110,7 @@ fn setup_phantom_fist_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let arc_mesh = create_arc_mesh(
-        VFX_RANGE,
-        VFX_ARC_DEGREES.to_radians(),
-        0.6,
-        16,
-    );
+    let arc_mesh = create_arc_mesh(VFX_RANGE, VFX_ARC_DEGREES.to_radians(), 0.6, 16);
     let mesh = meshes.add(arc_mesh);
 
     let material = materials.add(StandardMaterial {
@@ -246,12 +241,7 @@ fn setup_debug_hitbox_assets(
     const DEBUG_RANGE: f32 = 3.6;
     const DEBUG_ARC: f32 = 150.0;
 
-    let arc_mesh = create_arc_mesh(
-        DEBUG_RANGE,
-        DEBUG_ARC.to_radians(),
-        0.1,
-        24,
-    );
+    let arc_mesh = create_arc_mesh(DEBUG_RANGE, DEBUG_ARC.to_radians(), 0.1, 24);
     let mesh = meshes.add(arc_mesh);
 
     let material = materials.add(StandardMaterial {

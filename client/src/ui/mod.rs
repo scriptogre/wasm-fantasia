@@ -33,7 +33,12 @@ pub use props::*;
 pub use widget::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((prefabs::plugin, interaction::plugin, modal::plugin, hud::plugin));
+    app.add_plugins((
+        prefabs::plugin,
+        interaction::plugin,
+        modal::plugin,
+        hud::plugin,
+    ));
 
     #[cfg(feature = "multiplayer")]
     app.add_plugins(server_status::plugin);

@@ -69,7 +69,9 @@ mod native {
     impl File {
         /// Get a handle on a file which stores a SpacetimeDB [`Identity`] and its private access token.
         pub fn new(key: impl Into<String>) -> Self {
-            Self { filename: key.into() }
+            Self {
+                filename: key.into(),
+            }
         }
 
         fn determine_home_dir() -> Result<PathBuf, CredentialFileError> {
@@ -79,7 +81,8 @@ mod native {
         fn ensure_credentials_dir() -> Result<(), CredentialFileError> {
             let mut path = Self::determine_home_dir()?;
             path.push(CREDENTIALS_DIR);
-            std::fs::create_dir_all(&path).map_err(|source| CredentialFileError::CreateDir { path, source })
+            std::fs::create_dir_all(&path)
+                .map_err(|source| CredentialFileError::CreateDir { path, source })
         }
 
         fn path(&self) -> Result<PathBuf, CredentialFileError> {
@@ -92,10 +95,13 @@ mod native {
         /// Store the provided `token` to disk in the file referred to by `self`.
         pub fn save(self, token: impl Into<String>) -> Result<(), CredentialFileError> {
             Self::ensure_credentials_dir()?;
-            let creds = bsatn::to_vec(&Credentials { token: token.into() })
-                .map_err(|source| CredentialFileError::Serialize { source })?;
+            let creds = bsatn::to_vec(&Credentials {
+                token: token.into(),
+            })
+            .map_err(|source| CredentialFileError::Serialize { source })?;
             let path = self.path()?;
-            std::fs::write(&path, creds).map_err(|source| CredentialFileError::Write { path, source })?;
+            std::fs::write(&path, creds)
+                .map_err(|source| CredentialFileError::Write { path, source })?;
             Ok(())
         }
 

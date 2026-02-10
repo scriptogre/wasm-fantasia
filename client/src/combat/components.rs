@@ -188,4 +188,3 @@ pub struct EnemyAnimations {
 #[derive(Component, Debug)]
 #[component(storage = "SparseSet")]
 pub struct KnockbackRemaining(pub Vec3);
-

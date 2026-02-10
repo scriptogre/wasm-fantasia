@@ -363,7 +363,7 @@ fn auto_connect(
     // For local servers, wait until the server is ready before attempting connection
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(ref ls_state) = local_server_state {
-        if **ls_state != local_server::LocalServerState::Ready {
+        if !matches!(**ls_state, local_server::LocalServerState::Ready) {
             return;
         }
     }

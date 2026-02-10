@@ -50,18 +50,20 @@ pub mod __codegen {
     pub use spacetimedb_sats as __sats;
 
     pub use crate::callbacks::{CallbackId, DbCallbacks};
-    pub use crate::client_cache::{ClientCache, TableAppliedDiff, TableHandle, UniqueConstraintHandle};
+    pub use crate::client_cache::{
+        ClientCache, TableAppliedDiff, TableHandle, UniqueConstraintHandle,
+    };
     pub use crate::db_connection::DbContextImpl;
     pub use crate::error::{Error, InternalError, Result};
     pub use crate::spacetime_module::{
-        parse_reducer_args, AbstractEventContext, AppliedDiff, DbConnection, DbUpdate, ErrorContext, EventContext,
-        InModule, ProcedureEventContext, Reducer, ReducerEventContext, SpacetimeModule, SubscriptionEventContext,
-        SubscriptionHandle, TableUpdate,
+        parse_reducer_args, AbstractEventContext, AppliedDiff, DbConnection, DbUpdate,
+        ErrorContext, EventContext, InModule, ProcedureEventContext, Reducer, ReducerEventContext,
+        SpacetimeModule, SubscriptionEventContext, SubscriptionHandle, TableUpdate,
     };
     pub use crate::subscription::{OnEndedCallback, SubscriptionBuilder, SubscriptionHandleImpl};
     pub use crate::{
-        ConnectionId, DbConnectionBuilder, DbContext, Event, Identity, ReducerEvent, ScheduleAt, Table,
-        TableWithPrimaryKey, TimeDuration, Timestamp, Uuid,
+        ConnectionId, DbConnectionBuilder, DbContext, Event, Identity, ReducerEvent, ScheduleAt,
+        Table, TableWithPrimaryKey, TimeDuration, Timestamp, Uuid,
     };
 }
 

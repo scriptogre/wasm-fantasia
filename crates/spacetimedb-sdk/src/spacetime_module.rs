@@ -234,7 +234,9 @@ impl<Row> TableUpdate<Row> {
 
 impl<Row: DeserializeOwned + Debug> TableUpdate<Row> {
     /// Parse `raw_updates` into a [`TableUpdate`].
-    pub fn parse_table_update(raw_updates: ws::TableUpdate<ws::BsatnFormat>) -> crate::Result<TableUpdate<Row>> {
+    pub fn parse_table_update(
+        raw_updates: ws::TableUpdate<ws::BsatnFormat>,
+    ) -> crate::Result<TableUpdate<Row>> {
         let mut inserts = Vec::new();
         let mut deletes = Vec::new();
         for update in raw_updates.updates {
@@ -245,7 +247,10 @@ impl<Row: DeserializeOwned + Debug> TableUpdate<Row> {
         Ok(Self { inserts, deletes })
     }
 
-    fn parse_from_row_list(sink: &mut Vec<WithBsatn<Row>>, raw_rows: &ws::BsatnRowList) -> crate::Result<()> {
+    fn parse_from_row_list(
+        sink: &mut Vec<WithBsatn<Row>>,
+        raw_rows: &ws::BsatnRowList,
+    ) -> crate::Result<()> {
         sink.reserve(raw_rows.len());
         for raw_row in raw_rows {
             sink.push(Self::parse_row(raw_row)?);
@@ -264,7 +269,10 @@ impl<Row: DeserializeOwned + Debug> TableUpdate<Row> {
     }
 }
 
-pub fn parse_reducer_args<Args: DeserializeOwned>(reducer_name: &'static str, args: &[u8]) -> crate::Result<Args> {
+pub fn parse_reducer_args<Args: DeserializeOwned>(
+    reducer_name: &'static str,
+    args: &[u8],
+) -> crate::Result<Args> {
     bsatn::from_slice::<Args>(args).map_err(|source| {
         InternalError::failed_parse(std::any::type_name::<Args>(), reducer_name)
             .with_cause(source)

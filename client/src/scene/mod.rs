@@ -5,7 +5,7 @@ use bevy_skein::SkeinPlugin;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((PhysicsPlugins::default(), SkeinPlugin::default()))
-    .add_systems(OnEnter(Screen::Gameplay), setup_animus_scene);
+        .add_systems(OnEnter(Screen::Gameplay), setup_animus_scene);
 }
 
 /// Dark animus scene — near-black floor with faintly glowing grid lines

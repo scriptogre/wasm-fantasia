@@ -7,10 +7,7 @@ const KNOCKBACK_LERP_SPEED: f32 = 12.0;
 pub fn plugin(app: &mut App) {
     app.add_observer(on_damage)
         .add_observer(on_death)
-        .add_systems(
-            Update,
-            drain_knockback.run_if(in_state(Screen::Gameplay)),
-        );
+        .add_systems(Update, drain_knockback.run_if(in_state(Screen::Gameplay)));
 }
 
 /// Observer: apply damage and knockback when [`DamageDealt`] is triggered.
@@ -23,10 +20,7 @@ pub fn plugin(app: &mut App) {
 fn on_damage(
     on: On<DamageDealt>,
     mut targets: Query<(&mut Health, Option<&mut KnockbackRemaining>)>,
-    #[cfg(feature = "multiplayer")] server_entities: Query<
-        (),
-        With<crate::networking::ServerId>,
-    >,
+    #[cfg(feature = "multiplayer")] server_entities: Query<(), With<crate::networking::ServerId>>,
     mut commands: Commands,
 ) {
     let event = on.event();
@@ -78,10 +72,7 @@ fn on_damage(
 /// Server-owned entities are handled by the reconciler, not despawned locally.
 fn on_death(
     on: On<Died>,
-    #[cfg(feature = "multiplayer")] server_entities: Query<
-        (),
-        With<crate::networking::ServerId>,
-    >,
+    #[cfg(feature = "multiplayer")] server_entities: Query<(), With<crate::networking::ServerId>>,
     mut commands: Commands,
 ) {
     let event = on.event();
