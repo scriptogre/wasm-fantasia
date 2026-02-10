@@ -17,26 +17,30 @@ Currently, singleplayer and multiplayer are two completely different code paths.
 
 | Phase | Status | Summary |
 |-------|--------|---------|
-| 0 — Semantic Refactoring | **Code written** | `ServerTarget` resource, `is_server_connected` run condition |
-| 1 — Local Subprocess Manager | **Code written** | `networking/local_server.rs` — start, health-check, deploy, shutdown |
-| 2 — SP Connects to Local DB | **Code written** | Title screen flows, connecting screen, generalized run conditions |
-| 3 — Remove Client-Side SP Logic | **Code written** | Deleted `enemy_ai`, `EnemyAi`, SP spawn fallback, lag simulator |
+| 0 — Semantic Refactoring | **Done** | `ServerTarget` resource, `is_server_connected` run condition |
+| 1 — Local Subprocess Manager | **Done** | `networking/local_server.rs` — start, health-check, deploy, shutdown |
+| 2 — SP Connects to Local DB | **Done** | Title screen flows, connecting screen, generalized run conditions |
+| 3 — Remove Client-Side SP Logic | **Done** | Deleted `enemy_ai`, `EnemyAi`, SP spawn fallback, lag simulator |
 | 4 — Web Solo Sessions | **Not started** | Server-side session isolation needed |
 | 5 — Distribution & Polish | **Not started** | Binary bundling, pre-compiled WASM module |
 
-### Known issues
-- **Compilation verified** — `cargo check --features multiplayer` passes with zero warnings
-- **Local server not yet tested end-to-end** — the `--in-memory` flag was added to avoid data dir lock conflicts with existing SpacetimeDB instances; stderr is now captured for diagnostics; needs manual testing
-- **Multiplayer not yet tested end-to-end** — URI reset on title return was added to prevent stale local URIs leaking into MP connections; needs manual testing with a running remote server
+### Verified
+- Native singleplayer (local SpacetimeDB subprocess) — tested, working
+- Native multiplayer (remote SpacetimeDB) — tested, working
+- SP → MP → SP transitions — no stale URI leaks
+- Web compilation (`just check` + `just web`) — passes
+- `cargo check --features multiplayer` — zero warnings
 
 ### Additional cleanup (not in original plan)
 - Removed `LagSimulator`, `LagBuffers`, `PendingOutboundUpdate`, `process_outbound_lag`
 - Inlined `attack_animation()` helper into `send_local_position`
 - Renamed `is_remote` → `is_server_owned` in damage.rs for clarity
+- cfg-gated WASM-incompatible methods in generated SpacetimeDB bindings
+- Added `just generate` recipe for safe binding regeneration
 
 ---
 
-## Phase 0: Semantic Refactoring (No Behavior Change) — CODE WRITTEN
+## Phase 0: Semantic Refactoring (No Behavior Change) — DONE
 
 **Goal**: Prepare the type system for the new model without changing any runtime behavior.
 
@@ -68,7 +72,7 @@ pub fn is_server_connected(conn: Option<Res<SpacetimeDbConnection>>) -> bool {
 
 ---
 
-## Phase 1: Local SpacetimeDB Subprocess Manager — CODE WRITTEN (local server crashes at runtime)
+## Phase 1: Local SpacetimeDB Subprocess Manager — DONE
 
 **Goal**: A standalone module that can start, health-check, deploy to, and shut down a local SpacetimeDB instance. Native only.
 
@@ -81,7 +85,7 @@ Resources:
 Key operations:
 1. **Binary discovery**: `SPACETIMEDB_PATH` env → `~/.local/bin/spacetime` → system PATH
 2. **Port selection**: `TcpListener::bind("127.0.0.1:0")` for random available port
-3. **Start**: `spacetime start --listen-addr 127.0.0.1:<port>`
+3. **Start**: `spacetime start --listen-addr 127.0.0.1:<port> --in-memory --data-dir <temp>`
 4. **Health check**: Port probe — if `TcpListener::bind` fails, port is occupied = server listening
 5. **Deploy**: `spacetime publish wasm-fantasia --project-path server --yes --delete-data -s http://addr`
 6. **Shutdown**: `child.kill()` + `child.wait()`, also in `Drop` impl
@@ -92,7 +96,7 @@ Gated with `#[cfg(not(target_arch = "wasm32"))]`. Registered as plugin inside `N
 
 ---
 
-## Phase 2: Singleplayer Connects to Local SpacetimeDB — CODE WRITTEN (blocked by Phase 1 crash)
+## Phase 2: Singleplayer Connects to Local SpacetimeDB — DONE
 
 **Goal**: Clicking "Singleplayer" on native starts the local server, deploys, connects, and enters gameplay.
 
@@ -126,7 +130,7 @@ Now handles both local server startup and remote connections:
 
 ---
 
-## Phase 3: Remove Client-Side Singleplayer Logic — CODE WRITTEN
+## Phase 3: Remove Client-Side Singleplayer Logic — DONE
 
 **Goal**: Delete the duplicated client-side game logic. Server module is the single source of truth.
 
@@ -203,13 +207,13 @@ Build step: `cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown
 ## Dependency Graph
 
 ```
-Phase 0 (Refactoring) ─── code written
+Phase 0 (Refactoring) ─── done
     │
-Phase 1 (Subprocess Manager) ─── code written, LOCAL SERVER CRASHES
+Phase 1 (Subprocess Manager) ─── done
     │
-Phase 2 (SP Uses Local DB) ─── code written, blocked by Phase 1
+Phase 2 (SP Uses Local DB) ─── done
     │
-    ├── Phase 3 (Delete Client-Side SP Logic) ─── code written
+    ├── Phase 3 (Delete Client-Side SP Logic) ─── done
     │
     ├── Phase 4 (Web Solo Sessions) ─── not started, server-side work
     │
