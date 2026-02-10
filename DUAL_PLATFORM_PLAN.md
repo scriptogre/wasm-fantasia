@@ -25,8 +25,9 @@ Currently, singleplayer and multiplayer are two completely different code paths.
 | 5 — Distribution & Polish | **Not started** | Binary bundling, pre-compiled WASM module |
 
 ### Known issues
-- **Local server crashes on startup** — `spacetime start` exits immediately with status 1. Needs debugging (likely missing args, wrong binary path, or SpacetimeDB version incompatibility). Native singleplayer is non-functional until this is fixed.
-- **Compilation not verified** — `cargo check` and `just check` have not been run against these changes yet
+- **Compilation verified** — `cargo check --features multiplayer` passes with zero warnings
+- **Local server not yet tested end-to-end** — the `--in-memory` flag was added to avoid data dir lock conflicts with existing SpacetimeDB instances; stderr is now captured for diagnostics; needs manual testing
+- **Multiplayer not yet tested end-to-end** — URI reset on title return was added to prevent stale local URIs leaking into MP connections; needs manual testing with a running remote server
 
 ### Additional cleanup (not in original plan)
 - Removed `LagSimulator`, `LagBuffers`, `PendingOutboundUpdate`, `process_outbound_lag`

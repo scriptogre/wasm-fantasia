@@ -125,7 +125,7 @@ pub fn start() -> (LocalServer, LocalServerState) {
     info!("Starting local SpacetimeDB on {listen_addr}");
 
     let result = Command::new(&binary)
-        .args(["start", "--listen-addr", &listen_addr])
+        .args(["start", "--listen-addr", &listen_addr, "--in-memory"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn();
@@ -167,8 +167,22 @@ pub fn advance(server: &mut LocalServer, state: &mut LocalServerState) -> bool {
             // Check for premature exit
             if let Some(ref mut child) = server.process {
                 if let Ok(Some(status)) = child.try_wait() {
+                    let stderr = child
+                        .stderr
+                        .as_mut()
+                        .and_then(|s| {
+                            use std::io::Read;
+                            let mut buf = String::new();
+                            s.read_to_string(&mut buf).ok().map(|_| buf)
+                        })
+                        .unwrap_or_default();
+                    let detail = if stderr.is_empty() {
+                        format!("exit status: {status}")
+                    } else {
+                        format!("exit status: {status}\n{stderr}")
+                    };
                     *state = LocalServerState::Failed(format!(
-                        "SpacetimeDB exited prematurely with status: {status}"
+                        "SpacetimeDB exited prematurely: {detail}"
                     ));
                     return true;
                 }

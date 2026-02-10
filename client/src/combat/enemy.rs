@@ -2,7 +2,6 @@ use super::*;
 use crate::asset_loading::Models;
 use crate::models::SpawnEnemy;
 use crate::player::{Animation, find_animation_player_descendant};
-use crate::rules::{Stat, Stats};
 use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::Start;
 use std::time::Duration;
