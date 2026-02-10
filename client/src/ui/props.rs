@@ -88,6 +88,10 @@ impl Props {
         self.node.height = h;
         self
     }
+    pub fn min_width(mut self, w: Val) -> Self {
+        self.node.min_width = w;
+        self
+    }
     pub fn row_gap(mut self, g: Val) -> Self {
         self.node.row_gap = g;
         self

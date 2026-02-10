@@ -22,6 +22,7 @@ struct ConnectionLog {
     showed_target: bool,
     saw_resource: bool,
     saw_identity: bool,
+    saw_ready: bool,
 }
 
 impl ConnectionLog {
@@ -139,7 +140,12 @@ fn spawn_connecting_screen(
                 ));
             });
 
-            root.spawn(btn_small("Cancel", cancel_connecting));
+            root.spawn(btn(
+                Props::new("Cancel")
+                    .margin(UiRect::ZERO)
+                    .padding(UiRect::axes(Vw(1.0), Px(6.0))),
+                cancel_connecting,
+            ));
         });
 }
 
@@ -169,6 +175,15 @@ fn advance_local_server(
         let (Some(ref mut server), Some(ref mut state)) = (server, server_state) else {
             return;
         };
+
+        // Server already ready from a previous session — skip straight to connecting
+        if !log.saw_ready && matches!(state.as_ref(), LocalServerState::Ready) {
+            log.saw_ready = true;
+            let uri = local_server::connection_uri(server);
+            log.push(format!("Server already running. Connecting to {uri}..."));
+            commands.insert_resource(ReconnectTimer::default());
+            return;
+        }
 
         let changed = local_server::advance(server, state);
         if !changed {

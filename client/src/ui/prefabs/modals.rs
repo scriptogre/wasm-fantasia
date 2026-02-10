@@ -3,10 +3,10 @@ use super::*;
 pub fn click_to_menu(
     _: On<Pointer<Click>>,
     mut commands: Commands,
-    mut state: ResMut<Session>,
     mut modals: ResMut<Modals>,
 ) {
-    state.reset();
+    // Don't reset session here — keep game paused during the transition
+    // frames so gameplay systems don't tick. setup_menu resets on OnEnter(Title).
     modals.clear();
     commands.trigger(GoTo(Screen::Title));
 }
@@ -45,8 +45,12 @@ pub fn menu_modal() -> impl Bundle {
                         bottom: Px(32.0),
                         ..Default::default()
                     },
-                    children![btn_small(
-                        Props::new("back").width(Vw(5.0)).border(UiRect::DEFAULT),
+                    children![btn(
+                        Props::new("back")
+                            .width(Vw(5.0))
+                            .margin(UiRect::ZERO)
+                            .padding(UiRect::axes(Vw(1.0), Px(6.0)))
+                            .border(UiRect::DEFAULT),
                         ui::click_pop_modal
                     )]
                 ),

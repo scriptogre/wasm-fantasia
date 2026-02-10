@@ -298,7 +298,13 @@ fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
 }
 
 /// Clean up when leaving the Connecting screen without a completed handshake.
-fn cleanup_connecting_exit(conn: Option<Res<SpacetimeDbConnection>>, mut commands: Commands) {
+fn cleanup_connecting_exit(
+    conn: Option<Res<SpacetimeDbConnection>>,
+    mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
+        Res<local_server::LocalServerState>,
+    >,
+) {
     if conn
         .as_ref()
         .is_some_and(|c| c.conn.try_identity().is_some())
@@ -312,12 +318,17 @@ fn cleanup_connecting_exit(conn: Option<Res<SpacetimeDbConnection>>, mut command
         commands.remove_resource::<HandshakeStart>();
     }
 
-    // Remove local server so stale LocalServerState::Failed doesn't block
-    // the next auto_connect attempt.
+    // Preserve a Ready server so the player can resume from the title screen.
+    // Only remove the server if it failed or is still starting — stale state
+    // would block the next auto_connect attempt.
     #[cfg(not(target_arch = "wasm32"))]
     {
-        commands.remove_resource::<local_server::LocalServer>();
-        commands.remove_resource::<local_server::LocalServerState>();
+        let is_ready = server_state
+            .is_some_and(|s| matches!(*s, local_server::LocalServerState::Ready));
+        if !is_ready {
+            commands.remove_resource::<local_server::LocalServer>();
+            commands.remove_resource::<local_server::LocalServerState>();
+        }
     }
 }
 
@@ -326,7 +337,19 @@ fn disconnect_from_spacetimedb(
     mut commands: Commands,
     mut ping: ResMut<PingTracker>,
     mut mode: ResMut<GameMode>,
+    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
+        Res<local_server::LocalServerState>,
+    >,
 ) {
+    // In singleplayer with a running local server, keep the connection alive
+    // so the player can resume from the title screen without losing world state.
+    #[cfg(not(target_arch = "wasm32"))]
+    if *mode == GameMode::Singleplayer
+        && server_state.is_some_and(|s| matches!(*s, local_server::LocalServerState::Ready))
+    {
+        return;
+    }
+
     if let Some(conn) = conn {
         if let Err(e) = conn.conn.disconnect() {
             warn!("SpacetimeDB disconnect error: {e:?}");

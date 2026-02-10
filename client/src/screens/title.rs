@@ -6,13 +6,19 @@ pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::Title), setup_menu);
 }
 
-fn setup_menu(mut commands: Commands, mut state: ResMut<Session>) {
+fn setup_menu(
+    mut commands: Commands,
+    mut state: ResMut<Session>,
+    #[cfg(all(not(target_arch = "wasm32"), feature = "multiplayer"))] server_state: Option<
+        Res<crate::networking::local_server::LocalServerState>,
+    >,
+) {
     commands
         .spawn((
             DespawnOnExit(Screen::Title),
             GlobalZIndex(1),
             ui_root("Title UI"),
-            BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),
+            BackgroundColor(colors::NEUTRAL950),
         ))
         .with_children(|root| {
             root.spawn(Node {
@@ -25,28 +31,78 @@ fn setup_menu(mut commands: Commands, mut state: ResMut<Session>) {
                 ..default()
             })
             .with_children(|buttons| {
-                // Native: "Singleplayer" starts a local SpacetimeDB subprocess
+                let menu = || {
+                    Props::default()
+                        .min_width(Vw(30.0))
+                        .padding(UiRect::axes(Vw(8.0), Vh(2.0)))
+                };
+
+                // Native: Resume existing or start new singleplayer session
                 #[cfg(not(target_arch = "wasm32"))]
-                buttons.spawn(btn_big("Singleplayer", to::singleplayer));
+                {
+                    #[cfg(feature = "multiplayer")]
+                    let has_running_server = server_state.as_ref().is_some_and(|s| {
+                        matches!(
+                            s.as_ref(),
+                            crate::networking::local_server::LocalServerState::Ready
+                        )
+                    });
+                    #[cfg(not(feature = "multiplayer"))]
+                    let has_running_server = false;
+
+                    if has_running_server {
+                        let half = || {
+                            Props::default().padding(UiRect::axes(Vw(2.0), Vh(2.0)))
+                        };
+                        let half_slot = || Node {
+                            flex_grow: 1.0,
+                            flex_basis: Percent(0.0),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        };
+                        buttons.spawn((
+                            Node {
+                                min_width: Vw(30.0),
+                                column_gap: Vh(1.5),
+                                ..default()
+                            },
+                            children![
+                                (
+                                    half_slot(),
+                                    children![btn(half().text("Resume"), to::singleplayer)]
+                                ),
+                                (
+                                    half_slot(),
+                                    children![btn(
+                                        half().text("New Game"),
+                                        to::new_singleplayer
+                                    )]
+                                ),
+                            ],
+                        ));
+                    } else {
+                        buttons.spawn(btn(menu().text("Singleplayer"), to::singleplayer));
+                    }
+                }
 
                 // Web: "Solo" creates a private session on the remote server
                 #[cfg(target_arch = "wasm32")]
                 {
                     #[cfg(feature = "multiplayer")]
-                    buttons.spawn(btn_big("Solo", to::solo));
+                    buttons.spawn(btn(menu().text("Solo"), to::solo));
                     #[cfg(not(feature = "multiplayer"))]
-                    buttons.spawn(btn_big_disabled("Solo"));
+                    buttons.spawn(btn_disabled(menu().text("Solo")));
                 }
 
                 #[cfg(feature = "multiplayer")]
-                buttons.spawn(btn_big("Multiplayer", to::multiplayer));
+                buttons.spawn(btn(menu().text("Multiplayer"), to::multiplayer));
                 #[cfg(not(feature = "multiplayer"))]
-                buttons.spawn(btn_big_disabled("Multiplayer"));
+                buttons.spawn(btn_disabled(menu().text("Multiplayer")));
 
-                buttons.spawn(btn_big("Settings", to::settings));
+                buttons.spawn(btn(menu().text("Settings"), to::settings));
 
                 #[cfg(not(target_arch = "wasm32"))]
-                buttons.spawn(btn_big("Exit", exit_app));
+                buttons.spawn(btn(menu().text("Exit"), exit_app));
             });
         });
 

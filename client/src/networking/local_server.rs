@@ -62,15 +62,17 @@ impl std::fmt::Debug for LocalServerState {
 // =============================================================================
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(OnEnter(Screen::Loading), prewarm_local_server)
-        .add_systems(OnExit(Screen::Gameplay), shutdown_local_server);
+    app.add_systems(OnEnter(Screen::Loading), prewarm_local_server);
 }
 
 /// Spawn the local SpacetimeDB process during loading so it has a head
 /// start booting by the time the player clicks Singleplayer. The process
 /// runs independently — the Connecting screen's `advance_local_server`
 /// detects when it's ready and triggers the deploy step.
-fn prewarm_local_server(mut commands: Commands) {
+fn prewarm_local_server(mut commands: Commands, existing: Option<Res<LocalServer>>) {
+    if existing.is_some() {
+        return;
+    }
     let (server, state) = start();
     info!("Prewarming local SpacetimeDB on port {}", server.port);
     commands.insert_resource(server);
@@ -354,14 +356,6 @@ fn shutdown(server: &mut LocalServer) {
     }
     if let Some(ref dir) = server.data_dir {
         let _ = std::fs::remove_dir_all(dir);
-    }
-}
-
-fn shutdown_local_server(mut server: Option<ResMut<LocalServer>>, mut commands: Commands) {
-    if let Some(ref mut server) = server {
-        shutdown(server);
-        commands.remove_resource::<LocalServer>();
-        commands.remove_resource::<LocalServerState>();
     }
 }
 

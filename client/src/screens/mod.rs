@@ -66,14 +66,16 @@ pub fn on_go_to(goto: On<GoTo>, mut next_screen: ResMut<NextState<Screen>>) {
 // }
 pub mod to {
     use super::*;
+    #[cfg(feature = "multiplayer")]
+    use spacetimedb_sdk::DbContext;
 
     pub fn title(
         _: On<Pointer<Click>>,
         mut commands: Commands,
-        mut state: ResMut<Session>,
         mut modals: ResMut<Modals>,
     ) {
-        state.reset();
+        // Don't reset session here — keep game paused during transition.
+        // setup_menu resets on OnEnter(Title).
         modals.clear();
         commands.remove_resource::<ServerTarget>();
         commands.trigger(GoTo(Screen::Title));
@@ -121,6 +123,45 @@ pub mod to {
         }
     }
 
+    /// Native singleplayer: kill the existing server and start a fresh one.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn new_singleplayer(
+        _: On<Pointer<Click>>,
+        mut mode: ResMut<GameMode>,
+        mut commands: Commands,
+        resource_handles: Res<ResourceHandles>,
+        mut next_screen: ResMut<NextState<Screen>>,
+        existing_connection: Option<Res<crate::networking::SpacetimeDbConnection>>,
+    ) {
+        *mode = GameMode::Singleplayer;
+
+        // Disconnect from the old server's connection
+        if let Some(conn) = existing_connection {
+            let _ = conn.conn.disconnect();
+            commands.remove_resource::<crate::networking::SpacetimeDbConnection>();
+        }
+
+        // Remove old server (Drop kills the process)
+        commands.remove_resource::<crate::networking::local_server::LocalServer>();
+        commands.remove_resource::<crate::networking::local_server::LocalServerState>();
+
+        // Start fresh
+        let (server, state) = crate::networking::local_server::start();
+        let port = server.port;
+        commands.insert_resource(server);
+        commands.insert_resource(state);
+        commands.insert_resource(ServerTarget::Local { port });
+
+        if resource_handles.is_all_done() {
+            #[cfg(feature = "multiplayer")]
+            next_screen.set(Screen::Connecting);
+            #[cfg(not(feature = "multiplayer"))]
+            next_screen.set(Screen::Gameplay);
+        } else {
+            next_screen.set(Screen::Loading);
+        }
+    }
+
     /// Web solo: private session on the remote server.
     #[cfg(target_arch = "wasm32")]
     #[cfg(feature = "multiplayer")]
@@ -152,13 +193,21 @@ pub mod to {
         config: Res<crate::networking::SpacetimeDbConfig>,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
+        existing_connection: Option<Res<crate::networking::SpacetimeDbConnection>>,
     ) {
         *mode = GameMode::Multiplayer;
+
+        // Disconnect from any existing SP connection before switching servers
+        if let Some(conn) = existing_connection {
+            let _ = conn.conn.disconnect();
+            commands.remove_resource::<crate::networking::SpacetimeDbConnection>();
+        }
+
         commands.insert_resource(ServerTarget::Remote {
             uri: config.uri.clone(),
         });
 
-        // Shut down prewarmed local server — not needed for multiplayer
+        // Shut down local server — not needed for multiplayer
         #[cfg(not(target_arch = "wasm32"))]
         {
             commands.remove_resource::<crate::networking::local_server::LocalServer>();
