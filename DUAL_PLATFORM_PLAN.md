@@ -196,7 +196,7 @@ Handles both local server startup and remote connections:
 
 ### 5C: Justfile targets
 
-- `just bundle-native` — builds server WASM module + native client + copies spacetime binary + assets to `dist/native/`
+- `just build` — builds server WASM module + native client + copies spacetime binary + assets to `dist/native/`
 
 ### 5D: Startup time optimization
 

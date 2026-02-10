@@ -40,9 +40,20 @@ spacetimedb:
         --yes \
         --delete-data
 
-# Native release build
+# Native release build — self-contained bundle in dist/native/
 build:
-    cargo build -p wasm_fantasia --release
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Building server WASM module..."
+    cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release
+    echo "Building native client..."
+    cargo build -p wasm_fantasia --release --no-default-features --features multiplayer,audio
+    rm -rf dist/native && mkdir -p dist/native
+    cp target/release/wasm_fantasia dist/native/
+    cp target/wasm32-unknown-unknown/release/wasm_fantasia_module.wasm dist/native/
+    cp "{{spacetime}}" dist/native/
+    cp -r client/assets dist/native/
+    echo "Bundle ready at dist/native/"
 
 # WASM release build
 web-build:
@@ -74,20 +85,6 @@ generate:
     sed -i '' 's/    pub fn run_threaded/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn run_threaded/' client/src/networking/generated/mod.rs
     echo "Bindings regenerated and WASM-patched."
 
-# Bundle a self-contained native release into dist/native/
-bundle-native:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Building server WASM module..."
-    cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release
-    echo "Building native client..."
-    cargo build -p wasm_fantasia --release --no-default-features --features multiplayer,audio
-    rm -rf dist/native && mkdir -p dist/native
-    cp target/release/wasm_fantasia dist/native/
-    cp target/wasm32-unknown-unknown/release/wasm_fantasia_module.wasm dist/native/
-    cp "{{spacetime}}" dist/native/
-    cp -r client/assets dist/native/
-    echo "Bundle ready at dist/native/"
 
 # Wipe SpacetimeDB data and redeploy module
 db-reset:
