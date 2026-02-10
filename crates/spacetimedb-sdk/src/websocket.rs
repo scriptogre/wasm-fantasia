@@ -9,9 +9,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures::{SinkExt, StreamExt as _};
 #[cfg(not(feature = "web"))]
 use futures::TryStreamExt;
+use futures::{SinkExt, StreamExt as _};
 use futures_channel::mpsc;
 use http::uri::{InvalidUri, Scheme, Uri};
 use spacetimedb_client_api_messages::websocket::{BsatnFormat, Compression, BIN_PROTOCOL};
@@ -53,9 +53,7 @@ pub enum UriError {
     UnexpectedQuery { query: String },
 
     #[error(transparent)]
-    InvalidUri {
-        source: Arc<http::uri::InvalidUri>,
-    },
+    InvalidUri { source: Arc<http::uri::InvalidUri> },
 
     #[error(transparent)]
     InvalidUriParts {
@@ -143,7 +141,9 @@ fn make_uri(
     parts.scheme = Some(scheme);
     let mut path = if let Some(path_and_query) = parts.path_and_query {
         if let Some(query) = path_and_query.query() {
-            return Err(UriError::UnexpectedQuery { query: query.into() });
+            return Err(UriError::UnexpectedQuery {
+                query: query.into(),
+            });
         }
         path_and_query.path().to_string()
     } else {
@@ -185,9 +185,13 @@ fn make_uri(
         path.push_str(token);
     }
 
-    parts.path_and_query = Some(path.parse().map_err(|source: InvalidUri| UriError::InvalidUri {
-        source: Arc::new(source),
-    })?);
+    parts.path_and_query =
+        Some(
+            path.parse()
+                .map_err(|source: InvalidUri| UriError::InvalidUri {
+                    source: Arc::new(source),
+                })?,
+        );
     Uri::from_parts(parts).map_err(|source| UriError::InvalidUriParts {
         source: Arc::new(source),
     })
@@ -202,9 +206,11 @@ fn make_request(
     params: WsParams,
 ) -> Result<http::Request<()>, WsError> {
     let uri = make_uri(host, db_name, connection_id, params)?;
-    let mut req = IntoClientRequest::into_client_request(uri.clone()).map_err(|source| WsError::Tungstenite {
-        uri,
-        source: Arc::new(source),
+    let mut req = IntoClientRequest::into_client_request(uri.clone()).map_err(|source| {
+        WsError::Tungstenite {
+            uri,
+            source: Arc::new(source),
+        }
     })?;
     req.headers_mut().insert(
         http::header::SEC_WEBSOCKET_PROTOCOL,
@@ -240,7 +246,11 @@ impl WsConnection {
 
         let (sock, _): (WebSocketStream<MaybeTlsStream<TcpStream>>, _) = connect_async_with_config(
             req,
-            Some(WebSocketConfig::default().max_frame_size(None).max_message_size(None)),
+            Some(
+                WebSocketConfig::default()
+                    .max_frame_size(None)
+                    .max_message_size(None),
+            ),
             false,
         )
         .await
@@ -300,7 +310,9 @@ impl WsConnection {
         incoming_messages: mpsc::UnboundedSender<ServerMessage<BsatnFormat>>,
         outgoing_messages: mpsc::UnboundedReceiver<ClientMessage<Bytes>>,
     ) {
-        let websocket_received = CLIENT_METRICS.websocket_received.with_label_values(&self.db_name);
+        let websocket_received = CLIENT_METRICS
+            .websocket_received
+            .with_label_values(&self.db_name);
         let websocket_received_msg_size = CLIENT_METRICS
             .websocket_received_msg_size
             .with_label_values(&self.db_name);
@@ -310,7 +322,8 @@ impl WsConnection {
         };
 
         const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
-        let mut idle_timeout_interval = tokio::time::interval_at(Instant::now() + IDLE_TIMEOUT, IDLE_TIMEOUT);
+        let mut idle_timeout_interval =
+            tokio::time::interval_at(Instant::now() + IDLE_TIMEOUT, IDLE_TIMEOUT);
 
         let mut idle = true;
         let mut want_pong = false;
@@ -409,7 +422,9 @@ impl WsConnection {
         incoming_messages: mpsc::UnboundedSender<ServerMessage<BsatnFormat>>,
         outgoing_messages: mpsc::UnboundedReceiver<ClientMessage<Bytes>>,
     ) {
-        let websocket_received = CLIENT_METRICS.websocket_received.with_label_values(&self.db_name);
+        let websocket_received = CLIENT_METRICS
+            .websocket_received
+            .with_label_values(&self.db_name);
         let websocket_received_msg_size = CLIENT_METRICS
             .websocket_received_msg_size
             .with_label_values(&self.db_name);

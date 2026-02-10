@@ -2,8 +2,8 @@
 
 pub mod feedback;
 
-use bevy::prelude::*;
 use crate::rules::*;
+use bevy::prelude::*;
 use wasm_fantasia_shared::presets::EntityRules;
 
 /// Convert shared EntityRules into a Bevy component bundle.

@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Table};
 
-use crate::models::{is_multiplayer_mode, Screen};
+use crate::models::{Screen, is_multiplayer_mode};
 use crate::networking::generated::player_table::PlayerTableAccess;
-use crate::networking::{PingTracker, SpacetimeDbConnection, STALE_THRESHOLD_SECS};
+use crate::networking::{PingTracker, STALE_THRESHOLD_SECS, SpacetimeDbConnection};
 use crate::ui::colors::NEUTRAL300;
 use crate::ui::hud::HudFont;
 
@@ -211,10 +211,7 @@ fn tick_ping(
         return;
     }
 
-    let ms = tracker
-        .as_ref()
-        .map(|t| t.smoothed_rtt_ms)
-        .unwrap_or(0.0);
+    let ms = tracker.as_ref().map(|t| t.smoothed_rtt_ms).unwrap_or(0.0);
     let new = if ms > 0.0 {
         format!("{ms:.0} ms")
     } else {

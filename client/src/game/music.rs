@@ -7,15 +7,18 @@ use bevy_seedling::prelude::*;
 use std::time::Duration;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(OnExit(Screen::Gameplay), stop_soundtrack.before(GameplayCleanup))
-        .add_systems(OnEnter(Screen::Gameplay), start_soundtrack)
-        .add_systems(
-            Update,
-            trigger_mood_change
-                .run_if(in_state(Screen::Gameplay))
-                .run_if(on_timer(Duration::from_millis(200))),
-        )
-        .add_observer(change_mood);
+    app.add_systems(
+        OnExit(Screen::Gameplay),
+        stop_soundtrack.before(GameplayCleanup),
+    )
+    .add_systems(OnEnter(Screen::Gameplay), start_soundtrack)
+    .add_systems(
+        Update,
+        trigger_mood_change
+            .run_if(in_state(Screen::Gameplay))
+            .run_if(on_timer(Duration::from_millis(200))),
+    )
+    .add_observer(change_mood);
 }
 
 fn start_soundtrack(

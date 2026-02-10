@@ -104,7 +104,9 @@ impl Status {
         status: ws::UpdateStatus<ws::BsatnFormat>,
     ) -> crate::Result<(Self, Option<M::DbUpdate>)> {
         Ok(match status {
-            ws::UpdateStatus::Committed(update) => (Self::Committed, Some(M::DbUpdate::parse_update(update)?)),
+            ws::UpdateStatus::Committed(update) => {
+                (Self::Committed, Some(M::DbUpdate::parse_update(update)?))
+            }
             ws::UpdateStatus::Failed(errmsg) => (Self::Failed(errmsg), None),
             ws::UpdateStatus::OutOfEnergy => (Self::OutOfEnergy, None),
         })

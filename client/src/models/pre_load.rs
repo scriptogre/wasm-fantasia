@@ -85,4 +85,3 @@ pub struct CameraPreset {
     pub min_height: f32,
     pub max_height: f32,
 }
-

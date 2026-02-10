@@ -1,3 +1,5 @@
+use bevy_enhanced_input::prelude::Actions;
+
 use super::*;
 
 pub fn plugin(app: &mut App) {
@@ -57,6 +59,7 @@ pub fn pop_modal(
     menu_marker: Query<Entity, With<MenuModal>>,
     settings_marker: Query<Entity, With<SettingsModal>>,
     backdrop: Query<Entity, With<ModalBackdrop>>,
+    modal_ctx_holder: Query<Entity, With<ModalCtx>>,
     mut commands: Commands,
     mut modals: ResMut<Modals>,
 ) {
@@ -92,6 +95,12 @@ pub fn pop_modal(
     if modals.is_empty() {
         if let Ok(bg) = backdrop.single() {
             commands.entity(bg).despawn();
+        }
+        if let Ok(entity) = modal_ctx_holder.single() {
+            commands
+                .entity(entity)
+                .remove::<ModalCtx>()
+                .despawn_related::<Actions<ModalCtx>>();
         }
         commands.trigger(TogglePause);
         commands.trigger(CamCursorToggle);

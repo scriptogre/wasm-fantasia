@@ -4,18 +4,20 @@ use bevy::prelude::*;
 use spacetimedb_sdk::DbContext;
 
 use crate::combat::{AttackState, Combatant, Enemy, EnemyBehavior, Health};
-use crate::models::{is_multiplayer_mode, GameMode, GameplayCleanup, Player as LocalPlayer, Screen};
+use crate::models::{GameMode, GameplayCleanup, Player as LocalPlayer, Screen, ServerTarget};
 use crate::player::Animation;
 use crate::rules::{Stat, Stats};
-use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
 use spacetimedb_sdk::Table;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
+use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 use web_time::Instant;
 
 pub mod combat;
 pub mod generated;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod local_server;
 
 pub use generated::{DbConnection, Player, Reducer};
 
@@ -94,6 +96,11 @@ pub struct PingTracker {
     pub last_ack: Option<Instant>,
 }
 
+/// Run condition: true when a SpacetimeDB connection is live (any mode).
+pub fn is_server_connected(conn: Option<Res<SpacetimeDbConnection>>) -> bool {
+    conn.is_some()
+}
+
 pub const STALE_THRESHOLD_SECS: f32 = 3.0;
 const HANDSHAKE_TIMEOUT_SECS: f32 = 5.0;
 const RECONNECT_INTERVAL_SECS: f32 = 2.0;
@@ -106,7 +113,9 @@ impl Default for ReconnectTimer {
     fn default() -> Self {
         let mut timer = Timer::from_seconds(RECONNECT_INTERVAL_SECS, TimerMode::Repeating);
         // Pre-tick to almost done so the first real tick fires immediately
-        timer.tick(std::time::Duration::from_secs_f32(RECONNECT_INTERVAL_SECS - 0.01));
+        timer.tick(std::time::Duration::from_secs_f32(
+            RECONNECT_INTERVAL_SECS - 0.01,
+        ));
         Self(timer)
     }
 }
@@ -123,43 +132,6 @@ impl Default for PositionSyncTimer {
             timer: Timer::from_seconds(0.05, TimerMode::Repeating),
         }
     }
-}
-
-/// Lag simulator for testing network conditions.
-#[derive(Resource, Clone, Debug)]
-pub struct LagSimulator {
-    pub outbound_delay_ms: u64,
-    pub inbound_delay_ms: u64,
-    pub packet_loss_chance: f32,
-}
-
-impl Default for LagSimulator {
-    fn default() -> Self {
-        Self {
-            outbound_delay_ms: 0,
-            inbound_delay_ms: 0,
-            packet_loss_chance: 0.0,
-        }
-    }
-}
-
-/// A pending outbound update with its scheduled send time.
-#[derive(Clone, Debug)]
-struct PendingOutboundUpdate {
-    x: f32,
-    y: f32,
-    z: f32,
-    rotation_y: f32,
-    animation_state: String,
-    attack_sequence: u32,
-    attack_animation: String,
-    send_at: Instant,
-}
-
-/// Container for delayed outbound messages.
-#[derive(Resource, Default)]
-pub struct LagBuffers {
-    outbound_queue: Vec<PendingOutboundUpdate>,
 }
 
 /// Tracks which CombatEvent IDs have been processed.
@@ -219,45 +191,40 @@ pub struct NetworkingPlugin;
 
 impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_plugins(local_server::plugin);
+
         app.init_resource::<SpacetimeDbConfig>()
             .init_resource::<SpacetimeDbToken>()
             .init_resource::<ReconnectTimer>()
             .init_resource::<PositionSyncTimer>()
-            .init_resource::<LagSimulator>()
-            .init_resource::<LagBuffers>()
             .init_resource::<PingTracker>()
             .init_resource::<CombatEventTracker>()
             .add_systems(
                 OnEnter(Screen::Connecting),
-                reset_reconnect_timer.run_if(is_multiplayer_mode),
+                reset_reconnect_timer.run_if(resource_exists::<ServerTarget>),
             )
             .add_systems(Update, auto_connect)
-            .add_systems(
-                OnExit(Screen::Connecting),
-                disconnect_on_cancel.run_if(is_multiplayer_mode),
-            )
+            .add_systems(OnExit(Screen::Connecting), cleanup_connecting_exit)
             .add_systems(
                 OnExit(Screen::Gameplay),
-                disconnect_from_spacetimedb
-                    .run_if(is_multiplayer_mode)
+                (disconnect_from_spacetimedb, remove_server_target)
+                    .run_if(is_server_connected)
                     .before(GameplayCleanup),
             );
 
-        app.add_observer(combat::send_attack_to_server)
-            .add_systems(
-                Update,
-                (
-                    reap_dead_connections.run_if(resource_exists::<SpacetimeDbConnection>),
-                    handle_connection_events.run_if(resource_exists::<SpacetimeDbConnection>),
-                    reconcile.run_if(resource_exists::<SpacetimeDbConnection>),
-                    interpolate_synced_entities.run_if(resource_exists::<SpacetimeDbConnection>),
-                    process_outbound_lag.run_if(resource_exists::<SpacetimeDbConnection>),
-                    send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
-                    combat::request_respawn_on_death
-                        .run_if(resource_exists::<SpacetimeDbConnection>),
-                    measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
-                ),
-            );
+        app.add_observer(combat::send_attack_to_server).add_systems(
+            Update,
+            (
+                reap_dead_connections.run_if(resource_exists::<SpacetimeDbConnection>),
+                handle_connection_events.run_if(resource_exists::<SpacetimeDbConnection>),
+                reconcile.run_if(resource_exists::<SpacetimeDbConnection>),
+                interpolate_synced_entities.run_if(resource_exists::<SpacetimeDbConnection>),
+                send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
+                combat::request_respawn_on_death.run_if(resource_exists::<SpacetimeDbConnection>),
+                measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
+            ),
+        );
     }
 }
 
@@ -266,24 +233,35 @@ impl Plugin for NetworkingPlugin {
 // =============================================================================
 
 macro_rules! connection_builder {
-    ($config:expr, $token:expr) => {{
+    ($uri:expr, $module_name:expr, $token:expr, $is_solo:expr) => {{
         let token_store = $token.clone();
         let stored = $token.lock().unwrap().clone();
+        let is_solo = $is_solo;
         DbConnection::builder()
-            .with_uri(&$config.uri)
-            .with_module_name(&$config.module_name)
+            .with_uri($uri)
+            .with_module_name($module_name)
             .with_token(stored)
             .on_connect(move |conn, identity, token| {
                 info!("Connected to SpacetimeDB with identity: {:?}", identity);
                 *token_store.lock().unwrap() = Some(token.to_string());
-                if let Err(e) = conn.reducers.join_game(Some("Player".to_string())) {
+
+                let world_id = if is_solo {
+                    identity.to_hex().to_string()
+                } else {
+                    "shared".to_string()
+                };
+
+                if let Err(e) = conn
+                    .reducers
+                    .join_game(Some("Player".to_string()), world_id.clone())
+                {
                     error!("Failed to call join_game: {:?}", e);
                 }
                 conn.subscription_builder().subscribe([
-                    "SELECT * FROM player",
-                    "SELECT * FROM enemy",
-                    "SELECT * FROM combat_event",
-                    "SELECT * FROM active_effect",
+                    format!("SELECT * FROM player WHERE world_id = '{world_id}'"),
+                    format!("SELECT * FROM enemy WHERE world_id = '{world_id}'"),
+                    format!("SELECT * FROM combat_event WHERE world_id = '{world_id}'"),
+                    "SELECT * FROM active_effect".to_string(),
                 ]);
             })
             .on_connect_error(|_ctx, err| {
@@ -297,11 +275,13 @@ macro_rules! connection_builder {
 }
 
 pub fn try_connect(
-    config: &SpacetimeDbConfig,
+    uri: &str,
+    module_name: &str,
     token: &SpacetimeDbToken,
+    is_solo: bool,
 ) -> Option<SpacetimeDbConnection> {
-    info!("Attempting SpacetimeDB connection to {}...", config.uri);
-    match connection_builder!(config, token.0).build() {
+    info!("Attempting SpacetimeDB connection to {uri}...");
+    match connection_builder!(uri, module_name, token.0, is_solo).build() {
         Ok(conn) => {
             info!("Connection initiated — waiting for handshake");
             Some(SpacetimeDbConnection { conn })
@@ -317,23 +297,39 @@ fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
     *timer = ReconnectTimer::default();
 }
 
-/// Clean up connection if we leave the connecting screen without a completed handshake
-/// (cancel or timeout). If the handshake succeeded, we're transitioning to Gameplay
-/// and want to keep the connection alive.
-fn disconnect_on_cancel(
+/// Clean up when leaving the Connecting screen without a completed handshake.
+fn cleanup_connecting_exit(
     conn: Option<Res<SpacetimeDbConnection>>,
     mut commands: Commands,
+    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
+        Res<local_server::LocalServerState>,
+    >,
 ) {
-    let Some(conn) = conn else { return };
-    if conn.conn.try_identity().is_some() {
-        // Handshake completed — heading to Gameplay, keep connection alive
-        return;
+    if conn
+        .as_ref()
+        .is_some_and(|c| c.conn.try_identity().is_some())
+    {
+        return; // heading to Gameplay — keep everything
     }
-    if let Err(e) = conn.conn.disconnect() {
-        warn!("SpacetimeDB disconnect error on cancel: {e:?}");
+
+    if let Some(conn) = conn {
+        let _ = conn.conn.disconnect();
+        commands.remove_resource::<SpacetimeDbConnection>();
+        commands.remove_resource::<HandshakeStart>();
     }
-    commands.remove_resource::<SpacetimeDbConnection>();
-    commands.remove_resource::<HandshakeStart>();
+
+    // Preserve a Ready server so the player can resume from the title screen.
+    // Only remove the server if it failed or is still starting — stale state
+    // would block the next auto_connect attempt.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let is_ready = server_state
+            .is_some_and(|s| matches!(*s, local_server::LocalServerState::Ready));
+        if !is_ready {
+            commands.remove_resource::<local_server::LocalServer>();
+            commands.remove_resource::<local_server::LocalServerState>();
+        }
+    }
 }
 
 fn disconnect_from_spacetimedb(
@@ -341,7 +337,19 @@ fn disconnect_from_spacetimedb(
     mut commands: Commands,
     mut ping: ResMut<PingTracker>,
     mut mode: ResMut<GameMode>,
+    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
+        Res<local_server::LocalServerState>,
+    >,
 ) {
+    // In singleplayer with a running local server, keep the connection alive
+    // so the player can resume from the title screen without losing world state.
+    #[cfg(not(target_arch = "wasm32"))]
+    if *mode == GameMode::Singleplayer
+        && server_state.is_some_and(|s| matches!(*s, local_server::LocalServerState::Ready))
+    {
+        return;
+    }
+
     if let Some(conn) = conn {
         if let Err(e) = conn.conn.disconnect() {
             warn!("SpacetimeDB disconnect error: {e:?}");
@@ -352,28 +360,49 @@ fn disconnect_from_spacetimedb(
     *mode = GameMode::default();
 }
 
+fn remove_server_target(mut commands: Commands) {
+    commands.remove_resource::<ServerTarget>();
+}
+
 fn auto_connect(
     config: Res<SpacetimeDbConfig>,
     token: Res<SpacetimeDbToken>,
+    mode: Res<GameMode>,
     mut timer: ResMut<ReconnectTimer>,
     time: Res<Time>,
     mut commands: Commands,
     state: Res<State<Screen>>,
-    mode: Res<GameMode>,
+    server_target: Option<Res<ServerTarget>>,
     conn: Option<Res<SpacetimeDbConnection>>,
+    #[cfg(not(target_arch = "wasm32"))] local_server_state: Option<
+        Res<local_server::LocalServerState>,
+    >,
 ) {
-    if !matches!(state.get(), Screen::Connecting | Screen::Gameplay)
-        || *mode != GameMode::Multiplayer
-        || conn.is_some()
-    {
+    let Some(target) = server_target else { return };
+    if !matches!(state.get(), Screen::Connecting | Screen::Gameplay) || conn.is_some() {
         return;
+    }
+
+    // For local servers, wait until the server is ready before attempting connection
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(ref ls_state) = local_server_state {
+        if !matches!(**ls_state, local_server::LocalServerState::Ready) {
+            return;
+        }
     }
 
     timer.0.tick(time.delta());
     if !timer.0.just_finished() {
         return;
     }
-    if let Some(conn) = try_connect(&config, &token) {
+
+    // Derive URI from ServerTarget — never from mutable config
+    let uri = match target.as_ref() {
+        ServerTarget::Local { port } => format!("ws://127.0.0.1:{port}"),
+        ServerTarget::Remote { uri } => uri.clone(),
+    };
+    let is_solo = *mode != GameMode::Multiplayer;
+    if let Some(conn) = try_connect(&uri, &config.module_name, &token, is_solo) {
         commands.insert_resource(conn);
         commands.insert_resource(HandshakeStart(Instant::now()));
         info!("auto_connect: connection initiated");
@@ -491,7 +520,7 @@ fn reconcile(
     // ── Local player: patch health, skip spawning ─────
     for row in &rows {
         if let ServerId::Player(identity) = &row.id {
-            if Some(identity.clone()) == my_id {
+            if Some(*identity) == my_id {
                 if let Ok((mut health, mut stats)) = local_health.single_mut() {
                     health.current = row.health;
                     health.max = row.max_health;
@@ -513,7 +542,7 @@ fn reconcile(
 
             // Patch enemy behavior from server animation_state
             if let Some(mut behavior) = enemy_behavior {
-                let kind = EnemyBehaviorKind::from_str(&row.animation_state);
+                let kind = EnemyBehaviorKind::parse_str(&row.animation_state);
                 let new_behavior = match kind {
                     EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
                     EnemyBehaviorKind::Chase => EnemyBehavior::Chase,
@@ -623,22 +652,9 @@ fn interpolate_synced_entities(
 // Outbound position relay
 // =============================================================================
 
-
-/// Determine attack animation from AttackState.
-fn attack_animation(attack: &AttackState) -> Animation {
-    if attack.is_crit {
-        Animation::MeleeHook
-    } else if attack.attack_count % 2 == 1 {
-        Animation::PunchJab
-    } else {
-        Animation::PunchCross
-    }
-}
-
 /// Send local player position to the server at a fixed rate.
 fn send_local_position(
-    lag: Res<LagSimulator>,
-    mut buffers: ResMut<LagBuffers>,
+    conn: Res<SpacetimeDbConnection>,
     mut timer: ResMut<PositionSyncTimer>,
     mut ping: ResMut<PingTracker>,
     time: Res<Time>,
@@ -658,31 +674,31 @@ fn send_local_position(
     let animation_state = player.animation_state.server_name().to_string();
 
     let (attack_sequence, attack_animation) = if let Some(attack) = attack_state {
-        (
-            attack.attack_count,
-            self::attack_animation(attack).clip_name().to_string(),
-        )
+        let anim = if attack.is_crit {
+            Animation::MeleeHook
+        } else if attack.attack_count % 2 == 1 {
+            Animation::PunchJab
+        } else {
+            Animation::PunchCross
+        };
+        (attack.attack_count, anim.clip_name().to_string())
     } else {
         (0, String::new())
     };
 
-    let update = PendingOutboundUpdate {
-        x: pos.x,
-        y: pos.y,
-        z: pos.z,
+    ping.last_send = Some(Instant::now());
+
+    if let Err(e) = conn.conn.reducers.update_position(
+        pos.x,
+        pos.y,
+        pos.z,
         rotation_y,
         animation_state,
         attack_sequence,
         attack_animation,
-        send_at: if lag.outbound_delay_ms == 0 && lag.packet_loss_chance == 0.0 {
-            Instant::now()
-        } else {
-            Instant::now() + std::time::Duration::from_millis(lag.outbound_delay_ms)
-        },
-    };
-
-    ping.last_send = Some(Instant::now());
-    buffers.outbound_queue.push(update);
+    ) {
+        warn!("Failed to send position update: {:?}", e);
+    }
 }
 
 // =============================================================================
@@ -710,54 +726,4 @@ fn measure_ping(conn: Res<SpacetimeDbConnection>, mut tracker: ResMut<PingTracke
             }
         }
     }
-}
-
-// =============================================================================
-// Lag simulation
-// =============================================================================
-
-fn process_outbound_lag(
-    conn: Res<SpacetimeDbConnection>,
-    lag: Res<LagSimulator>,
-    mut buffers: ResMut<LagBuffers>,
-) {
-    if lag.outbound_delay_ms == 0 && lag.packet_loss_chance == 0.0 {
-        for update in buffers.outbound_queue.drain(..) {
-            if let Err(e) = conn.conn.reducers.update_position(
-                update.x,
-                update.y,
-                update.z,
-                update.rotation_y,
-                update.animation_state,
-                update.attack_sequence,
-                update.attack_animation,
-            ) {
-                warn!("Failed to send position update: {:?}", e);
-            }
-        }
-        return;
-    }
-
-    let now = Instant::now();
-    buffers.outbound_queue.retain(|update| {
-        if now >= update.send_at {
-            if lag.packet_loss_chance > 0.0 && rand::random::<f32>() < lag.packet_loss_chance {
-                return false;
-            }
-            if let Err(e) = conn.conn.reducers.update_position(
-                update.x,
-                update.y,
-                update.z,
-                update.rotation_y,
-                update.animation_state.clone(),
-                update.attack_sequence,
-                update.attack_animation.clone(),
-            ) {
-                warn!("Failed to send position update: {:?}", e);
-            }
-            false
-        } else {
-            true
-        }
-    });
 }

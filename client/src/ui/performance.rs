@@ -11,7 +11,7 @@ pub fn plugin(app: &mut App) {
                 font_size: 14.0,
                 ..default()
             },
-            text_color: colors::NEUTRAL400.into(),
+            text_color: colors::NEUTRAL400,
             enabled: true,
             refresh_interval: Duration::from_millis(100),
             frame_time_graph_config: FrameTimeGraphConfig {
@@ -42,4 +42,3 @@ fn adjust_fps_layout(mut nodes: Query<(&GlobalZIndex, &mut Node)>) {
         }
     }
 }
-

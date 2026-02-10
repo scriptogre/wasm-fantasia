@@ -237,7 +237,11 @@ fn on_attack_hit(
         let fwd_2d = Vec2::new(forward_flat.x, forward_flat.z);
         let radial_dir = radial_2d.normalize_or(fwd_2d);
         let force = wasm_fantasia_shared::combat::knockback_displacement(
-            radial_dir, fwd_2d, hit.knockback, hit.push, hit.launch,
+            radial_dir,
+            fwd_2d,
+            hit.knockback,
+            hit.push,
+            hit.launch,
         );
 
         commands.trigger(DamageDealt {

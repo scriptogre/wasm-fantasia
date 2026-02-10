@@ -3,6 +3,7 @@
 //! This module is internal, and may incompatibly change without warning.
 
 use crate::spacetime_module::AbstractEventContext;
+use crate::wasm_safe::MutexExt;
 use crate::{
     db_connection::{next_request_id, next_subscription_id, DbContextImpl, PendingMutation},
     spacetime_module::{SpacetimeModule, SubscriptionHandle},
@@ -11,7 +12,6 @@ use futures_channel::mpsc;
 use spacetimedb_client_api_messages::websocket::{self as ws};
 use spacetimedb_data_structures::map::HashMap;
 use std::sync::{atomic::AtomicU32, Arc, Mutex};
-use crate::wasm_safe::MutexExt;
 
 // TODO: Rewrite for subscription manipulation, once we get that.
 // Currently race conditions abound, as you may resubscribe before the prev sub was applied,
@@ -35,7 +35,8 @@ pub(crate) type OnAppliedCallback<M> =
     Box<dyn FnOnce(&<M as SpacetimeModule>::SubscriptionEventContext) + Send + 'static>;
 pub(crate) type OnErrorCallback<M> =
     Box<dyn FnOnce(&<M as SpacetimeModule>::ErrorContext, crate::Error) + Send + 'static>;
-pub type OnEndedCallback<M> = Box<dyn FnOnce(&<M as SpacetimeModule>::SubscriptionEventContext) + Send + 'static>;
+pub type OnEndedCallback<M> =
+    Box<dyn FnOnce(&<M as SpacetimeModule>::SubscriptionEventContext) + Send + 'static>;
 
 /// When handling a pending unsubscribe, there are three cases the caller must handle.
 pub(crate) enum PendingUnsubscribeResult<M: SpacetimeModule> {
@@ -88,7 +89,11 @@ impl<M: SpacetimeModule> SubscriptionManager<M> {
             .unwrap_or_else(|_| unreachable!("Duplicate subscription id {sub_id}"));
     }
 
-    pub(crate) fn legacy_subscription_applied(&mut self, ctx: &M::SubscriptionEventContext, sub_id: u32) {
+    pub(crate) fn legacy_subscription_applied(
+        &mut self,
+        ctx: &M::SubscriptionEventContext,
+        sub_id: u32,
+    ) {
         let sub = self.legacy_subscriptions.get_mut(&sub_id).unwrap();
         sub.is_applied = true;
         if let Some(callback) = sub.on_applied.take() {
@@ -98,7 +103,11 @@ impl<M: SpacetimeModule> SubscriptionManager<M> {
 
     /// Register a new subscription. This does not send the subscription to the server.
     /// Rather, it makes the subscription available for the next `apply_subscriptions` call.
-    pub(crate) fn register_subscription(&mut self, query_id: u32, handle: SubscriptionHandleImpl<M>) {
+    pub(crate) fn register_subscription(
+        &mut self,
+        query_id: u32,
+        handle: SubscriptionHandleImpl<M>,
+    ) {
         self.new_subscriptions
             .try_insert(query_id, handle.clone())
             .unwrap_or_else(|_| unreachable!("Duplicate subscription id {query_id}"));
@@ -116,7 +125,10 @@ impl<M: SpacetimeModule> SubscriptionManager<M> {
     }
 
     /// This should be called when we get a subscription applied message from the server.
-    pub(crate) fn handle_pending_unsubscribe(&mut self, sub_id: u32) -> PendingUnsubscribeResult<M> {
+    pub(crate) fn handle_pending_unsubscribe(
+        &mut self,
+        sub_id: u32,
+    ) -> PendingUnsubscribeResult<M> {
         let Some(sub) = self.new_subscriptions.get(&sub_id) else {
             // TODO: log or double check error handling.
             return PendingUnsubscribeResult::DoNothing;
@@ -195,7 +207,10 @@ impl<M: SpacetimeModule> SubscriptionBuilder<M> {
     }
 
     /// Register a callback to run when the subscription is applied.
-    pub fn on_applied(mut self, callback: impl FnOnce(&M::SubscriptionEventContext) + Send + 'static) -> Self {
+    pub fn on_applied(
+        mut self,
+        callback: impl FnOnce(&M::SubscriptionEventContext) + Send + 'static,
+    ) -> Self {
         self.on_applied = Some(Box::new(callback));
         self
     }
@@ -206,7 +221,10 @@ impl<M: SpacetimeModule> SubscriptionBuilder<M> {
     /// in which case [`Self::on_applied`] will never run,
     /// or later during the subscription's lifetime if the module's interface changes,
     /// in which case [`Self::on_applied`] may have already run.
-    pub fn on_error(mut self, callback: impl FnOnce(&M::ErrorContext, crate::Error) + Send + 'static) -> Self {
+    pub fn on_error(
+        mut self,
+        callback: impl FnOnce(&M::ErrorContext, crate::Error) + Send + 'static,
+    ) -> Self {
         self.on_error = Some(Box::new(callback));
         self
     }
@@ -297,19 +315,26 @@ impl<T: IntoQueryString> IntoQueries for T {
 
 impl<T: IntoQueryString, const N: usize> IntoQueries for [T; N] {
     fn into_queries(self) -> Box<[Box<str>]> {
-        self.into_iter().map(IntoQueryString::into_query_string).collect()
+        self.into_iter()
+            .map(IntoQueryString::into_query_string)
+            .collect()
     }
 }
 
 impl<T: IntoQueryString + Clone> IntoQueries for &[T] {
     fn into_queries(self) -> Box<[Box<str>]> {
-        self.iter().cloned().map(IntoQueryString::into_query_string).collect()
+        self.iter()
+            .cloned()
+            .map(IntoQueryString::into_query_string)
+            .collect()
     }
 }
 
 impl<T: IntoQueryString> IntoQueries for Vec<T> {
     fn into_queries(self) -> Box<[Box<str>]> {
-        self.into_iter().map(IntoQueryString::into_query_string).collect()
+        self.into_iter()
+            .map(IntoQueryString::into_query_string)
+            .collect()
     }
 }
 

@@ -3,12 +3,14 @@ use super::*;
 use bevy_seedling::prelude::*;
 use bevy_third_person_camera::ThirdPersonCamera;
 
-
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(Modals(Vec::default()))
         .add_systems(PostStartup, mark_startup_entities_persistent)
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
-        .add_systems(OnExit(Screen::Gameplay), cleanup_gameplay_entities.in_set(GameplayCleanup))
+        .add_systems(
+            OnExit(Screen::Gameplay),
+            cleanup_gameplay_entities.in_set(GameplayCleanup),
+        )
         .add_systems(
             Update,
             (
@@ -38,7 +40,14 @@ fn mark_startup_entities_persistent(
 /// because bevy_seedling's audio graph holds internal references that
 /// outlive the ECS entity — let the audio system manage its own lifecycle.
 fn cleanup_gameplay_entities(
-    entities: Query<Entity, (Without<Persistent>, Without<ChildOf>, Without<FirewheelNode>)>,
+    entities: Query<
+        Entity,
+        (
+            Without<Persistent>,
+            Without<ChildOf>,
+            Without<FirewheelNode>,
+        ),
+    >,
     mut commands: Commands,
 ) {
     for entity in entities.iter() {
@@ -76,11 +85,7 @@ fn sync_gameplay_lock(
 
 /// Keeps `Time<Virtual>` in sync with `session.paused`.
 /// Runs globally so leaving gameplay with time paused always cleans up.
-fn sync_virtual_time(
-    session: Res<Session>,
-    mode: Res<GameMode>,
-    mut time: ResMut<Time<Virtual>>,
-) {
+fn sync_virtual_time(session: Res<Session>, mode: Res<GameMode>, mut time: ResMut<Time<Virtual>>) {
     let should_pause = session.paused && *mode != GameMode::Multiplayer;
     if should_pause != time.is_paused() {
         if should_pause {

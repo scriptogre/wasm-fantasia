@@ -2,11 +2,9 @@ use super::*;
 use crate::asset_loading::Models;
 use crate::models::SpawnEnemy;
 use crate::player::{Animation, find_animation_player_descendant};
-use crate::rules::{Stat, Stats};
 use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::Start;
 use std::time::Duration;
-use wasm_fantasia_shared::combat::{defaults, enemy_ai_decision, EnemyBehaviorKind};
 
 /// Enemies beyond this distance from the camera have their animations paused.
 const ANIMATION_CULL_DISTANCE: f32 = 30.0;
@@ -18,11 +16,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                enemy_ai
-                    .run_if(in_state(Screen::Gameplay))
-                    .run_if(not(is_paused)),
-                cull_enemy_animations
-                    .run_if(in_state(Screen::Gameplay)),
+                cull_enemy_animations.run_if(in_state(Screen::Gameplay)),
                 animate_enemies
                     .in_set(PostPhysicsAppSystems::PlayAnimations)
                     .run_if(in_state(Screen::Gameplay)),
@@ -34,15 +28,12 @@ pub fn plugin(app: &mut App) {
 // Spawn trigger (E key / server request)
 // =============================================================================
 
-/// Spawn a pack of enemies in front of the player when E is pressed.
-/// In multiplayer: calls server reducer so all clients see the enemies.
-/// Offline: spawns locally like before.
+/// Spawn a pack of enemies via server reducer.
+/// All game modes go through SpacetimeDB when connected.
 fn spawn_enemy_in_front(
     _on: On<Start<SpawnEnemy>>,
     player: Query<&Transform, With<Player>>,
-    mode: Res<GameMode>,
     #[cfg(feature = "multiplayer")] conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
-    mut commands: Commands,
 ) {
     let Ok(player_transform) = player.single() else {
         return;
@@ -51,45 +42,17 @@ fn spawn_enemy_in_front(
     let forward = player_transform.forward();
     let pos = player_transform.translation;
 
-    // Suppress unused warning when multiplayer feature is off
-    let _ = &mode;
-
-    // If multiplayer mode and server is reachable, spawn via server
     #[cfg(feature = "multiplayer")]
-    if *mode == GameMode::Multiplayer {
-        if let Some(conn) = conn {
-            use spacetimedb_sdk::DbContext;
-            if conn.conn.is_active() {
-                crate::networking::combat::server_spawn_enemies(&conn, pos, forward.as_vec3());
-                debug!("Requested 5 enemies from server");
-                return;
-            }
+    if let Some(conn) = conn {
+        use spacetimedb_sdk::DbContext;
+        if conn.conn.is_active() {
+            crate::networking::combat::server_spawn_enemies(&conn, pos, forward.as_vec3());
+            debug!("Requested enemies from server");
+            return;
         }
     }
 
-    // Offline fallback: spawn locally
-    // TODO(server-abstraction): spawn logic is duplicated in server's spawn_enemies reducer.
-    let count = 80 + (rand::random::<u32>() % 41); // 80–120 enemies
-
-    for i in 0..count {
-        let angle = rand::random::<f32>() * std::f32::consts::TAU;
-        let radius = defaults::ENEMY_SPAWN_RADIUS_MIN
-            + rand::random::<f32>() * (defaults::ENEMY_SPAWN_RADIUS_MAX - defaults::ENEMY_SPAWN_RADIUS_MIN);
-        let spawn_pos = pos + Vec3::new(angle.cos() * radius, 0.0, angle.sin() * radius);
-
-        commands.spawn((
-            Name::new(format!("TestEnemy_{}", i)),
-            Transform::from_translation(spawn_pos),
-            Health::new(defaults::ENEMY_HEALTH),
-            Enemy,
-            Combatant,
-            Stats::new()
-                .with(Stat::MaxHealth, defaults::ENEMY_HEALTH)
-                .with(Stat::Health, defaults::ENEMY_HEALTH),
-        ));
-    }
-
-    debug!("Spawned {} enemies locally", count);
+    warn!("No server connection — cannot spawn enemies");
 }
 
 // =============================================================================
@@ -104,17 +67,16 @@ fn on_enemy_added(
 ) {
     let entity = on.entity;
 
-    // Remove capsule mesh if present (both SP spawn and MP reconciler may have added it)
+    // Remove capsule mesh if present (reconciler may have added it)
     commands
         .entity(entity)
         .remove::<Mesh3d>()
         .remove::<MeshMaterial3d<StandardMaterial>>();
 
-    // Insert behavior/AI components + visibility
+    // Insert behavior components + visibility
     commands.entity(entity).insert((
         EnemyBehavior::default(),
         EnemyAnimations::default(),
-        EnemyAi::default(),
         InheritedVisibility::default(),
     ));
 
@@ -254,122 +216,6 @@ fn prepare_enemy_scene(
         &mut commands,
         &red_material,
     );
-}
-
-// =============================================================================
-// Singleplayer AI — chase and attack
-// =============================================================================
-//
-// TODO(server-abstraction): This system duplicates the decision + movement logic
-// that also lives in the server's `game_tick` reducer. When the SP/MP backend
-// trait lands, both code paths collapse into a single `GameServer::tick_enemies`
-// implementation — SP writes directly to ECS, MP calls SpacetimeDB reducers.
-// The shared decision function `enemy_ai_decision()` (shared/src/combat.rs)
-// already centralises the state-machine; what remains duplicated is the
-// movement application and facing logic.
-
-fn enemy_ai(
-    time: Res<Time>,
-    mut enemies: Query<
-        (
-            Entity,
-            &mut Transform,
-            &mut EnemyBehavior,
-            &mut EnemyAi,
-            &Health,
-        ),
-        With<Enemy>,
-    >,
-    #[cfg(feature = "multiplayer")] server_ids: Query<&crate::networking::ServerId>,
-    player_q: Query<&Transform, (With<Player>, Without<Enemy>)>,
-) {
-    let Ok(player_transform) = player_q.single() else {
-        return;
-    };
-    let player_pos = player_transform.translation;
-    let dt = time.delta_secs();
-
-    // Collect alive enemy positions for separation (read-only pass)
-    let positions: Vec<(Entity, Vec3)> = enemies
-        .iter()
-        .filter_map(|(entity, transform, _, _, health)| {
-            if health.is_dead() {
-                None
-            } else {
-                Some((entity, transform.translation))
-            }
-        })
-        .collect();
-
-    for (entity, mut transform, mut behavior, mut ai, health) in &mut enemies {
-        // Skip server-driven enemies in multiplayer — the reconciler handles those
-        #[cfg(feature = "multiplayer")]
-        if server_ids.get(entity).is_ok() {
-            continue;
-        }
-        let _ = entity; // suppress unused warning in SP builds
-
-        if health.is_dead() {
-            continue;
-        }
-
-        ai.attack_cooldown.tick(time.delta());
-
-        let enemy_pos = transform.translation;
-        let to_player = Vec3::new(
-            player_pos.x - enemy_pos.x,
-            0.0,
-            player_pos.z - enemy_pos.z,
-        );
-        let distance = to_player.length();
-
-        let decision = enemy_ai_decision(distance, ai.attack_cooldown.is_finished());
-
-        *behavior = match decision {
-            EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
-            EnemyBehaviorKind::Chase => EnemyBehavior::Chase,
-            EnemyBehaviorKind::Attack => EnemyBehavior::Attack,
-        };
-
-        // Face the player when in range
-        if decision != EnemyBehaviorKind::Idle && distance > 0.01 {
-            let direction = to_player.normalize();
-            let target_rotation = Quat::from_rotation_y(f32::atan2(-direction.x, -direction.z));
-            transform.rotation = transform.rotation.slerp(target_rotation, (dt * 8.0).min(1.0));
-        }
-
-        // Move toward player when chasing
-        if decision == EnemyBehaviorKind::Chase && distance > 0.01 {
-            let move_dir = to_player.normalize();
-            transform.translation += move_dir * defaults::ENEMY_WALK_SPEED * dt;
-        }
-
-        // Enemy-enemy separation — push apart to prevent stacking
-        let mut separation = Vec3::ZERO;
-        for &(other_entity, other_pos) in &positions {
-            if other_entity == entity {
-                continue;
-            }
-            let diff = Vec3::new(
-                enemy_pos.x - other_pos.x,
-                0.0,
-                enemy_pos.z - other_pos.z,
-            );
-            let dist = diff.length();
-            if dist < defaults::ENEMY_SEPARATION_RADIUS && dist > 0.01 {
-                separation += diff.normalize() * (1.0 - dist / defaults::ENEMY_SEPARATION_RADIUS);
-            }
-        }
-        if separation.length() > 0.01 {
-            transform.translation +=
-                separation.normalize() * defaults::ENEMY_SEPARATION_STRENGTH * dt;
-        }
-
-        // Reset cooldown on attack
-        if decision == EnemyBehaviorKind::Attack {
-            ai.attack_cooldown.reset();
-        }
-    }
 }
 
 // =============================================================================

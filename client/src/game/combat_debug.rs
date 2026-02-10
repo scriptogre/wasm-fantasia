@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
-use crate::models::{Player as LocalPlayer, Session};
+use crate::models::{Player as LocalPlayer, Screen, Session};
 use crate::rules::{Stat, Stats};
 use crate::ui::{colors, size};
 
@@ -100,7 +100,7 @@ impl DebugLog {
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<DebugLog>()
-        .add_systems(Startup, spawn_panel)
+        .add_systems(OnEnter(Screen::Gameplay), spawn_panel)
         .add_observer(observe_damage)
         .add_observer(observe_death)
         .add_systems(
@@ -219,7 +219,10 @@ fn flush_pending_hits(mut log: ResMut<DebugLog>) {
             String::new()
         };
         let tag = if is_local { Tag::Local } else { Tag::Remote };
-        log.push(tag, format!("{total_dmg:.0} dmg -> {target_str} x{total_hits}{crit_str}"));
+        log.push(
+            tag,
+            format!("{total_dmg:.0} dmg -> {target_str} x{total_hits}{crit_str}"),
+        );
     }
 }
 
@@ -249,7 +252,7 @@ fn spawn_title(commands: &mut Commands, panel: Entity, fonts: &Fonts, text: impl
             font_size: 14.0,
             ..default()
         },
-        TextColor(colors::NEUTRAL300.into()),
+        TextColor(colors::NEUTRAL300),
     ));
 }
 
@@ -262,7 +265,7 @@ fn spawn_body(commands: &mut Commands, panel: Entity, text: impl Into<String>) {
             font_size: 12.0,
             ..default()
         },
-        TextColor(colors::NEUTRAL500.into()),
+        TextColor(colors::NEUTRAL500),
     ));
 }
 
@@ -288,7 +291,7 @@ fn update_overlay(
         return;
     }
 
-    if log.frame % 10 == 0 {
+    if log.frame.is_multiple_of(10) {
         log.dirty = true;
     }
 
@@ -311,9 +314,7 @@ fn update_overlay(
         let stacks = stats
             .map(|s| s.get(&Stat::Custom("Stacks".into())) as u32)
             .unwrap_or(0);
-        let atk_spd = stats
-            .map(|s| s.get(&Stat::AttackSpeed))
-            .unwrap_or(1.0);
+        let atk_spd = stats.map(|s| s.get(&Stat::AttackSpeed)).unwrap_or(1.0);
         spawn_title(
             &mut commands,
             panel_entity,
@@ -338,15 +339,28 @@ fn update_overlay(
             (online, is_you)
         });
         let online = players.iter().filter(|p| p.online).count();
-        spawn_title(&mut commands, panel_entity, &fonts, format!("Players  {online}/{}", players.len()));
+        spawn_title(
+            &mut commands,
+            panel_entity,
+            &fonts,
+            format!("Players  {online}/{}", players.len()),
+        );
 
         const MAX_PLAYER_ROWS: usize = 5;
         let mut body = String::new();
         for p in players.iter().take(MAX_PLAYER_ROWS) {
             let name = p.name.as_deref().unwrap_or("?");
-            let you = if Some(p.identity) == our_id { " (you)" } else { "" };
+            let you = if Some(p.identity) == our_id {
+                " (you)"
+            } else {
+                ""
+            };
             let status = if p.online { "" } else { " [off]" };
-            let _ = writeln!(body, "{name}{you}{status}  {:.0}/{:.0}", p.health, p.max_health);
+            let _ = writeln!(
+                body,
+                "{name}{you}{status}  {:.0}/{:.0}",
+                p.health, p.max_health
+            );
         }
         if players.len() > MAX_PLAYER_ROWS {
             let _ = writeln!(body, "+{} more", players.len() - MAX_PLAYER_ROWS);
@@ -357,7 +371,12 @@ fn update_overlay(
         let enemies: Vec<_> = conn.conn.db.enemy().iter().collect();
         if !enemies.is_empty() {
             let alive = enemies.iter().filter(|n| n.health > 0.0).count();
-            spawn_title(&mut commands, panel_entity, &fonts, format!("Enemies  {} alive / {} dead", alive, enemies.len() - alive));
+            spawn_title(
+                &mut commands,
+                panel_entity,
+                &fonts,
+                format!("Enemies  {} alive / {} dead", alive, enemies.len() - alive),
+            );
         } else {
             spawn_title(&mut commands, panel_entity, &fonts, "Enemies  none");
         }
@@ -365,11 +384,20 @@ fn update_overlay(
         // Server events
         let events: Vec<_> = conn.conn.db.combat_event().iter().collect();
         if !events.is_empty() {
-            spawn_title(&mut commands, panel_entity, &fonts, format!("Server Events  ({})", events.len()));
+            spawn_title(
+                &mut commands,
+                panel_entity,
+                &fonts,
+                format!("Server Events  ({})", events.len()),
+            );
             let mut body = String::new();
             for evt in events.iter().rev().take(3).rev() {
                 let crit = if evt.is_crit { " CRIT" } else { "" };
-                let _ = writeln!(body, "{:.0} dmg at ({:.1}, {:.1}){crit}", evt.damage, evt.x, evt.z);
+                let _ = writeln!(
+                    body,
+                    "{:.0} dmg at ({:.1}, {:.1}){crit}",
+                    evt.damage, evt.x, evt.z
+                );
             }
             spawn_body(&mut commands, panel_entity, body.trim_end());
         }
@@ -384,7 +412,10 @@ fn update_overlay(
                             &mut commands,
                             panel_entity,
                             &fonts,
-                            format!("DESYNC  local {:.0} / server {:.0}", local_hp.current, sp.health),
+                            format!(
+                                "DESYNC  local {:.0} / server {:.0}",
+                                local_hp.current, sp.health
+                            ),
                         );
                     }
                 }

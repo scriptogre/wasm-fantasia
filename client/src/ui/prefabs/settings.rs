@@ -65,7 +65,12 @@ fn update_tab_content(
     tab_bar: Query<&Children, With<TabBar>>,
     mut tab_content: Query<(Entity, &Children), With<TabContent>>,
     buttons: Query<(&UiTab, &Children)>,
-    mut style_q: Query<(&mut PaletteSet, &mut BackgroundColor, &mut BorderColor, &Children)>,
+    mut style_q: Query<(
+        &mut PaletteSet,
+        &mut BackgroundColor,
+        &mut BorderColor,
+        &Children,
+    )>,
     mut text_color_q: Query<&mut TextColor>,
     mut commands: Commands,
 ) -> Result {
@@ -433,14 +438,8 @@ fn tab_bar() -> impl Bundle {
                 },
                 TabBar,
                 children![
-                    (
-                        btn(left_tab, switch_to_tab(UiTab::Audio)),
-                        UiTab::Audio
-                    ),
-                    (
-                        btn(right_tab, switch_to_tab(UiTab::Video)),
-                        UiTab::Video
-                    ),
+                    (btn(left_tab, switch_to_tab(UiTab::Audio)), UiTab::Audio),
+                    (btn(right_tab, switch_to_tab(UiTab::Video)), UiTab::Video),
                 ],
             ),
         ],

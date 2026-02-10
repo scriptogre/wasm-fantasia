@@ -66,7 +66,6 @@ pub struct OnTickRules(pub Vec<Rule>);
 /// On-hit/on-crit-hit/on-kill rule execution is now handled by
 /// `resolve_combat()` in the shared crate. These observers only
 /// dispatch sub-feedback events for VFX that care about crits.
-
 fn on_take_damage_observer(
     trigger: On<DamageDealt>,
     mut query: Query<(&OnTakeDamageRules, &mut Stats)>,
@@ -93,7 +92,11 @@ fn sync_attack_state_to_stats(mut query: Query<(&AttackState, &mut Stats)>) {
     for (attack_state, mut stats) in query.iter_mut() {
         stats.set(
             Stat::IsAttacking,
-            if attack_state.is_attacking() { 1.0 } else { 0.0 },
+            if attack_state.is_attacking() {
+                1.0
+            } else {
+                0.0
+            },
         );
 
         stats.set(Stat::AttackProgress, attack_state.progress());

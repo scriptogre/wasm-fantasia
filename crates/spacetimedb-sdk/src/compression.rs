@@ -20,7 +20,9 @@ fn gzip_decompress(bytes: &[u8]) -> Result<Vec<u8>, io::Error> {
     Ok(decompressed)
 }
 
-pub(crate) fn maybe_decompress_cqu(cqu: CompressableQueryUpdate<BsatnFormat>) -> QueryUpdate<BsatnFormat> {
+pub(crate) fn maybe_decompress_cqu(
+    cqu: CompressableQueryUpdate<BsatnFormat>,
+) -> QueryUpdate<BsatnFormat> {
     match cqu {
         CompressableQueryUpdate::Uncompressed(qu) => qu,
         CompressableQueryUpdate::Brotli(bytes) => {
@@ -49,9 +51,9 @@ pub(crate) fn decompress_server_message(raw: &[u8]) -> Result<Cow<'_, [u8]>, WsE
         [SERVER_MSG_COMPRESSION_TAG_BROTLI, bytes @ ..] => brotli_decompress(bytes)
             .map(Cow::Owned)
             .map_err(err_decompress("brotli")),
-        [SERVER_MSG_COMPRESSION_TAG_GZIP, bytes @ ..] => {
-            gzip_decompress(bytes).map(Cow::Owned).map_err(err_decompress("gzip"))
-        }
+        [SERVER_MSG_COMPRESSION_TAG_GZIP, bytes @ ..] => gzip_decompress(bytes)
+            .map(Cow::Owned)
+            .map_err(err_decompress("gzip")),
         [c, ..] => Err(WsError::UnknownCompressionScheme { scheme: *c }),
     }
 }

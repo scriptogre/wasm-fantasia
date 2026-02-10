@@ -13,6 +13,7 @@ pub mod combat_event_table;
 pub mod combat_event_type;
 pub mod enemy_table;
 pub mod enemy_type;
+pub mod game_tick_reducer;
 pub mod join_game_reducer;
 pub mod leave_game_reducer;
 pub mod on_disconnect_reducer;
@@ -20,28 +21,33 @@ pub mod player_table;
 pub mod player_type;
 pub mod respawn_reducer;
 pub mod spawn_enemies_reducer;
+pub mod tick_schedule_table;
+pub mod tick_schedule_type;
 pub mod update_position_reducer;
 
 pub use active_effect_table::*;
 pub use active_effect_type::ActiveEffect;
-pub use attack_hit_reducer::{attack_hit, set_flags_for_attack_hit, AttackHitCallbackId};
+pub use attack_hit_reducer::{AttackHitCallbackId, attack_hit, set_flags_for_attack_hit};
 pub use combat_event_table::*;
 pub use combat_event_type::CombatEvent;
 pub use enemy_table::*;
 pub use enemy_type::Enemy;
-pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
-pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
+pub use game_tick_reducer::{GameTickCallbackId, game_tick, set_flags_for_game_tick};
+pub use join_game_reducer::{JoinGameCallbackId, join_game, set_flags_for_join_game};
+pub use leave_game_reducer::{LeaveGameCallbackId, leave_game, set_flags_for_leave_game};
 pub use on_disconnect_reducer::{
-    on_disconnect, set_flags_for_on_disconnect, OnDisconnectCallbackId,
+    OnDisconnectCallbackId, on_disconnect, set_flags_for_on_disconnect,
 };
 pub use player_table::*;
 pub use player_type::Player;
-pub use respawn_reducer::{respawn, set_flags_for_respawn, RespawnCallbackId};
+pub use respawn_reducer::{RespawnCallbackId, respawn, set_flags_for_respawn};
 pub use spawn_enemies_reducer::{
-    set_flags_for_spawn_enemies, spawn_enemies, SpawnEnemiesCallbackId,
+    SpawnEnemiesCallbackId, set_flags_for_spawn_enemies, spawn_enemies,
 };
+pub use tick_schedule_table::*;
+pub use tick_schedule_type::TickSchedule;
 pub use update_position_reducer::{
-    set_flags_for_update_position, update_position, UpdatePositionCallbackId,
+    UpdatePositionCallbackId, set_flags_for_update_position, update_position,
 };
 
 #[derive(Clone, PartialEq, Debug)]
@@ -53,8 +59,12 @@ pub use update_position_reducer::{
 
 pub enum Reducer {
     AttackHit,
+    GameTick {
+        args: TickSchedule,
+    },
     JoinGame {
         name: Option<String>,
+        world_id: String,
     },
     LeaveGame,
     OnDisconnect,
@@ -85,6 +95,7 @@ impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::AttackHit => "attack_hit",
+            Reducer::GameTick { .. } => "game_tick",
             Reducer::JoinGame { .. } => "join_game",
             Reducer::LeaveGame => "leave_game",
             Reducer::OnDisconnect => "on_disconnect",
@@ -102,6 +113,13 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
             "attack_hit" => Ok(
                 __sdk::parse_reducer_args::<attack_hit_reducer::AttackHitArgs>(
                     "attack_hit",
+                    &value.args,
+                )?
+                .into(),
+            ),
+            "game_tick" => Ok(
+                __sdk::parse_reducer_args::<game_tick_reducer::GameTickArgs>(
+                    "game_tick",
                     &value.args,
                 )?
                 .into(),
@@ -155,6 +173,7 @@ pub struct DbUpdate {
     combat_event: __sdk::TableUpdate<CombatEvent>,
     enemy: __sdk::TableUpdate<Enemy>,
     player: __sdk::TableUpdate<Player>,
+    tick_schedule: __sdk::TableUpdate<TickSchedule>,
 }
 
 impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
@@ -175,6 +194,9 @@ impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
+                "tick_schedule" => db_update
+                    .tick_schedule
+                    .append(tick_schedule_table::parse_table_update(table_update)?),
 
                 unknown => {
                     return Err(__sdk::InternalError::unknown_name(
@@ -213,6 +235,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
             .with_updates_by_pk(|row| &row.identity);
+        diff.tick_schedule = cache
+            .apply_diff_to_table::<TickSchedule>("tick_schedule", &self.tick_schedule)
+            .with_updates_by_pk(|row| &row.scheduled_id);
 
         diff
     }
@@ -226,6 +251,7 @@ pub struct AppliedDiff<'r> {
     combat_event: __sdk::TableAppliedDiff<'r, CombatEvent>,
     enemy: __sdk::TableAppliedDiff<'r, Enemy>,
     player: __sdk::TableAppliedDiff<'r, Player>,
+    tick_schedule: __sdk::TableAppliedDiff<'r, TickSchedule>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
 
@@ -251,6 +277,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Enemy>("enemy", &self.enemy, event);
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
+        callbacks.invoke_table_row_callbacks::<TickSchedule>(
+            "tick_schedule",
+            &self.tick_schedule,
+            event,
+        );
     }
 }
 
@@ -423,6 +454,7 @@ impl DbConnection {
     /// This is a low-level primitive exposed for power users who need significant control over scheduling.
     /// Most applications should call [`Self::run_threaded`] to spawn a thread
     /// which advances the connection automatically.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn advance_one_message_blocking(&self) -> __sdk::Result<()> {
         self.imp.advance_one_message_blocking()
     }
@@ -448,6 +480,7 @@ impl DbConnection {
     }
 
     /// Spawn a thread which processes WebSocket messages as they are received.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn run_threaded(&self) -> std::thread::JoinHandle<()> {
         self.imp.run_threaded()
     }
@@ -514,21 +547,21 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
 /// either a [`DbConnection`] or an [`EventContext`] and operate on either.
 pub trait RemoteDbContext:
     __sdk::DbContext<
-    DbView = RemoteTables,
-    Reducers = RemoteReducers,
-    SetReducerFlags = SetReducerFlags,
-    SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
->
+        DbView = RemoteTables,
+        Reducers = RemoteReducers,
+        SetReducerFlags = SetReducerFlags,
+        SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
+    >
 {
 }
 impl<
-        Ctx: __sdk::DbContext<
+    Ctx: __sdk::DbContext<
             DbView = RemoteTables,
             Reducers = RemoteReducers,
             SetReducerFlags = SetReducerFlags,
             SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
         >,
-    > RemoteDbContext for Ctx
+> RemoteDbContext for Ctx
 {
 }
 
@@ -974,5 +1007,6 @@ impl __sdk::SpacetimeModule for RemoteModule {
         combat_event_table::register_table(client_cache);
         enemy_table::register_table(client_cache);
         player_table::register_table(client_cache);
+        tick_schedule_table::register_table(client_cache);
     }
 }

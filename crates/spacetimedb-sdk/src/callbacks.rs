@@ -68,7 +68,10 @@ impl<M: SpacetimeModule> Default for DbCallbacks<M> {
 
 impl<M: SpacetimeModule> DbCallbacks<M> {
     /// Get the [`TableCallbacks`] for the table `table_name`.
-    pub(crate) fn get_table_callbacks(&mut self, table_name: &'static str) -> &mut TableCallbacks<M> {
+    pub(crate) fn get_table_callbacks(
+        &mut self,
+        table_name: &'static str,
+    ) -> &mut TableCallbacks<M> {
         self.table_callbacks.entry(table_name).or_default()
     }
 
@@ -100,7 +103,8 @@ impl<M: SpacetimeModule> DbCallbacks<M> {
 /// Rows are passed to callbacks as `&dyn Any`,
 /// and a wrapper inserted by the SDK will downcast to the actual row type
 /// before invoking the user-supplied function.
-pub(crate) type RowCallback<M> = Box<dyn FnMut(&<M as SpacetimeModule>::EventContext, &dyn Any) + Send + 'static>;
+pub(crate) type RowCallback<M> =
+    Box<dyn FnMut(&<M as SpacetimeModule>::EventContext, &dyn Any) + Send + 'static>;
 
 type InsertCallbackMap<M> = HashMap<CallbackId, RowCallback<M>>;
 type DeleteCallbackMap<M> = HashMap<CallbackId, RowCallback<M>>;
@@ -144,7 +148,11 @@ impl<M: SpacetimeModule> TableCallbacks<M> {
         self.on_delete.insert(callback_id, callback);
     }
 
-    pub(crate) fn register_on_update(&mut self, callback_id: CallbackId, callback: UpdateCallback<M>) {
+    pub(crate) fn register_on_update(
+        &mut self,
+        callback_id: CallbackId,
+        callback: UpdateCallback<M>,
+    ) {
         self.on_update.insert(callback_id, callback);
     }
 
@@ -208,7 +216,8 @@ impl<M: SpacetimeModule> TableCallbacks<M> {
 /// Reducer arguments are passed to callbacks within the `EventContext`,
 /// and a wrapper inserted by the SDK will destructure the contained `Event`
 /// before invoking the user-supplied function.
-pub(crate) type ReducerCallback<M> = Box<dyn FnMut(&<M as SpacetimeModule>::ReducerEventContext) + Send + 'static>;
+pub(crate) type ReducerCallback<M> =
+    Box<dyn FnMut(&<M as SpacetimeModule>::ReducerEventContext) + Send + 'static>;
 
 type ReducerCallbackMap<M> = HashMap<CallbackId, ReducerCallback<M>>;
 
@@ -246,7 +255,10 @@ impl<M: SpacetimeModule> ReducerCallbacks<M> {
         callback_id: CallbackId,
         callback: ReducerCallback<M>,
     ) {
-        self.callbacks.entry(reducer).or_default().insert(callback_id, callback);
+        self.callbacks
+            .entry(reducer)
+            .or_default()
+            .insert(callback_id, callback);
     }
 
     pub(crate) fn remove_on_reducer(&mut self, reducer: &'static str, callback_id: CallbackId) {
@@ -267,8 +279,11 @@ impl<M: SpacetimeModule> ReducerCallbacks<M> {
 /// A procedure callback for a procedure defined by the module `M`.
 ///
 /// Procedure return values are deserialized within this function by code injected by the SDK.
-pub(crate) type ProcedureCallback<M> =
-    Box<dyn FnOnce(&<M as SpacetimeModule>::ProcedureEventContext, Result<Box<[u8]>, InternalError>) + Send + 'static>;
+pub(crate) type ProcedureCallback<M> = Box<
+    dyn FnOnce(&<M as SpacetimeModule>::ProcedureEventContext, Result<Box<[u8]>, InternalError>)
+        + Send
+        + 'static,
+>;
 
 pub struct ProcedureCallbacks<M: SpacetimeModule> {
     request_id_to_callback: HashMap<u32, ProcedureCallback<M>>,
@@ -284,8 +299,14 @@ impl<M: SpacetimeModule> Default for ProcedureCallbacks<M> {
 
 impl<M: SpacetimeModule> ProcedureCallbacks<M> {
     pub(crate) fn insert(&mut self, request_id: u32, callback: ProcedureCallback<M>) {
-        if self.request_id_to_callback.insert(request_id, callback).is_some() {
-            unreachable!("Request IDs are drawn from a global monotonic atomic counter and so are unique");
+        if self
+            .request_id_to_callback
+            .insert(request_id, callback)
+            .is_some()
+        {
+            unreachable!(
+                "Request IDs are drawn from a global monotonic atomic counter and so are unique"
+            );
         };
     }
 

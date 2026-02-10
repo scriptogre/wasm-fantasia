@@ -8,7 +8,6 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(EnhancedInputPlugin)
         .add_input_context::<PlayerCtx>()
         .add_input_context::<ModalCtx>()
-        .add_systems(Startup, spawn_ctx)
         .add_systems(Update, (log_gamepad_events, log_gamepad_status))
         .add_observer(rm_player_ctx)
         .add_observer(add_modal_ctx)
@@ -43,10 +42,7 @@ fn log_gamepad_events(
 }
 
 /// Log gamepad detection status. Runs every frame but only logs on state changes.
-fn log_gamepad_status(
-    gamepads: Query<(Entity, &Gamepad)>,
-    mut prev_count: Local<Option<usize>>,
-) {
+fn log_gamepad_status(gamepads: Query<(Entity, &Gamepad)>, mut prev_count: Local<Option<usize>>) {
     let count = gamepads.iter().count();
     let prev = *prev_count;
 
@@ -101,10 +97,6 @@ fn log_escape(_on: On<Start<Escape>>) {
 }
 
 markers!(GlobalCtx, PlayerCtx, ModalCtx);
-
-fn spawn_ctx(mut commands: Commands) {
-    commands.spawn(ModalCtx);
-}
 
 #[derive(InputAction)]
 #[action_output(Vec2)]
@@ -270,8 +262,3 @@ fn add_modal_ctx(add: On<Add, ModalCtx>, mut commands: Commands) {
     ));
 }
 
-// fn _rm_modal_ctx(rm: On<Remove, ModalCtx>, mut commands: Commands) {
-//     commands
-//         .entity(rm.entity)
-//         .despawn_related::<Actions<ModalCtx>>();
-// }

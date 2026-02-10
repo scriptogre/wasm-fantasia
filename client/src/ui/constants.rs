@@ -113,10 +113,26 @@ pub struct PaletteSet {
 impl Default for PaletteSet {
     fn default() -> Self {
         Self {
-            none: Palette::new(colors::NEUTRAL300, colors::NEUTRAL900, BorderColor::all(colors::NEUTRAL850)),
-            hovered: Palette::new(colors::NEUTRAL300, colors::NEUTRAL850, BorderColor::all(colors::NEUTRAL800)),
-            pressed: Palette::new(colors::NEUTRAL300, colors::NEUTRAL800, BorderColor::all(colors::NEUTRAL750)),
-            disabled: Palette::new(colors::NEUTRAL500, colors::NEUTRAL900, BorderColor::all(colors::NEUTRAL850)),
+            none: Palette::new(
+                colors::NEUTRAL300,
+                colors::NEUTRAL900,
+                BorderColor::all(colors::NEUTRAL850),
+            ),
+            hovered: Palette::new(
+                colors::NEUTRAL300,
+                colors::NEUTRAL850,
+                BorderColor::all(colors::NEUTRAL800),
+            ),
+            pressed: Palette::new(
+                colors::NEUTRAL300,
+                colors::NEUTRAL800,
+                BorderColor::all(colors::NEUTRAL750),
+            ),
+            disabled: Palette::new(
+                colors::NEUTRAL500,
+                colors::NEUTRAL900,
+                BorderColor::all(colors::NEUTRAL850),
+            ),
         }
     }
 }

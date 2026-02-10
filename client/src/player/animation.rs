@@ -182,7 +182,11 @@ pub fn prepare_animations(
     #[cfg(debug_assertions)]
     for anim in Animation::ALL {
         if !player.animations.contains_key(anim) {
-            warn!("Animation {:?} ({}) not found in player model", anim, anim.clip_name());
+            warn!(
+                "Animation {:?} ({}) not found in player model",
+                anim,
+                anim.clip_name()
+            );
         }
     }
 
@@ -198,17 +202,19 @@ pub fn prepare_animations(
 
     // Start idle animation immediately to avoid T-pose on first frame
     if let Some(index) = idle_node {
-        commands.entity(animation_player).queue(move |mut entity: EntityWorldMut| {
-            let Some(mut transitions) = entity.take::<AnimationTransitions>() else {
-                return;
-            };
-            if let Some(mut player) = entity.get_mut::<AnimationPlayer>() {
-                transitions
-                    .play(&mut player, index, Duration::ZERO)
-                    .repeat();
-            }
-            entity.insert(transitions);
-        });
+        commands
+            .entity(animation_player)
+            .queue(move |mut entity: EntityWorldMut| {
+                let Some(mut transitions) = entity.take::<AnimationTransitions>() else {
+                    return;
+                };
+                if let Some(mut player) = entity.get_mut::<AnimationPlayer>() {
+                    transitions
+                        .play(&mut player, index, Duration::ZERO)
+                        .repeat();
+                }
+                entity.insert(transitions);
+            });
     }
 }
 

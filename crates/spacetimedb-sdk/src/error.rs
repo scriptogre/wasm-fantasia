@@ -62,7 +62,11 @@ This is often caused by outdated bindings; try re-running `spacetime generate`."
 
     #[doc(hidden)]
     /// Called by codegen. Not part of this library's stable API.
-    pub fn unknown_name(category: &'static str, name: impl std::fmt::Display, container: &'static str) -> Self {
+    pub fn unknown_name(
+        category: &'static str,
+        name: impl std::fmt::Display,
+        container: &'static str,
+    ) -> Self {
         Self::new(format!(
             "Unknown {category} {name} in {container}
 

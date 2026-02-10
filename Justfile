@@ -20,18 +20,25 @@ spacetimedb:
     set -euo pipefail
     command -v "{{spacetime}}" &>/dev/null || \
         (echo "Installing SpacetimeDB..." && curl -sSf https://install.spacetimedb.com | sh)
-    if ! "{{spacetime}}" start --pg-port 5432 2>/dev/null & then true; fi
-    sleep 2
+    # Start server if port 3000 isn't already listening
+    if nc -z 127.0.0.1 3000 2>/dev/null; then
+        echo "SpacetimeDB already running on port 3000"
+    else
+        "{{spacetime}}" start 2>/dev/null &
+        echo "Waiting for SpacetimeDB..."
+        for i in $(seq 1 30); do
+            if nc -z 127.0.0.1 3000 2>/dev/null; then break; fi
+            sleep 0.5
+        done
+        if ! nc -z 127.0.0.1 3000 2>/dev/null; then
+            echo "ERROR: SpacetimeDB failed to start on port 3000"
+            exit 1
+        fi
+    fi
     "{{spacetime}}" publish wasm-fantasia \
         --project-path server \
         --yes \
         --delete-data
-    TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════════"
-    echo "  Postgres: postgresql://token:${TOKEN}@localhost:5432/wasm-fantasia"
-    echo "═══════════════════════════════════════════════════════════════════"
-    echo ""
 
 # Native release build
 build:
@@ -55,6 +62,32 @@ check:
 # Analyze web build sizes
 web-size *args:
     python3 client/web_size.py {{args}}
+
+# Regenerate SpacetimeDB client bindings (patches WASM-incompatible methods)
+generate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    "{{spacetime}}" generate --lang rust --project-path server --out-dir client/src/networking/generated --yes
+    # The codegen emits advance_one_message_blocking() and run_threaded() which
+    # don't exist in our WASM-patched SDK fork. Gate them to native-only.
+    sed -i '' 's/    pub fn advance_one_message_blocking/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn advance_one_message_blocking/' client/src/networking/generated/mod.rs
+    sed -i '' 's/    pub fn run_threaded/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn run_threaded/' client/src/networking/generated/mod.rs
+    echo "Bindings regenerated and WASM-patched."
+
+# Bundle a self-contained native release into dist/native/
+bundle-native:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Building server WASM module..."
+    cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release
+    echo "Building native client..."
+    cargo build -p wasm_fantasia --release --no-default-features --features multiplayer,audio
+    rm -rf dist/native && mkdir -p dist/native
+    cp target/release/wasm_fantasia dist/native/
+    cp target/wasm32-unknown-unknown/release/wasm_fantasia_module.wasm dist/native/
+    cp "{{spacetime}}" dist/native/
+    cp -r client/assets dist/native/
+    echo "Bundle ready at dist/native/"
 
 # Wipe SpacetimeDB data and redeploy module
 db-reset:
