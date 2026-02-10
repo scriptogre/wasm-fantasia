@@ -91,9 +91,11 @@ fn main() {
 
     let bin_chunk_offset = GLB_HEADER_SIZE + CHUNK_HEADER_SIZE + json_len;
     let bin_data = if bin_chunk_offset + CHUNK_HEADER_SIZE <= glb_data.len() {
-        let bin_len =
-            u32::from_le_bytes(glb_data[bin_chunk_offset..bin_chunk_offset + 4].try_into().unwrap())
-                as usize;
+        let bin_len = u32::from_le_bytes(
+            glb_data[bin_chunk_offset..bin_chunk_offset + 4]
+                .try_into()
+                .unwrap(),
+        ) as usize;
         assert_eq!(
             u32::from_le_bytes(
                 glb_data[bin_chunk_offset + 4..bin_chunk_offset + 8]
@@ -192,25 +194,19 @@ fn rebuild_binary(root: &mut Value, bin_data: &[u8]) -> Vec<u8> {
         let bv_offset = bv.get("byteOffset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         let bv_stride = bv.get("byteStride").and_then(|v| v.as_u64());
 
-        let acc_offset = acc
-            .get("byteOffset")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
+        let acc_offset = acc.get("byteOffset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         let count = acc.get("count").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         let comp_type = acc
             .get("componentType")
             .and_then(|v| v.as_u64())
             .unwrap_or(5126);
-        let acc_type = acc
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("SCALAR");
+        let acc_type = acc.get("type").and_then(|v| v.as_str()).unwrap_or("SCALAR");
 
         let element_size = component_byte_size(comp_type) * type_element_count(acc_type);
         let stride = bv_stride.map(|s| s as usize).unwrap_or(element_size);
 
         // Align new bufferView start to 4 bytes
-        while new_bin.len() % 4 != 0 {
+        while !new_bin.len().is_multiple_of(4) {
             new_bin.push(0);
         }
         let new_bv_offset = new_bin.len();
@@ -257,7 +253,7 @@ fn rebuild_binary(root: &mut Value, bin_data: &[u8]) -> Vec<u8> {
                 let offset = bv.get("byteOffset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                 let length = bv.get("byteLength").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
-                while new_bin.len() % 4 != 0 {
+                while !new_bin.len().is_multiple_of(4) {
                     new_bin.push(0);
                 }
                 let new_offset = new_bin.len();
@@ -279,7 +275,7 @@ fn rebuild_binary(root: &mut Value, bin_data: &[u8]) -> Vec<u8> {
     }
 
     // Pad final buffer
-    while new_bin.len() % 4 != 0 {
+    while !new_bin.len().is_multiple_of(4) {
         new_bin.push(0);
     }
 
@@ -289,10 +285,7 @@ fn rebuild_binary(root: &mut Value, bin_data: &[u8]) -> Vec<u8> {
         .insert("bufferViews".to_string(), Value::Array(new_buffer_views));
 
     // Update accessors: point to new bufferViews, clear byteOffset (data starts at 0 in new bv)
-    if let Some(accs) = root
-        .get_mut("accessors")
-        .and_then(|a| a.as_array_mut())
-    {
+    if let Some(accs) = root.get_mut("accessors").and_then(|a| a.as_array_mut()) {
         for (i, acc) in accs.iter_mut().enumerate() {
             if let Some(&new_bv) = acc_to_new_bv.get(&i) {
                 let obj = acc.as_object_mut().unwrap();
@@ -542,6 +535,9 @@ fn parse_clip_names() -> Vec<String> {
         }
     }
 
-    assert!(!names.is_empty(), "parsed zero clip names from animation.rs");
+    assert!(
+        !names.is_empty(),
+        "parsed zero clip names from animation.rs"
+    );
     names
 }

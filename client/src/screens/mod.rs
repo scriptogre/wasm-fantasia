@@ -90,16 +90,24 @@ pub mod to {
         mut commands: Commands,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
+        #[cfg(feature = "multiplayer")] existing_server: Option<
+            Res<crate::networking::local_server::LocalServer>,
+        >,
     ) {
         *mode = GameMode::Singleplayer;
 
         #[cfg(feature = "multiplayer")]
         {
-            // Start the local SpacetimeDB subprocess
-            let (server, state) = crate::networking::local_server::start();
-            let port = server.port;
-            commands.insert_resource(server);
-            commands.insert_resource(state);
+            // Reuse prewarmed server if available, otherwise start fresh
+            let port = if let Some(server) = existing_server {
+                server.port
+            } else {
+                let (server, state) = crate::networking::local_server::start();
+                let port = server.port;
+                commands.insert_resource(server);
+                commands.insert_resource(state);
+                port
+            };
             commands.insert_resource(ServerTarget::Local { port });
         }
 
@@ -149,6 +157,13 @@ pub mod to {
         commands.insert_resource(ServerTarget::Remote {
             uri: config.uri.clone(),
         });
+
+        // Shut down prewarmed local server — not needed for multiplayer
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            commands.remove_resource::<crate::networking::local_server::LocalServer>();
+            commands.remove_resource::<crate::networking::local_server::LocalServerState>();
+        }
 
         if resource_handles.is_all_done() {
             next_screen.set(Screen::Connecting);

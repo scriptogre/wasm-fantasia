@@ -10,6 +10,7 @@ pub struct Player {
     pub identity: __sdk::Identity,
     pub name: Option<String>,
     pub online: bool,
+    pub world_id: String,
     pub last_update: i64,
     pub x: f32,
     pub y: f32,

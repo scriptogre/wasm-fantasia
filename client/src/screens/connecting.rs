@@ -16,23 +16,12 @@ const CONNECTION_TIMEOUT_SECS: f32 = 10.0;
 #[derive(Resource)]
 struct ConnectionTimeout(Timer);
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct ConnectionLog {
     lines: Vec<String>,
     showed_target: bool,
     saw_resource: bool,
     saw_identity: bool,
-}
-
-impl Default for ConnectionLog {
-    fn default() -> Self {
-        Self {
-            lines: Vec::new(),
-            showed_target: false,
-            saw_resource: false,
-            saw_identity: false,
-        }
-    }
 }
 
 impl ConnectionLog {

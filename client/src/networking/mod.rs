@@ -7,11 +7,11 @@ use crate::combat::{AttackState, Combatant, Enemy, EnemyBehavior, Health};
 use crate::models::{GameMode, GameplayCleanup, Player as LocalPlayer, Screen, ServerTarget};
 use crate::player::Animation;
 use crate::rules::{Stat, Stats};
-use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
 use spacetimedb_sdk::Table;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
+use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 use web_time::Instant;
 
 pub mod combat;
@@ -113,7 +113,9 @@ impl Default for ReconnectTimer {
     fn default() -> Self {
         let mut timer = Timer::from_seconds(RECONNECT_INTERVAL_SECS, TimerMode::Repeating);
         // Pre-tick to almost done so the first real tick fires immediately
-        timer.tick(std::time::Duration::from_secs_f32(RECONNECT_INTERVAL_SECS - 0.01));
+        timer.tick(std::time::Duration::from_secs_f32(
+            RECONNECT_INTERVAL_SECS - 0.01,
+        ));
         Self(timer)
     }
 }
@@ -206,28 +208,23 @@ impl Plugin for NetworkingPlugin {
             .add_systems(OnExit(Screen::Connecting), cleanup_connecting_exit)
             .add_systems(
                 OnExit(Screen::Gameplay),
-                (
-                    disconnect_from_spacetimedb,
-                    remove_server_target,
-                )
+                (disconnect_from_spacetimedb, remove_server_target)
                     .run_if(is_server_connected)
                     .before(GameplayCleanup),
             );
 
-        app.add_observer(combat::send_attack_to_server)
-            .add_systems(
-                Update,
-                (
-                    reap_dead_connections.run_if(resource_exists::<SpacetimeDbConnection>),
-                    handle_connection_events.run_if(resource_exists::<SpacetimeDbConnection>),
-                    reconcile.run_if(resource_exists::<SpacetimeDbConnection>),
-                    interpolate_synced_entities.run_if(resource_exists::<SpacetimeDbConnection>),
-                    send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
-                    combat::request_respawn_on_death
-                        .run_if(resource_exists::<SpacetimeDbConnection>),
-                    measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
-                ),
-            );
+        app.add_observer(combat::send_attack_to_server).add_systems(
+            Update,
+            (
+                reap_dead_connections.run_if(resource_exists::<SpacetimeDbConnection>),
+                handle_connection_events.run_if(resource_exists::<SpacetimeDbConnection>),
+                reconcile.run_if(resource_exists::<SpacetimeDbConnection>),
+                interpolate_synced_entities.run_if(resource_exists::<SpacetimeDbConnection>),
+                send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
+                combat::request_respawn_on_death.run_if(resource_exists::<SpacetimeDbConnection>),
+                measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
+            ),
+        );
     }
 }
 
@@ -236,9 +233,10 @@ impl Plugin for NetworkingPlugin {
 // =============================================================================
 
 macro_rules! connection_builder {
-    ($uri:expr, $module_name:expr, $token:expr) => {{
+    ($uri:expr, $module_name:expr, $token:expr, $is_solo:expr) => {{
         let token_store = $token.clone();
         let stored = $token.lock().unwrap().clone();
+        let is_solo = $is_solo;
         DbConnection::builder()
             .with_uri($uri)
             .with_module_name($module_name)
@@ -246,14 +244,24 @@ macro_rules! connection_builder {
             .on_connect(move |conn, identity, token| {
                 info!("Connected to SpacetimeDB with identity: {:?}", identity);
                 *token_store.lock().unwrap() = Some(token.to_string());
-                if let Err(e) = conn.reducers.join_game(Some("Player".to_string())) {
+
+                let world_id = if is_solo {
+                    identity.to_hex().to_string()
+                } else {
+                    "shared".to_string()
+                };
+
+                if let Err(e) = conn
+                    .reducers
+                    .join_game(Some("Player".to_string()), world_id.clone())
+                {
                     error!("Failed to call join_game: {:?}", e);
                 }
                 conn.subscription_builder().subscribe([
-                    "SELECT * FROM player",
-                    "SELECT * FROM enemy",
-                    "SELECT * FROM combat_event",
-                    "SELECT * FROM active_effect",
+                    format!("SELECT * FROM player WHERE world_id = '{world_id}'"),
+                    format!("SELECT * FROM enemy WHERE world_id = '{world_id}'"),
+                    format!("SELECT * FROM combat_event WHERE world_id = '{world_id}'"),
+                    "SELECT * FROM active_effect".to_string(),
                 ]);
             })
             .on_connect_error(|_ctx, err| {
@@ -270,9 +278,10 @@ pub fn try_connect(
     uri: &str,
     module_name: &str,
     token: &SpacetimeDbToken,
+    is_solo: bool,
 ) -> Option<SpacetimeDbConnection> {
     info!("Attempting SpacetimeDB connection to {uri}...");
-    match connection_builder!(uri, module_name, token.0).build() {
+    match connection_builder!(uri, module_name, token.0, is_solo).build() {
         Ok(conn) => {
             info!("Connection initiated — waiting for handshake");
             Some(SpacetimeDbConnection { conn })
@@ -289,10 +298,7 @@ fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
 }
 
 /// Clean up when leaving the Connecting screen without a completed handshake.
-fn cleanup_connecting_exit(
-    conn: Option<Res<SpacetimeDbConnection>>,
-    mut commands: Commands,
-) {
+fn cleanup_connecting_exit(conn: Option<Res<SpacetimeDbConnection>>, mut commands: Commands) {
     if conn
         .as_ref()
         .is_some_and(|c| c.conn.try_identity().is_some())
@@ -338,6 +344,7 @@ fn remove_server_target(mut commands: Commands) {
 fn auto_connect(
     config: Res<SpacetimeDbConfig>,
     token: Res<SpacetimeDbToken>,
+    mode: Res<GameMode>,
     mut timer: ResMut<ReconnectTimer>,
     time: Res<Time>,
     mut commands: Commands,
@@ -371,7 +378,8 @@ fn auto_connect(
         ServerTarget::Local { port } => format!("ws://127.0.0.1:{port}"),
         ServerTarget::Remote { uri } => uri.clone(),
     };
-    if let Some(conn) = try_connect(&uri, &config.module_name, &token) {
+    let is_solo = *mode != GameMode::Multiplayer;
+    if let Some(conn) = try_connect(&uri, &config.module_name, &token, is_solo) {
         commands.insert_resource(conn);
         commands.insert_resource(HandshakeStart(Instant::now()));
         info!("auto_connect: connection initiated");
@@ -489,7 +497,7 @@ fn reconcile(
     // ── Local player: patch health, skip spawning ─────
     for row in &rows {
         if let ServerId::Player(identity) = &row.id {
-            if Some(identity.clone()) == my_id {
+            if Some(*identity) == my_id {
                 if let Ok((mut health, mut stats)) = local_health.single_mut() {
                     health.current = row.health;
                     health.max = row.max_health;
@@ -511,7 +519,7 @@ fn reconcile(
 
             // Patch enemy behavior from server animation_state
             if let Some(mut behavior) = enemy_behavior {
-                let kind = EnemyBehaviorKind::from_str(&row.animation_state);
+                let kind = EnemyBehaviorKind::parse_str(&row.animation_state);
                 let new_behavior = match kind {
                     EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
                     EnemyBehaviorKind::Chase => EnemyBehavior::Chase,

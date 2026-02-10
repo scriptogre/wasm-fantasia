@@ -39,7 +39,19 @@ pub enum LocalServerState {
 // =============================================================================
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(OnExit(Screen::Gameplay), shutdown_local_server);
+    app.add_systems(OnEnter(Screen::Loading), prewarm_local_server)
+        .add_systems(OnExit(Screen::Gameplay), shutdown_local_server);
+}
+
+/// Spawn the local SpacetimeDB process during loading so it has a head
+/// start booting by the time the player clicks Singleplayer. The process
+/// runs independently — the Connecting screen's `advance_local_server`
+/// detects when it's ready and triggers the deploy step.
+fn prewarm_local_server(mut commands: Commands) {
+    let (server, state) = start();
+    info!("Prewarming local SpacetimeDB on port {}", server.port);
+    commands.insert_resource(server);
+    commands.insert_resource(state);
 }
 
 // =============================================================================
@@ -49,10 +61,20 @@ pub fn plugin(app: &mut App) {
 /// Find the `spacetime` CLI binary.
 ///
 /// Search order:
-/// 1. `SPACETIMEDB_PATH` environment variable
-/// 2. `~/.local/bin/spacetime` (default install location)
-/// 3. System PATH via `which`
+/// 1. Adjacent to the game executable (bundled distribution)
+/// 2. `SPACETIMEDB_PATH` environment variable
+/// 3. `~/.local/bin/spacetime` (default install location)
+/// 4. System PATH via `which`
 fn find_spacetime_binary() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let adjacent = dir.join("spacetime");
+            if adjacent.exists() {
+                return Some(adjacent);
+            }
+        }
+    }
+
     if let Ok(path) = std::env::var("SPACETIMEDB_PATH") {
         let p = PathBuf::from(path);
         if p.exists() {
@@ -218,20 +240,29 @@ pub fn advance(server: &mut LocalServer, state: &mut LocalServerState) -> bool {
             let listen_addr = format!("127.0.0.1:{}", server.port);
             info!("Deploying game module to local server at {listen_addr}");
 
-            let result = Command::new(&server.spacetime_binary)
-                .args([
-                    "publish",
-                    "wasm-fantasia",
-                    "--project-path",
-                    "server",
-                    "--yes",
-                    "--delete-data",
-                    "-s",
-                    &format!("http://{listen_addr}"),
-                ])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .output();
+            // Use pre-compiled WASM if adjacent to the executable, otherwise
+            // fall back to --project-path for dev workflow.
+            let bin_path = std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|d| d.join("wasm_fantasia_module.wasm")))
+                .filter(|p| p.exists());
+
+            let mut cmd = Command::new(&server.spacetime_binary);
+            cmd.args([
+                "publish",
+                "wasm-fantasia",
+                "--yes",
+                "--delete-data",
+                "-s",
+                &format!("http://{listen_addr}"),
+            ]);
+            if let Some(ref wasm_path) = bin_path {
+                cmd.args(["--bin-path", &wasm_path.to_string_lossy()]);
+            } else {
+                cmd.args(["--project-path", "server"]);
+            }
+
+            let result = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output();
 
             match result {
                 Ok(output) if output.status.success() => {

@@ -9,6 +9,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub struct Enemy {
     pub id: u64,
     pub enemy_type: String,
+    pub world_id: String,
     pub x: f32,
     pub y: f32,
     pub z: f32,

@@ -6,17 +6,11 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
-pub struct CombatEvent {
-    pub id: u64,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub damage: f32,
-    pub is_crit: bool,
-    pub world_id: String,
-    pub timestamp: i64,
+pub struct TickSchedule {
+    pub scheduled_id: u64,
+    pub scheduled_at: __sdk::ScheduleAt,
 }
 
-impl __sdk::InModule for CombatEvent {
+impl __sdk::InModule for TickSchedule {
     type Module = super::RemoteModule;
 }

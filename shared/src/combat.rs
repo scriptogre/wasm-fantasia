@@ -66,7 +66,7 @@ impl EnemyBehaviorKind {
     }
 
     /// Parse from the server DB string representation.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_str(s: &str) -> Self {
         match s {
             "Chase" => Self::Chase,
             "Attack" => Self::Attack,
@@ -178,8 +178,8 @@ pub fn can_attack(last_attack_micros: i64, now_micros: i64, attack_speed: f32) -
 // UNIFIED COMBAT RESOLUTION
 // ============================================================================
 
-use crate::presets::feedback;
 use crate::presets::EntityRules;
+use crate::presets::feedback;
 use crate::rules::{
     Action, ActionVar, Rule, RuleOutput, Stats, execute_effects, execute_rules,
     execute_rules_with_roll,
@@ -340,7 +340,13 @@ pub fn resolve_combat(input: &CombatInput) -> CombatOutput {
             input.base_range
         };
 
-        if !cone_hit_check(input.origin, input.forward, target.pos, range, input.half_arc_cos) {
+        if !cone_hit_check(
+            input.origin,
+            input.forward,
+            target.pos,
+            range,
+            input.half_arc_cos,
+        ) {
             continue;
         }
 
