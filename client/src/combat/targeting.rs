@@ -32,15 +32,16 @@ impl LockedTarget {
 #[derive(Component)]
 pub struct TargetIndicator;
 
-/// Soft targeting assist - gently rotate player toward nearest target when attacking.
-/// This allows circling enemies while still connecting hits.
+/// Soft targeting assist — rotate toward the direction that maximizes enemies
+/// caught in the attack cone. When attacking, finds the optimal facing angle
+/// via a sliding-window sweep over nearby enemy angles, then slerps toward it.
 fn soft_target_assist(
-    suggested: Res<LockedTarget>,
     enemies: Query<&Transform, (With<Enemy>, Without<Player>)>,
     mut player: Query<(&mut Transform, &AttackState), (With<Player>, Without<Enemy>)>,
     time: Res<Time>,
 ) {
-    // Only assist when attacking
+    use wasm_fantasia_shared::combat::defaults::{ATTACK_ARC, ATTACK_RANGE};
+
     let Ok((mut player_tf, attack_state)) = player.single_mut() else {
         return;
     };
@@ -49,27 +50,75 @@ fn soft_target_assist(
         return;
     }
 
-    // Get suggested target
-    let Some(target_entity) = suggested.get() else {
-        return;
-    };
+    // Gather angles (on XZ plane) of all enemies within attack range
+    let player_pos = player_tf.translation;
+    let mut angles: Vec<f32> = enemies
+        .iter()
+        .filter_map(|tf| {
+            let delta = tf.translation - player_pos;
+            let flat = Vec2::new(delta.x, delta.z);
+            if flat.length_squared() > ATTACK_RANGE * ATTACK_RANGE || flat.length_squared() < 0.01 {
+                return None;
+            }
+            Some(flat.y.atan2(flat.x))
+        })
+        .collect();
 
-    let Ok(target_tf) = enemies.get(target_entity) else {
-        return;
-    };
-
-    // Calculate direction to target (ignore Y)
-    let to_target = target_tf.translation - player_tf.translation;
-    let to_target_flat = Vec3::new(to_target.x, 0.0, to_target.z);
-
-    if to_target_flat.length_squared() < 0.01 {
+    if angles.is_empty() {
         return;
     }
 
-    let target_rotation = Quat::from_rotation_arc(Vec3::NEG_Z, to_target_flat.normalize());
+    // Single enemy — just face it directly
+    if angles.len() == 1 {
+        let best_angle = angles[0];
+        let direction = Vec3::new(best_angle.cos(), 0.0, best_angle.sin()).normalize();
+        let target_rotation = Quat::from_rotation_arc(Vec3::NEG_Z, direction);
+        let assist_strength = if attack_state.progress() < 0.4 { 15.0 } else { 8.0 };
+        player_tf.rotation = player_tf
+            .rotation
+            .slerp(target_rotation, time.delta_secs() * assist_strength);
+        return;
+    }
 
-    // Gentle rotation assist - fast enough to help, not so fast it feels forced
-    // Stronger early in attack (wind-up), weaker during recovery
+    // Sort angles for sliding-window sweep
+    angles.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let half_arc = (ATTACK_ARC / 2.0_f32).to_radians();
+    let arc_rad = ATTACK_ARC.to_radians();
+    let n = angles.len();
+
+    // Duplicate angles shifted by +2π so the window can wrap around
+    let mut extended = angles.clone();
+    for &a in &angles {
+        extended.push(a + std::f32::consts::TAU);
+    }
+
+    let mut best_count = 0usize;
+    let mut best_center = 0.0_f32;
+    let mut right = 0usize;
+
+    for left in 0..n {
+        // Advance right pointer while the window fits within arc_rad
+        while right < extended.len() && extended[right] - extended[left] <= arc_rad {
+            right += 1;
+        }
+        let count = right - left;
+        if count > best_count {
+            best_count = count;
+            // Center of the window
+            best_center = extended[left] + half_arc;
+        }
+    }
+
+    if best_count == 0 {
+        return;
+    }
+
+    // Convert angle back to XZ direction vector, then to a Bevy rotation
+    // atan2(z, x) angle → direction Vec3(cos, 0, sin)
+    let direction = Vec3::new(best_center.cos(), 0.0, best_center.sin()).normalize();
+    let target_rotation = Quat::from_rotation_arc(Vec3::NEG_Z, direction);
+
     let assist_strength = if attack_state.progress() < 0.4 {
         15.0
     } else {

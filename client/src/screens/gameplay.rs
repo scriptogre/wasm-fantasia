@@ -13,7 +13,9 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
         .add_systems(
             OnExit(Screen::Gameplay),
-            cleanup_gameplay_entities.in_set(GameplayCleanup),
+            (unpause_server_on_exit, cleanup_gameplay_entities)
+                .chain()
+                .in_set(GameplayCleanup),
         )
         .add_systems(
             Update,
@@ -36,6 +38,22 @@ fn mark_startup_entities_persistent(
     for entity in all_entities.iter() {
         commands.entity(entity).insert(Persistent);
     }
+}
+
+/// Ensure the server is unpaused when leaving gameplay.
+/// Covers all exit paths (Main Menu, disconnect, etc.) so the server tick
+/// isn't left frozen when the player returns.
+fn unpause_server_on_exit(
+    mut session: ResMut<Session>,
+    mode: Res<GameMode>,
+    conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+) {
+    if session.paused && *mode != GameMode::Multiplayer {
+        if let Some(conn) = conn {
+            let _ = conn.conn.reducers.resume_world();
+        }
+    }
+    session.paused = false;
 }
 
 /// Nuclear cleanup on gameplay exit: despawn every root entity that wasn't
