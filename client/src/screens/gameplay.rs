@@ -3,6 +3,11 @@ use super::*;
 use bevy_seedling::prelude::*;
 use bevy_third_person_camera::ThirdPersonCamera;
 
+#[cfg(feature = "multiplayer")]
+use crate::networking::generated::{
+    pause_world_reducer::pause_world, resume_world_reducer::resume_world,
+};
+
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(Modals(Vec::default()))
         .add_systems(PostStartup, mark_startup_entities_persistent)
@@ -96,8 +101,24 @@ fn sync_virtual_time(session: Res<Session>, mode: Res<GameMode>, mut time: ResMu
     }
 }
 
-fn toggle_pause(_: On<TogglePause>, mut session: ResMut<Session>) {
+fn toggle_pause(
+    _: On<TogglePause>,
+    mut session: ResMut<Session>,
+    #[cfg(feature = "multiplayer")] mode: Res<GameMode>,
+    #[cfg(feature = "multiplayer")] conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+) {
     session.paused = !session.paused;
+
+    #[cfg(feature = "multiplayer")]
+    if *mode != GameMode::Multiplayer {
+        if let Some(conn) = conn {
+            let _ = if session.paused {
+                conn.conn.reducers.pause_world()
+            } else {
+                conn.conn.reducers.resume_world()
+            };
+        }
+    }
 }
 
 fn toggle_mute(

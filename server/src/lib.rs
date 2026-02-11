@@ -109,6 +109,13 @@ pub struct TickSchedule {
     pub scheduled_at: spacetimedb::ScheduleAt,
 }
 
+/// Tracks which worlds are paused (singleplayer ESC menu).
+#[spacetimedb::table(name = world_pause, public)]
+pub struct WorldPause {
+    #[primary_key]
+    pub world_id: String,
+}
+
 /// Server tick interval: 100ms (10 ticks/second).
 const TICK_INTERVAL_MICROS: i64 = 100_000;
 
@@ -123,6 +130,23 @@ pub fn init(ctx: &spacetimedb::ReducerContext) {
         "Server initialized — game tick scheduled at {}ms interval",
         TICK_INTERVAL_MICROS / 1000
     );
+}
+
+#[spacetimedb::reducer]
+pub fn pause_world(ctx: &spacetimedb::ReducerContext) {
+    if let Some(player) = ctx.db.player().identity().find(&ctx.sender) {
+        let _ = ctx
+            .db
+            .world_pause()
+            .insert(WorldPause { world_id: player.world_id.clone() });
+    }
+}
+
+#[spacetimedb::reducer]
+pub fn resume_world(ctx: &spacetimedb::ReducerContext) {
+    if let Some(player) = ctx.db.player().identity().find(&ctx.sender) {
+        ctx.db.world_pause().world_id().delete(&player.world_id);
+    }
 }
 
 #[spacetimedb::reducer]
@@ -460,6 +484,9 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     }
 
     for (world_id, enemies) in &enemies_by_world {
+        if ctx.db.world_pause().world_id().find(world_id).is_some() {
+            continue;
+        }
         let Some(players) = players_by_world.get(world_id) else {
             continue;
         };

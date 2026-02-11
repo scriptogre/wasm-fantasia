@@ -17,38 +17,46 @@ pub mod game_tick_reducer;
 pub mod join_game_reducer;
 pub mod leave_game_reducer;
 pub mod on_disconnect_reducer;
+pub mod pause_world_reducer;
 pub mod player_table;
 pub mod player_type;
 pub mod respawn_reducer;
+pub mod resume_world_reducer;
 pub mod spawn_enemies_reducer;
 pub mod tick_schedule_table;
 pub mod tick_schedule_type;
 pub mod update_position_reducer;
+pub mod world_pause_table;
+pub mod world_pause_type;
 
 pub use active_effect_table::*;
 pub use active_effect_type::ActiveEffect;
-pub use attack_hit_reducer::{AttackHitCallbackId, attack_hit, set_flags_for_attack_hit};
+pub use attack_hit_reducer::{attack_hit, set_flags_for_attack_hit, AttackHitCallbackId};
 pub use combat_event_table::*;
 pub use combat_event_type::CombatEvent;
 pub use enemy_table::*;
 pub use enemy_type::Enemy;
-pub use game_tick_reducer::{GameTickCallbackId, game_tick, set_flags_for_game_tick};
-pub use join_game_reducer::{JoinGameCallbackId, join_game, set_flags_for_join_game};
-pub use leave_game_reducer::{LeaveGameCallbackId, leave_game, set_flags_for_leave_game};
+pub use game_tick_reducer::{game_tick, set_flags_for_game_tick, GameTickCallbackId};
+pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
+pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
 pub use on_disconnect_reducer::{
-    OnDisconnectCallbackId, on_disconnect, set_flags_for_on_disconnect,
+    on_disconnect, set_flags_for_on_disconnect, OnDisconnectCallbackId,
 };
+pub use pause_world_reducer::{pause_world, set_flags_for_pause_world, PauseWorldCallbackId};
 pub use player_table::*;
 pub use player_type::Player;
-pub use respawn_reducer::{RespawnCallbackId, respawn, set_flags_for_respawn};
+pub use respawn_reducer::{respawn, set_flags_for_respawn, RespawnCallbackId};
+pub use resume_world_reducer::{resume_world, set_flags_for_resume_world, ResumeWorldCallbackId};
 pub use spawn_enemies_reducer::{
-    SpawnEnemiesCallbackId, set_flags_for_spawn_enemies, spawn_enemies,
+    set_flags_for_spawn_enemies, spawn_enemies, SpawnEnemiesCallbackId,
 };
 pub use tick_schedule_table::*;
 pub use tick_schedule_type::TickSchedule;
 pub use update_position_reducer::{
-    UpdatePositionCallbackId, set_flags_for_update_position, update_position,
+    set_flags_for_update_position, update_position, UpdatePositionCallbackId,
 };
+pub use world_pause_table::*;
+pub use world_pause_type::WorldPause;
 
 #[derive(Clone, PartialEq, Debug)]
 
@@ -68,7 +76,9 @@ pub enum Reducer {
     },
     LeaveGame,
     OnDisconnect,
+    PauseWorld,
     Respawn,
+    ResumeWorld,
     SpawnEnemies {
         x: f32,
         y: f32,
@@ -99,7 +109,9 @@ impl __sdk::Reducer for Reducer {
             Reducer::JoinGame { .. } => "join_game",
             Reducer::LeaveGame => "leave_game",
             Reducer::OnDisconnect => "on_disconnect",
+            Reducer::PauseWorld => "pause_world",
             Reducer::Respawn => "respawn",
+            Reducer::ResumeWorld => "resume_world",
             Reducer::SpawnEnemies { .. } => "spawn_enemies",
             Reducer::UpdatePosition { .. } => "update_position",
             _ => unreachable!(),
@@ -142,11 +154,25 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
                 on_disconnect_reducer::OnDisconnectArgs,
             >("on_disconnect", &value.args)?
             .into()),
+            "pause_world" => Ok(
+                __sdk::parse_reducer_args::<pause_world_reducer::PauseWorldArgs>(
+                    "pause_world",
+                    &value.args,
+                )?
+                .into(),
+            ),
             "respawn" => Ok(__sdk::parse_reducer_args::<respawn_reducer::RespawnArgs>(
                 "respawn",
                 &value.args,
             )?
             .into()),
+            "resume_world" => Ok(
+                __sdk::parse_reducer_args::<resume_world_reducer::ResumeWorldArgs>(
+                    "resume_world",
+                    &value.args,
+                )?
+                .into(),
+            ),
             "spawn_enemies" => Ok(__sdk::parse_reducer_args::<
                 spawn_enemies_reducer::SpawnEnemiesArgs,
             >("spawn_enemies", &value.args)?
@@ -174,6 +200,7 @@ pub struct DbUpdate {
     enemy: __sdk::TableUpdate<Enemy>,
     player: __sdk::TableUpdate<Player>,
     tick_schedule: __sdk::TableUpdate<TickSchedule>,
+    world_pause: __sdk::TableUpdate<WorldPause>,
 }
 
 impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
@@ -197,6 +224,9 @@ impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
                 "tick_schedule" => db_update
                     .tick_schedule
                     .append(tick_schedule_table::parse_table_update(table_update)?),
+                "world_pause" => db_update
+                    .world_pause
+                    .append(world_pause_table::parse_table_update(table_update)?),
 
                 unknown => {
                     return Err(__sdk::InternalError::unknown_name(
@@ -238,6 +268,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.tick_schedule = cache
             .apply_diff_to_table::<TickSchedule>("tick_schedule", &self.tick_schedule)
             .with_updates_by_pk(|row| &row.scheduled_id);
+        diff.world_pause = cache
+            .apply_diff_to_table::<WorldPause>("world_pause", &self.world_pause)
+            .with_updates_by_pk(|row| &row.world_id);
 
         diff
     }
@@ -252,6 +285,7 @@ pub struct AppliedDiff<'r> {
     enemy: __sdk::TableAppliedDiff<'r, Enemy>,
     player: __sdk::TableAppliedDiff<'r, Player>,
     tick_schedule: __sdk::TableAppliedDiff<'r, TickSchedule>,
+    world_pause: __sdk::TableAppliedDiff<'r, WorldPause>,
     __unused: std::marker::PhantomData<&'r ()>,
 }
 
@@ -282,6 +316,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.tick_schedule,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<WorldPause>("world_pause", &self.world_pause, event);
     }
 }
 
@@ -547,21 +582,21 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
 /// either a [`DbConnection`] or an [`EventContext`] and operate on either.
 pub trait RemoteDbContext:
     __sdk::DbContext<
-        DbView = RemoteTables,
-        Reducers = RemoteReducers,
-        SetReducerFlags = SetReducerFlags,
-        SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
-    >
+    DbView = RemoteTables,
+    Reducers = RemoteReducers,
+    SetReducerFlags = SetReducerFlags,
+    SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
+>
 {
 }
 impl<
-    Ctx: __sdk::DbContext<
+        Ctx: __sdk::DbContext<
             DbView = RemoteTables,
             Reducers = RemoteReducers,
             SetReducerFlags = SetReducerFlags,
             SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
         >,
-> RemoteDbContext for Ctx
+    > RemoteDbContext for Ctx
 {
 }
 
@@ -1008,5 +1043,6 @@ impl __sdk::SpacetimeModule for RemoteModule {
         enemy_table::register_table(client_cache);
         player_table::register_table(client_cache);
         tick_schedule_table::register_table(client_cache);
+        world_pause_table::register_table(client_cache);
     }
 }
