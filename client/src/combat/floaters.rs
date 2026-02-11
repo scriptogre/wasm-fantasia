@@ -1,3 +1,4 @@
+use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
@@ -6,6 +7,10 @@ use crate::combat::{DamageDealt, Died, HitLanded};
 use crate::models::SceneCamera;
 use crate::ui::colors::{GRASS_GREEN, NEUTRAL450, NEUTRAL850, RED, SAND_YELLOW};
 
+/// Cached mesh height above the entity origin, computed once from descendant AABBs.
+#[derive(Component)]
+pub struct MeshHeight(pub f32);
+
 pub fn plugin(app: &mut App) {
     app.add_observer(on_damage_number)
         .add_observer(on_enemy_damaged)
@@ -13,8 +18,37 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, setup_glyph_cache)
         .add_systems(
             PostUpdate,
-            (tick_damage_numbers, tick_enemy_health_bars).after(TransformSystems::Propagate),
+            (
+                compute_mesh_heights,
+                tick_damage_numbers,
+                tick_enemy_health_bars,
+            )
+                .after(TransformSystems::Propagate),
         );
+}
+
+/// Derives [`MeshHeight`] from the highest descendant [`Aabb`] (auto-added by
+/// Bevy to every [`Mesh3d`]). Runs once per enemy then caches.
+fn compute_mesh_heights(
+    mut commands: Commands,
+    enemies: Query<(Entity, &GlobalTransform), (With<Enemy>, Without<MeshHeight>)>,
+    children: Query<&Children>,
+    aabbs: Query<(&GlobalTransform, &Aabb)>,
+) {
+    for (entity, enemy_gt) in &enemies {
+        let origin_y = enemy_gt.translation().y;
+        let top = children
+            .iter_descendants(entity)
+            .filter_map(|e| aabbs.get(e).ok())
+            .map(|(gt, aabb)| {
+                gt.transform_point(Vec3::Y * (aabb.center.y + aabb.half_extents.y)).y
+                    - origin_y
+            })
+            .reduce(f32::max);
+        if let Some(height) = top {
+            commands.entity(entity).insert(MeshHeight(height));
+        }
+    }
 }
 
 // ── Damage Numbers ──────────────────────────────────────────────────
@@ -60,17 +94,18 @@ fn setup_glyph_cache(mut commands: Commands) {
 
 fn on_damage_number(
     on: On<HitLanded>,
-    targets: Query<&Transform>,
+    targets: Query<(&Transform, Option<&MeshHeight>)>,
     fonts: Option<Res<crate::asset_loading::Fonts>>,
     mut commands: Commands,
 ) {
     let event = on.event();
 
-    let Ok(target_transform) = targets.get(event.target) else {
+    let Ok((target_transform, mesh_height)) = targets.get(event.target) else {
         return;
     };
 
-    let world_pos = target_transform.translation + Vec3::Y * 1.0;
+    let world_pos =
+        target_transform.translation + Vec3::Y * mesh_height.map_or(2.0, |h| h.0);
     let damage = event.damage as i32;
     let is_crit = event.is_crit;
 
@@ -270,7 +305,7 @@ fn tick_enemy_health_bars(
     time: Res<Time>,
     mut commands: Commands,
     camera: Query<(&Camera, &GlobalTransform), With<SceneCamera>>,
-    enemies: Query<(&GlobalTransform, &Health), With<Enemy>>,
+    enemies: Query<(&GlobalTransform, &Health, Option<&MeshHeight>), With<Enemy>>,
     mut health_bars: Query<(
         Entity,
         &mut EnemyHealthBar,
@@ -297,12 +332,13 @@ fn tick_enemy_health_bars(
             continue;
         }
 
-        let Ok((enemy_tf, health)) = enemies.get(bar.target) else {
+        let Ok((enemy_tf, health, mesh_height)) = enemies.get(bar.target) else {
             commands.entity(entity).despawn();
             continue;
         };
 
-        let world_pos = enemy_tf.translation() + Vec3::Y * 2.2;
+        let world_pos =
+            enemy_tf.translation() + Vec3::Y * (mesh_height.map_or(2.0, |h| h.0) + 0.2);
         let Some(screen_pos) = cam.world_to_viewport(cam_global, world_pos).ok() else {
             node.left = Val::Px(-9999.0);
             node.top = Val::Px(-9999.0);

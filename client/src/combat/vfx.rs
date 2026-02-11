@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::combat::{AttackIntent, HitLanded, VFX_ARC_DEGREES, VFX_RANGE};
+use crate::combat::{AttackIntent, HitLanded, MeshHeight, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::Session;
 
 pub fn plugin(app: &mut App) {
@@ -346,7 +346,7 @@ pub struct ImpactBurst {
 
 fn on_impact_vfx(
     on: On<HitLanded>,
-    targets: Query<&Transform>,
+    targets: Query<(&Transform, Option<&MeshHeight>)>,
     impact_assets: Option<Res<ImpactAssets>>,
     mut commands: Commands,
 ) {
@@ -356,11 +356,12 @@ fn on_impact_vfx(
 
     let event = on.event();
 
-    let Ok(target_transform) = targets.get(event.target) else {
+    let Ok((target_transform, mesh_height)) = targets.get(event.target) else {
         return;
     };
 
-    let impact_pos = target_transform.translation + Vec3::Y * 0.9;
+    let center_mass = mesh_height.map_or(0.9, |h| h.0 * 0.5);
+    let impact_pos = target_transform.translation + Vec3::Y * center_mass;
 
     let num_particles = 12;
     let mut rng = rand::rng();
