@@ -5,14 +5,9 @@ use std::fmt::Write;
 use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
 use crate::models::{Player as LocalPlayer, Screen, Session};
+use crate::networking::ServerDiagnostics;
 use crate::rules::{Stat, Stats};
 use crate::ui::{colors, size};
-
-use crate::networking::SpacetimeDbConnection;
-use crate::networking::generated::combat_event_table::CombatEventTableAccess;
-use crate::networking::generated::enemy_table::EnemyTableAccess;
-use crate::networking::generated::player_table::PlayerTableAccess;
-use spacetimedb_sdk::{DbContext, Table};
 
 const MAX_ENTRIES: usize = 10;
 
@@ -273,7 +268,7 @@ fn update_overlay(
     panel: Query<Entity, With<DebugPanel>>,
     existing: Query<Entity, With<DebugText>>,
     mut commands: Commands,
-    conn: Option<Res<SpacetimeDbConnection>>,
+    server_diag: Res<ServerDiagnostics>,
     player_query: Query<(&Health, Option<&Stats>), With<PlayerCombatant>>,
 ) {
     log.frame = log.frame.wrapping_add(1);
@@ -321,71 +316,59 @@ fn update_overlay(
         );
     }
 
-    // ── Server sections (MP only) ───────────────────────────
-    if let Some(ref conn) = conn {
-        let our_id = conn.conn.try_identity();
-
+    // ── Server sections ─────────────────────────────────────
+    if server_diag.connected {
         // Players
-        let mut players: Vec<_> = conn.conn.db.player().iter().collect();
-        players.sort_by_key(|p| {
-            let is_you = if Some(p.identity) == our_id { 0 } else { 1 };
-            let online = if p.online { 0 } else { 1 };
-            (online, is_you)
-        });
-        let online = players.iter().filter(|p| p.online).count();
+        let online = server_diag.players.iter().filter(|p| p.online).count();
         spawn_title(
             &mut commands,
             panel_entity,
             &fonts,
-            format!("Players  {online}/{}", players.len()),
+            format!("Players  {online}/{}", server_diag.players.len()),
         );
 
         const MAX_PLAYER_ROWS: usize = 5;
         let mut body = String::new();
-        for p in players.iter().take(MAX_PLAYER_ROWS) {
-            let name = p.name.as_deref().unwrap_or("?");
-            let you = if Some(p.identity) == our_id {
-                " (you)"
-            } else {
-                ""
-            };
+        for p in server_diag.players.iter().take(MAX_PLAYER_ROWS) {
+            let you = if p.is_you { " (you)" } else { "" };
             let status = if p.online { "" } else { " [off]" };
             let _ = writeln!(
                 body,
-                "{name}{you}{status}  {:.0}/{:.0}",
-                p.health, p.max_health
+                "{}{you}{status}  {:.0}/{:.0}",
+                p.name, p.health, p.max_health
             );
         }
-        if players.len() > MAX_PLAYER_ROWS {
-            let _ = writeln!(body, "+{} more", players.len() - MAX_PLAYER_ROWS);
+        if server_diag.players.len() > MAX_PLAYER_ROWS {
+            let _ = writeln!(body, "+{} more", server_diag.players.len() - MAX_PLAYER_ROWS);
         }
         spawn_body(&mut commands, panel_entity, body.trim_end());
 
         // NPCs
-        let enemies: Vec<_> = conn.conn.db.enemy().iter().collect();
-        if !enemies.is_empty() {
-            let alive = enemies.iter().filter(|n| n.health > 0.0).count();
+        let total = server_diag.enemy_alive + server_diag.enemy_dead;
+        if total > 0 {
             spawn_title(
                 &mut commands,
                 panel_entity,
                 &fonts,
-                format!("Enemies  {} alive / {} dead", alive, enemies.len() - alive),
+                format!(
+                    "Enemies  {} alive / {} dead",
+                    server_diag.enemy_alive, server_diag.enemy_dead
+                ),
             );
         } else {
             spawn_title(&mut commands, panel_entity, &fonts, "Enemies  none");
         }
 
         // Server events
-        let events: Vec<_> = conn.conn.db.combat_event().iter().collect();
-        if !events.is_empty() {
+        if !server_diag.recent_events.is_empty() {
             spawn_title(
                 &mut commands,
                 panel_entity,
                 &fonts,
-                format!("Server Events  ({})", events.len()),
+                format!("Server Events  ({})", server_diag.recent_events.len()),
             );
             let mut body = String::new();
-            for evt in events.iter().rev().take(3).rev() {
+            for evt in &server_diag.recent_events {
                 let crit = if evt.is_crit { " CRIT" } else { "" };
                 let _ = writeln!(
                     body,
@@ -397,23 +380,13 @@ fn update_overlay(
         }
 
         // Desync warning
-        if let Ok((local_hp, _)) = player_query.single() {
-            if let Some(id) = our_id {
-                if let Some(sp) = conn.conn.db.player().identity().find(&id) {
-                    let delta = (local_hp.current - sp.health).abs();
-                    if delta > 0.1 {
-                        spawn_title(
-                            &mut commands,
-                            panel_entity,
-                            &fonts,
-                            format!(
-                                "DESYNC  local {:.0} / server {:.0}",
-                                local_hp.current, sp.health
-                            ),
-                        );
-                    }
-                }
-            }
+        if let Some((local, server)) = server_diag.health_desync {
+            spawn_title(
+                &mut commands,
+                panel_entity,
+                &fonts,
+                format!("DESYNC  local {local:.0} / server {server:.0}"),
+            );
         }
     }
 

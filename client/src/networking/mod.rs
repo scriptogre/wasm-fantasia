@@ -6,6 +6,7 @@ use crate::models::{GameplayCleanup, Screen, ServerTarget};
 
 pub mod combat;
 mod connection;
+mod diagnostics;
 pub mod generated;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod local_server;
@@ -13,6 +14,7 @@ mod reconcile;
 mod sync;
 
 pub use connection::{try_connect, ReconnectTimer};
+pub use diagnostics::ServerDiagnostics;
 pub use generated::{DbConnection, Player, Reducer};
 pub use reconcile::{CombatEventData, CombatStats, ServerId, WorldEntity};
 pub use sync::PingTracker;
@@ -100,6 +102,7 @@ impl Plugin for NetworkingPlugin {
             .init_resource::<sync::PositionSyncTimer>()
             .init_resource::<sync::PingTracker>()
             .init_resource::<reconcile::CombatEventTracker>()
+            .init_resource::<diagnostics::ServerDiagnostics>()
             .add_systems(
                 OnEnter(Screen::Connecting),
                 connection::reset_reconnect_timer.run_if(resource_exists::<ServerTarget>),
@@ -125,7 +128,15 @@ impl Plugin for NetworkingPlugin {
                 sync::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
                 combat::request_respawn_on_death.run_if(resource_exists::<SpacetimeDbConnection>),
                 sync::measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
+                diagnostics::update_server_diagnostics
+                    .run_if(resource_exists::<SpacetimeDbConnection>),
             ),
+        );
+
+        app.add_systems(
+            Update,
+            diagnostics::clear_server_diagnostics
+                .run_if(not(resource_exists::<SpacetimeDbConnection>)),
         );
     }
 }
