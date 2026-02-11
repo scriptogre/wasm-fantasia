@@ -48,7 +48,7 @@ impl LoadResource for App {
 
         // If we are running in dev mode on desktop where hot-reloading of assets is possible
         // then watch the asset and update the resource if it changes.
-        #[cfg(feature = "dev_native")]
+        #[cfg(feature = "dev")]
         self.add_systems(
             Update,
             move |mut commands: Commands,

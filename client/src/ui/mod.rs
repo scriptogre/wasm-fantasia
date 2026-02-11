@@ -22,7 +22,6 @@ mod modal;
 mod performance;
 mod prefabs;
 mod props;
-#[cfg(feature = "multiplayer")]
 mod server_status;
 mod widget;
 
@@ -40,7 +39,6 @@ pub fn plugin(app: &mut App) {
         hud::plugin,
     ));
 
-    #[cfg(feature = "multiplayer")]
     app.add_plugins(server_status::plugin);
 
     #[cfg(feature = "dev")]

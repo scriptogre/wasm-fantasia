@@ -9,7 +9,7 @@ pub fn plugin(app: &mut App) {
 fn setup_menu(
     mut commands: Commands,
     mut state: ResMut<Session>,
-    #[cfg(all(not(target_arch = "wasm32"), feature = "multiplayer"))] server_state: Option<
+    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
         Res<crate::networking::local_server::LocalServerState>,
     >,
 ) {
@@ -40,15 +40,12 @@ fn setup_menu(
                 // Native: Resume existing or start new singleplayer session
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    #[cfg(feature = "multiplayer")]
                     let has_running_server = server_state.as_ref().is_some_and(|s| {
                         matches!(
                             s.as_ref(),
                             crate::networking::local_server::LocalServerState::Ready
                         )
                     });
-                    #[cfg(not(feature = "multiplayer"))]
-                    let has_running_server = false;
 
                     if has_running_server {
                         let half = || {
@@ -87,17 +84,9 @@ fn setup_menu(
 
                 // Web: "Solo" creates a private session on the remote server
                 #[cfg(target_arch = "wasm32")]
-                {
-                    #[cfg(feature = "multiplayer")]
-                    buttons.spawn(btn(menu().text("Solo"), to::solo));
-                    #[cfg(not(feature = "multiplayer"))]
-                    buttons.spawn(btn_disabled(menu().text("Solo")));
-                }
+                buttons.spawn(btn(menu().text("Solo"), to::solo));
 
-                #[cfg(feature = "multiplayer")]
                 buttons.spawn(btn(menu().text("Multiplayer"), to::multiplayer));
-                #[cfg(not(feature = "multiplayer"))]
-                buttons.spawn(btn_disabled(menu().text("Multiplayer")));
 
                 buttons.spawn(btn(menu().text("Settings"), to::settings));
 

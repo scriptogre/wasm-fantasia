@@ -2,7 +2,6 @@
 use crate::*;
 use bevy::ui::Val::*;
 
-#[cfg(feature = "multiplayer")]
 mod connecting;
 mod gameplay;
 mod loading;
@@ -22,7 +21,6 @@ pub fn plugin(app: &mut App) {
         gameplay::plugin,
     ));
 
-    #[cfg(feature = "multiplayer")]
     app.add_plugins(connecting::plugin);
 
     app.add_systems(Update, track_last_screen.run_if(state_changed::<Screen>))
@@ -66,7 +64,6 @@ pub fn on_go_to(goto: On<GoTo>, mut next_screen: ResMut<NextState<Screen>>) {
 // }
 pub mod to {
     use super::*;
-    #[cfg(feature = "multiplayer")]
     use spacetimedb_sdk::DbContext;
 
     pub fn title(
@@ -92,32 +89,24 @@ pub mod to {
         mut commands: Commands,
         resource_handles: Res<ResourceHandles>,
         mut next_screen: ResMut<NextState<Screen>>,
-        #[cfg(feature = "multiplayer")] existing_server: Option<
-            Res<crate::networking::local_server::LocalServer>,
-        >,
+        existing_server: Option<Res<crate::networking::local_server::LocalServer>>,
     ) {
         *mode = GameMode::Singleplayer;
 
-        #[cfg(feature = "multiplayer")]
-        {
-            // Reuse prewarmed server if available, otherwise start fresh
-            let port = if let Some(server) = existing_server {
-                server.port
-            } else {
-                let (server, state) = crate::networking::local_server::start();
-                let port = server.port;
-                commands.insert_resource(server);
-                commands.insert_resource(state);
-                port
-            };
-            commands.insert_resource(ServerTarget::Local { port });
-        }
+        // Reuse prewarmed server if available, otherwise start fresh
+        let port = if let Some(server) = existing_server {
+            server.port
+        } else {
+            let (server, state) = crate::networking::local_server::start();
+            let port = server.port;
+            commands.insert_resource(server);
+            commands.insert_resource(state);
+            port
+        };
+        commands.insert_resource(ServerTarget::Local { port });
 
         if resource_handles.is_all_done() {
-            #[cfg(feature = "multiplayer")]
             next_screen.set(Screen::Connecting);
-            #[cfg(not(feature = "multiplayer"))]
-            next_screen.set(Screen::Gameplay);
         } else {
             next_screen.set(Screen::Loading);
         }
@@ -153,10 +142,7 @@ pub mod to {
         commands.insert_resource(ServerTarget::Local { port });
 
         if resource_handles.is_all_done() {
-            #[cfg(feature = "multiplayer")]
             next_screen.set(Screen::Connecting);
-            #[cfg(not(feature = "multiplayer"))]
-            next_screen.set(Screen::Gameplay);
         } else {
             next_screen.set(Screen::Loading);
         }
@@ -164,7 +150,6 @@ pub mod to {
 
     /// Web solo: private session on the remote server.
     #[cfg(target_arch = "wasm32")]
-    #[cfg(feature = "multiplayer")]
     pub fn solo(
         _: On<Pointer<Click>>,
         mut mode: ResMut<GameMode>,
@@ -185,7 +170,6 @@ pub mod to {
         }
     }
 
-    #[cfg(feature = "multiplayer")]
     pub fn multiplayer(
         _: On<Pointer<Click>>,
         mut mode: ResMut<GameMode>,

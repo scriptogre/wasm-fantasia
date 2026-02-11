@@ -704,7 +704,7 @@ dependencies = [
  "downcast-rs",
  "either",
  "petgraph",
- "ron 0.10.1",
+ "ron",
  "serde",
  "smallvec",
  "thiserror 2.0.17",
@@ -801,7 +801,7 @@ dependencies = [
  "js-sys",
  "notify-debouncer-full",
  "parking_lot 0.12.5",
- "ron 0.10.1",
+ "ron",
  "serde",
  "stackfuture",
  "thiserror 2.0.17",
@@ -1184,27 +1184,6 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.17",
  "tracing",
-]
-
-[[package]]
-name = "bevy_hanabi"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1398ccc1698633a35a4cf65c64f5c71dfd9d131d2e3e9e2fb85f156b6f66586"
-dependencies = [
- "anyhow",
- "bevy",
- "bitflags 2.10.0",
- "bytemuck",
- "fixedbitset",
- "naga",
- "naga_oil",
- "rand 0.9.2",
- "rand_pcg",
- "ron 0.8.1",
- "serde",
- "thiserror 2.0.17",
- "wgpu",
 ]
 
 [[package]]
@@ -6334,15 +6313,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand_pcg"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b48ac3f7ffaab7fac4d2376632268aa5f89abdb55f7ebf8f4d11fffccb2320f7"
-dependencies = [
- "rand_core 0.9.3",
-]
-
-[[package]]
 name = "range-alloc"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6574,18 +6544,6 @@ name = "robust"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
-
-[[package]]
-name = "ron"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91f7eff05f748767f183df4320a63d6936e9c6107d97c9e6bdd9784f4289c94"
-dependencies = [
- "base64 0.21.7",
- "bitflags 2.10.0",
- "serde",
- "serde_derive",
-]
 
 [[package]]
 name = "ron"
@@ -8337,7 +8295,6 @@ dependencies = [
  "bevy-tnua-avian3d",
  "bevy_enhanced_input",
  "bevy_fix_cursor_unlock_web",
- "bevy_hanabi",
  "bevy_seedling",
  "bevy_shuffle_bag",
  "bevy_skein",
@@ -8351,7 +8308,7 @@ dependencies = [
  "home",
  "image",
  "rand 0.9.2",
- "ron 0.10.1",
+ "ron",
  "serde",
  "serde_json",
  "smol_str 0.3.4",

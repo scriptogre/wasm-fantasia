@@ -11,7 +11,6 @@ pub mod camera;
 pub mod combat;
 pub mod game;
 pub mod models;
-#[cfg(feature = "multiplayer")]
 pub mod networking;
 pub mod player;
 pub mod postfx;
@@ -66,7 +65,6 @@ fn main() {
         game::plugin,
     ));
 
-    #[cfg(feature = "multiplayer")]
     app.add_plugins(networking::NetworkingPlugin);
 
     // override default font

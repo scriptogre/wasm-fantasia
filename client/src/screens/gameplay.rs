@@ -3,7 +3,6 @@ use super::*;
 use bevy_seedling::prelude::*;
 use bevy_third_person_camera::ThirdPersonCamera;
 
-#[cfg(feature = "multiplayer")]
 use crate::networking::generated::{
     pause_world_reducer::pause_world, resume_world_reducer::resume_world,
 };
@@ -104,12 +103,11 @@ fn sync_virtual_time(session: Res<Session>, mode: Res<GameMode>, mut time: ResMu
 fn toggle_pause(
     _: On<TogglePause>,
     mut session: ResMut<Session>,
-    #[cfg(feature = "multiplayer")] mode: Res<GameMode>,
-    #[cfg(feature = "multiplayer")] conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+    mode: Res<GameMode>,
+    conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
 ) {
     session.paused = !session.paused;
 
-    #[cfg(feature = "multiplayer")]
     if *mode != GameMode::Multiplayer {
         if let Some(conn) = conn {
             let _ = if session.paused {

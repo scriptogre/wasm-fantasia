@@ -83,9 +83,9 @@ pub fn is_paused(session: Res<Session>) -> bool {
 /// Or <https://github.com/bevyengine/bevy/blob/main/examples/ecs/state.rs>
 #[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash, Reflect)]
 pub enum Screen {
-    #[cfg_attr(not(feature = "dev_native"), default)]
+    #[cfg_attr(not(feature = "dev"), default)]
     Splash,
-    #[cfg_attr(feature = "dev_native", default)]
+    #[cfg_attr(feature = "dev", default)]
     Loading,
     Tutorial,
     Settings,

@@ -1,6 +1,6 @@
 # Run native dev build
 default: spacetimedb
-    cargo run -p wasm_fantasia --features dev_native
+    cargo run -p wasm_fantasia
 
 
 # Run WASM dev server
@@ -9,7 +9,7 @@ web: spacetimedb
     set -euo pipefail
     rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
     command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
-    cd client && rustup run nightly bevy run --yes --no-default-features --features web web -U multi-threading --host 0.0.0.0 --open
+    cd client && rustup run nightly bevy run --yes --no-default-features --features web,dev web -U multi-threading --host 0.0.0.0 --open
 
 
 spacetime := env('HOME') / ".local/bin/spacetime"
@@ -40,28 +40,25 @@ spacetimedb:
         --yes \
         --delete-data
 
-# Native release build — self-contained bundle in dist/native/
+# Release build — native bundle in dist/native/, WASM bundle in dist/web/
 build:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building server WASM module..."
     cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release
     echo "Building native client..."
-    cargo build -p wasm_fantasia --release --no-default-features --features multiplayer,audio
+    cargo build -p wasm_fantasia --release --no-default-features
     rm -rf dist/native && mkdir -p dist/native
     cp target/release/wasm_fantasia dist/native/
     cp target/wasm32-unknown-unknown/release/wasm_fantasia_module.wasm dist/native/
     cp "{{spacetime}}" dist/native/
     cp -r client/assets dist/native/
-    echo "Bundle ready at dist/native/"
-
-# WASM release build
-web-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
+    echo "Native bundle ready at dist/native/"
+    echo "Building WASM client..."
     rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
     command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
     cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
+    echo "WASM bundle ready at dist/web/"
 
 # Pre-commit checks: lint + web compilation
 check:

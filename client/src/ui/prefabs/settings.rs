@@ -26,7 +26,7 @@ markers!(
     TabContent,
     ScreenShakeLabel
 );
-#[cfg(feature = "dev_native")]
+#[cfg(feature = "dev")]
 markers!(DiagnosticsLabel, DebugUiLabel);
 
 // ============================ CONTROL KNOBS OBSERVERS ============================
@@ -322,7 +322,7 @@ fn update_button_text(
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "dev")]
 fn click_toggle_diagnostics(
     _: On<Pointer<Click>>,
     mut state: ResMut<Session>,
@@ -338,7 +338,7 @@ fn click_toggle_diagnostics(
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "dev")]
 fn click_toggle_debug_ui(
     _: On<Pointer<Click>>,
     mut commands: Commands,
@@ -466,9 +466,9 @@ fn bottom_row() -> impl Bundle {
 fn video_grid(state: &Session) -> impl Bundle {
     let screen_shake_label = if state.screen_shake { "on" } else { "off" };
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "dev")]
     let diagnostics_label = if state.diagnostics { "on" } else { "off" };
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "dev")]
     let debug_ui_label = if state.debug_ui { "on" } else { "off" };
 
     (
@@ -482,7 +482,7 @@ fn video_grid(state: &Session) -> impl Bundle {
             justify_items: JustifyItems::Center,
             ..default()
         },
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(not(feature = "dev"))]
         children![
             label("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
@@ -494,7 +494,7 @@ fn video_grid(state: &Session) -> impl Bundle {
                 ScreenShakeLabel
             ),
         ],
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "dev")]
         children![
             label("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),

@@ -8,15 +8,10 @@ use crate::models::{Player as LocalPlayer, Screen, Session};
 use crate::rules::{Stat, Stats};
 use crate::ui::{colors, size};
 
-#[cfg(feature = "multiplayer")]
 use crate::networking::SpacetimeDbConnection;
-#[cfg(feature = "multiplayer")]
 use crate::networking::generated::combat_event_table::CombatEventTableAccess;
-#[cfg(feature = "multiplayer")]
 use crate::networking::generated::enemy_table::EnemyTableAccess;
-#[cfg(feature = "multiplayer")]
 use crate::networking::generated::player_table::PlayerTableAccess;
-#[cfg(feature = "multiplayer")]
 use spacetimedb_sdk::{DbContext, Table};
 
 const MAX_ENTRIES: usize = 10;
@@ -278,7 +273,7 @@ fn update_overlay(
     panel: Query<Entity, With<DebugPanel>>,
     existing: Query<Entity, With<DebugText>>,
     mut commands: Commands,
-    #[cfg(feature = "multiplayer")] conn: Option<Res<SpacetimeDbConnection>>,
+    conn: Option<Res<SpacetimeDbConnection>>,
     player_query: Query<(&Health, Option<&Stats>), With<PlayerCombatant>>,
 ) {
     log.frame = log.frame.wrapping_add(1);
@@ -327,7 +322,6 @@ fn update_overlay(
     }
 
     // ── Server sections (MP only) ───────────────────────────
-    #[cfg(feature = "multiplayer")]
     if let Some(ref conn) = conn {
         let our_id = conn.conn.try_identity();
 

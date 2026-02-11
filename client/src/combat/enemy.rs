@@ -33,7 +33,7 @@ pub fn plugin(app: &mut App) {
 fn spawn_enemy_in_front(
     _on: On<Start<SpawnEnemy>>,
     player: Query<&Transform, With<Player>>,
-    #[cfg(feature = "multiplayer")] conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+    conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
 ) {
     let Ok(player_transform) = player.single() else {
         return;
@@ -42,7 +42,6 @@ fn spawn_enemy_in_front(
     let forward = player_transform.forward();
     let pos = player_transform.translation;
 
-    #[cfg(feature = "multiplayer")]
     if let Some(conn) = conn {
         use spacetimedb_sdk::DbContext;
         if conn.conn.is_active() {

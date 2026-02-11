@@ -20,7 +20,7 @@ pub fn plugin(app: &mut App) {
 fn on_damage(
     on: On<DamageDealt>,
     mut targets: Query<(&mut Health, Option<&mut KnockbackRemaining>)>,
-    #[cfg(feature = "multiplayer")] server_entities: Query<(), With<crate::networking::ServerId>>,
+    server_entities: Query<(), With<crate::networking::ServerId>>,
     mut commands: Commands,
 ) {
     let event = on.event();
@@ -31,10 +31,7 @@ fn on_damage(
 
     // Server-owned entities: server handles health + knockback, reconciler propagates.
     // Only the local player (no ServerId) gets client-side damage applied.
-    #[cfg(feature = "multiplayer")]
     let is_server_owned = server_entities.get(event.target).is_ok();
-    #[cfg(not(feature = "multiplayer"))]
-    let is_server_owned = false;
 
     let died = if is_server_owned {
         false
@@ -72,12 +69,11 @@ fn on_damage(
 /// Server-owned entities are handled by the reconciler, not despawned locally.
 fn on_death(
     on: On<Died>,
-    #[cfg(feature = "multiplayer")] server_entities: Query<(), With<crate::networking::ServerId>>,
+    server_entities: Query<(), With<crate::networking::ServerId>>,
     mut commands: Commands,
 ) {
     let event = on.event();
 
-    #[cfg(feature = "multiplayer")]
     if server_entities.get(event.entity).is_ok() {
         return;
     }

@@ -11,8 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `just check` - Pre-commit checks: clippy, fmt, machete, web compilation check
 
 **Release**
-- `just build` - Native release bundle (client + server WASM + SpacetimeDB binary → `dist/native/`)
-- `just web-build` - WASM release build
+- `just build` - Full release bundle (native → `dist/native/`, WASM → `dist/web/`)
 
 **Testing**
 - `cargo test` - Run all tests (currently minimal)
@@ -38,7 +37,7 @@ Bevy 0.17 3D action RPG targeting native and WebAssembly. Flat module architectu
 - **player** — Character control (Tnua + Avian3d physics), animation state machine, footstep sounds
 - **networking** — SpacetimeDB connection with auto-reconnect, session persistence, dead connection reaping, player sync, combat sync, local server management (native SP), world isolation (`world_id`), auto-generated bindings
 - **camera** — Third-person orbit camera (Metin2-style, elevated pitch for combat visibility)
-- **audio** — bevy_seedling (Firewheel) music and sound (native only, WASM has dependency conflicts)
+- **audio** — bevy_seedling (Firewheel) music and sound
 - **scene** — Environment loading via bevy_skein (Blender workflow), skybox with day/night cycle
 - **screens** — Screen state management (splash, loading, title, connecting, settings, gameplay), modal system
 - **ui** — Reusable UI components: modals, settings panels, keybinding editors, interaction observers
@@ -61,11 +60,9 @@ Player is Dynamic RigidBody with capsule Collider. TnuaAvian3dSensorShape for gr
 
 ### Feature Flags
 
-- `web` - Enables wasm32 target
-- `audio` - Enables bevy_seedling audio (native only)
-- `third_person` - Orbit camera (default, required)
-- `dev_native` - Dev tools, inspector, asset hot-reloading (native)
-- `multiplayer` - Enables SpacetimeDB networking
+- `web` - Enables WebGPU backend for wasm32 target
+- `dev` - Dev tools (inspector, debug UI). Default on; omitted for release builds
+- `default` - Includes `dev` plus native-only features (dynamic linking, file/embedded watcher for hot-reloading)
 
 ### Naming
 
@@ -143,7 +140,7 @@ The SDK at `crates/spacetimedb-sdk/` is a local fork with WASM patches (mutex sa
 
 Every game session connects to SpacetimeDB. Native singleplayer launches a local subprocess; web solo connects to a remote server with a private `world_id`; multiplayer connects to a shared remote `world_id`. The server is the single source of truth for all modes.
 
-`GameMode` resource (Singleplayer/Multiplayer) set by title screen buttons. `ServerTarget` resource (Local/Remote) describes where the SpacetimeDB instance lives. `#[cfg(feature = "multiplayer")]` gates code existence (module declarations, type imports), `GameMode` gates runtime behavior. Use `is_multiplayer_mode` run condition for MP-only systems.
+`GameMode` resource (Singleplayer/Multiplayer) set by title screen buttons. `ServerTarget` resource (Local/Remote) describes where the SpacetimeDB instance lives. `GameMode` gates runtime behavior. Use `is_multiplayer_mode` run condition for MP-only systems.
 
 ## Rules System (Data-Driven Behaviors)
 

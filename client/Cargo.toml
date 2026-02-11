@@ -10,30 +10,18 @@ description = "Simple but comprehensive 3D RPG game template with gamepad suppor
 keywords = ["bevy", "game", "template", "devkit", "third person", "topdown", "gamedev"]
 
 [features]
-default = ["dev_native"]
-web = ["bevy/webgpu", "audio", "multiplayer"]
-audio = ["bevy_seedling", "bevy_shuffle_bag", "firewheel"]
+default = [
+    "dev",
+    "bevy/dynamic_linking",         # Improve compile times for dev builds by linking Bevy as a dynamic library.
+    "bevy/embedded_watcher",        # Enable embedded asset hot reloading for dev builds.
+    "bevy/file_watcher",            # Enable asset hot reloading for dev builds.
+]
+web = ["bevy/webgpu"]
 dev = [
+    "bevy-inspector-egui",
     "bevy/bevy_dev_tools",
     "bevy/bevy_ui_debug",
-    "bevy/dynamic_linking",         # Improve compile times for dev builds by linking Bevy as a dynamic library.
     "bevy/track_location",          # Improve error messages coming from Bevy
-]
-dev_native = [
-    "dev",
-    "enhanced",
-    "audio",                        # Audio enabled for native builds
-    "multiplayer",                  # Multiplayer enabled for native builds
-    "bevy-inspector-egui",
-    "bevy_hanabi",                  # GPU particle effects (native only)
-    "bevy/embedded_watcher",        # Enable embedded asset hot reloading for native dev builds.
-    "bevy/file_watcher",            # Enable asset hot reloading for native dev builds.
-]
-multiplayer = ["spacetimedb-sdk"]
-enhanced = [
-    "bevy/meshlet",                 # new nanite-like rendering system
-    "bevy/bevy_pbr",                # PBR
-    "bevy/pbr_specular_textures",   # PBR specular maps
 ]
 
 [dependencies.bevy]
@@ -85,6 +73,9 @@ features = [
     "serialize",
     "hotpatching",
     "bevy_gilrs",
+    "bevy_pbr",
+    "meshlet",
+    "pbr_specular_textures",
     # TODO: play with these features
     # "pbr_light_textures"
 ]
@@ -99,14 +90,13 @@ bevy_skein = "^0.4"                                                             
 # iyes_perf_ui = "0.5"                                                                      # diagnostics overlay
 
 avian3d = { version = "^0.4", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics
-bevy_seedling = { version = "^0.6", features = ["hrtf", "ogg", "web_audio"], optional = true }  # audio plugin using firewheel
-bevy_shuffle_bag = { version = "^0.3", optional = true }                                    # random container for audio
-firewheel = { version = "^0.9", optional = true }
+bevy_seedling = { version = "^0.6", features = ["hrtf", "ogg", "web_audio"] }                # audio plugin using firewheel
+bevy_shuffle_bag = "^0.3"                                                                   # random container for audio
+firewheel = "^0.9"
 
 
 bevy_third_person_camera = "^0.3"                                                           # 3rd person camera
-bevy_hanabi = { version = "0.17", default-features = false, features = ["3d"], optional = true }  # GPU particles
-spacetimedb-sdk = { path = "../crates/spacetimedb-sdk", optional = true }
+spacetimedb-sdk = { path = "../crates/spacetimedb-sdk" }
 web-time = "1.1"
 
 # characrter control
