@@ -2,8 +2,8 @@ use spacetimedb::Table;
 use std::collections::HashMap;
 use wasm_fantasia_shared::combat::{self, defaults, enemy_ai_decision};
 
-use crate::TICK_INTERVAL_MICROS;
 use crate::schema::*;
+use crate::TICK_INTERVAL_MICROS;
 
 /// Spawn a pack of enemies at the given position and facing direction.
 #[spacetimedb::reducer]

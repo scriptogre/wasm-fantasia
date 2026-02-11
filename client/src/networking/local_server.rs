@@ -258,7 +258,10 @@ pub fn advance(server: &mut LocalServer, state: &mut LocalServerState) -> bool {
             // Port occupied = server is listening
             if TcpListener::bind(format!("127.0.0.1:{}", server.port)).is_err() {
                 info!("Local SpacetimeDB listening on port {}", server.port);
-                info!("Deploying game module to local server at 127.0.0.1:{}", server.port);
+                info!(
+                    "Deploying game module to local server at 127.0.0.1:{}",
+                    server.port
+                );
                 match spawn_deploy(server) {
                     Ok(child) => *state = LocalServerState::Deploying(child),
                     Err(e) => *state = LocalServerState::Failed(e),
@@ -324,8 +327,7 @@ pub fn advance(server: &mut LocalServer, state: &mut LocalServerState) -> bool {
                 }
                 Ok(None) => false, // Still running
                 Err(e) => {
-                    *state =
-                        LocalServerState::Failed(format!("Error polling deploy process: {e}"));
+                    *state = LocalServerState::Failed(format!("Error polling deploy process: {e}"));
                     true
                 }
             }

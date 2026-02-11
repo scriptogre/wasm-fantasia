@@ -1,11 +1,11 @@
 use super::*;
 use crate::player::control::InputBuffer;
+use crate::player::{ControlScheme, ControlSchemeActionDiscriminant};
 use crate::rules::{
     OnCritHitRules, OnHitRules, OnKillRules, OnPreHitRules, OnTakeDamageRules, OnTickRules, Stat,
     Stats,
 };
 use bevy_enhanced_input::prelude::Fire;
-use bevy_tnua::builtins::TnuaBuiltinDash;
 use bevy_tnua::prelude::*;
 use wasm_fantasia_shared::combat::{CombatInput, HitTarget, defaults, resolve_combat};
 use wasm_fantasia_shared::presets::EntityRules;
@@ -26,14 +26,14 @@ pub fn plugin(app: &mut App) {
 fn handle_attack(
     on: On<Fire<Attack>>,
     mut buffer: ResMut<InputBuffer>,
-    mut query: Query<(&mut AttackState, &TnuaController), With<PlayerCombatant>>,
+    mut query: Query<(&mut AttackState, &TnuaController<ControlScheme>), With<PlayerCombatant>>,
 ) {
     let Ok((mut attack_state, controller)) = query.get_mut(on.context) else {
         return;
     };
 
     // Block attacks during dash/slide - buffer for after dash
-    if controller.action_name() == Some(TnuaBuiltinDash::NAME) {
+    if controller.action_discriminant() == Some(ControlSchemeActionDiscriminant::Dash) {
         buffer.buffer_attack();
         return;
     }
@@ -48,7 +48,7 @@ fn handle_attack(
 /// Execute buffered attack when possible
 fn process_buffered_attack(
     mut buffer: ResMut<InputBuffer>,
-    mut query: Query<(&mut AttackState, &TnuaController), With<PlayerCombatant>>,
+    mut query: Query<(&mut AttackState, &TnuaController<ControlScheme>), With<PlayerCombatant>>,
 ) {
     if buffer.attack.is_none() {
         return;
@@ -58,7 +58,7 @@ fn process_buffered_attack(
         return;
     };
 
-    if controller.action_name() == Some(TnuaBuiltinDash::NAME) {
+    if controller.action_discriminant() == Some(ControlSchemeActionDiscriminant::Dash) {
         return;
     }
 

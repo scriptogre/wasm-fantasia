@@ -4,10 +4,10 @@ use bevy::prelude::*;
 use spacetimedb_sdk::DbContext;
 use web_time::Instant;
 
+use super::SpacetimeDbConnection;
 use super::generated::player_table::PlayerTableAccess;
 use super::generated::update_position_reducer::update_position;
 use super::reconcile::{ServerId, WorldEntity};
-use super::SpacetimeDbConnection;
 use crate::combat::AttackState;
 use crate::models::Player as LocalPlayer;
 use crate::player::Animation;

@@ -73,7 +73,11 @@ fn soft_target_assist(
         let best_angle = angles[0];
         let direction = Vec3::new(best_angle.cos(), 0.0, best_angle.sin()).normalize();
         let target_rotation = Quat::from_rotation_arc(Vec3::NEG_Z, direction);
-        let assist_strength = if attack_state.progress() < 0.4 { 15.0 } else { 8.0 };
+        let assist_strength = if attack_state.progress() < 0.4 {
+            15.0
+        } else {
+            8.0
+        };
         player_tf.rotation = player_tf
             .rotation
             .slerp(target_rotation, time.delta_secs() * assist_strength);

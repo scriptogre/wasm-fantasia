@@ -1,5 +1,6 @@
 use crate::*;
-use bevy::{asset::Asset, gltf::GltfLoaderSettings};
+use bevy::asset::Asset;
+use bevy::gltf::{GltfLoaderSettings, convert_coordinates::GltfConvertCoordinates};
 use bevy_seedling::sample::AudioSample;
 use bevy_shuffle_bag::ShuffleBag;
 
@@ -58,8 +59,11 @@ impl FromWorld for Models {
     fn from_world(world: &mut World) -> Self {
         let assets = world.resource::<AssetServer>();
         Self {
-            player: assets.load_with_settings(PLAYER_MODEL, |settings: &mut GltfLoaderSettings| {
-                settings.use_model_forward_direction = Some(true);
+            player: assets.load_with_settings(PLAYER_MODEL, |s: &mut GltfLoaderSettings| {
+                s.convert_coordinates = Some(GltfConvertCoordinates {
+                    rotate_scene_entity: true,
+                    rotate_meshes: false,
+                });
             }),
             scene: assets.load("models/scene.glb"),
         }

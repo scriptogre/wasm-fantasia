@@ -41,7 +41,8 @@ fn compute_mesh_heights(
             .iter_descendants(entity)
             .filter_map(|e| aabbs.get(e).ok())
             .map(|(gt, aabb)| {
-                gt.transform_point(Vec3::Y * (aabb.center.y + aabb.half_extents.y)).y
+                gt.transform_point(Vec3::Y * (aabb.center.y + aabb.half_extents.y))
+                    .y
                     - origin_y
             })
             .reduce(f32::max);
@@ -104,8 +105,7 @@ fn on_damage_number(
         return;
     };
 
-    let world_pos =
-        target_transform.translation + Vec3::Y * mesh_height.map_or(2.0, |h| h.0);
+    let world_pos = target_transform.translation + Vec3::Y * mesh_height.map_or(2.0, |h| h.0);
     let damage = event.damage as i32;
     let is_crit = event.is_crit;
 
@@ -264,9 +264,9 @@ fn on_enemy_damaged(
                 left: Val::Px(-9999.0),
                 top: Val::Px(-9999.0),
                 border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
                 ..default()
             },
-            BorderRadius::all(Val::Px(3.0)),
             BorderColor::all(NEUTRAL450.with_alpha(0.6)),
             BackgroundColor(NEUTRAL850.with_alpha(0.7)),
             GlobalZIndex(90),
@@ -278,9 +278,9 @@ fn on_enemy_damaged(
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
+                    border_radius: BorderRadius::all(Val::Px(2.0)),
                     ..default()
                 },
-                BorderRadius::all(Val::Px(2.0)),
                 BackgroundColor(GRASS_GREEN),
             ));
         });
@@ -337,8 +337,7 @@ fn tick_enemy_health_bars(
             continue;
         };
 
-        let world_pos =
-            enemy_tf.translation() + Vec3::Y * (mesh_height.map_or(2.0, |h| h.0) + 0.2);
+        let world_pos = enemy_tf.translation() + Vec3::Y * (mesh_height.map_or(2.0, |h| h.0) + 0.2);
         let Some(screen_pos) = cam.world_to_viewport(cam_global, world_pos).ok() else {
             node.left = Val::Px(-9999.0);
             node.top = Val::Px(-9999.0);

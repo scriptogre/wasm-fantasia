@@ -77,7 +77,7 @@ fn setup_animus_scene(
         ));
     }
 
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
         brightness: 1500.0,
         ..Default::default()

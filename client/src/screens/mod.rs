@@ -66,11 +66,7 @@ pub mod to {
     use super::*;
     use spacetimedb_sdk::DbContext;
 
-    pub fn title(
-        _: On<Pointer<Click>>,
-        mut commands: Commands,
-        mut modals: ResMut<Modals>,
-    ) {
+    pub fn title(_: On<Pointer<Click>>, mut commands: Commands, mut modals: ResMut<Modals>) {
         // Don't reset session here — keep game paused during transition.
         // setup_menu resets on OnEnter(Title).
         modals.clear();

@@ -13,7 +13,7 @@ fn movement_sound(
     time: Res<Time>,
     state: Res<Session>,
     settings: Res<Settings>,
-    tnua: Query<&TnuaController, With<Player>>,
+    tnua: Query<&TnuaController<ControlScheme>, With<Player>>,
     crouch: Single<&Action<Crouch>>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
@@ -26,12 +26,10 @@ fn movement_sound(
     let controller = tnua.get(on.context)?;
     let mut step_timer = step_timer.get_mut(on.context)?;
 
-    let Some((_, basis)) = controller.concrete_basis::<TnuaBuiltinWalk>() else {
-        return Ok(());
-    };
-
     // WALK SOUND
-    if step_timer.tick(time.delta()).just_finished() && basis.standing_on_entity().is_some() {
+    if step_timer.tick(time.delta()).just_finished()
+        && controller.basis_memory.standing_on_entity().is_some()
+    {
         let mut rng = rand::rng();
         let crouch = ***crouch;
         let handle = if crouch {

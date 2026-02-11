@@ -1,8 +1,5 @@
 use super::*;
-use bevy_tnua::{
-    builtins::{TnuaBuiltinCrouch, TnuaBuiltinDash},
-    control_helpers::TnuaSimpleAirActionsCounter,
-};
+use bevy_tnua::control_helpers::TnuaActionsCounter;
 
 pub const IDLE_TO_RUN_TRESHOLD: f32 = 0.01;
 
@@ -21,19 +18,11 @@ fn apply_response_curve(input: Vec2, exponent: f32) -> Vec2 {
 /// Movement stick uses slight curve (1.3) for precise positioning
 const MOVEMENT_CURVE_EXPONENT: f32 = 1.3;
 
-fn jump_action() -> TnuaBuiltinJump {
-    TnuaBuiltinJump {
-        height: 5.0,
-        takeoff_extra_gravity: 40.0,
-        fall_extra_gravity: 35.0,
-        shorten_extra_gravity: 80.0,
-        peak_prevention_at_upward_velocity: 0.5,
-        peak_prevention_extra_gravity: 25.0,
-        reschedule_cooldown: Some(0.1),
-        disable_force_forward_after_peak: true,
+fn jump_action() -> ControlScheme {
+    ControlScheme::Jump(TnuaBuiltinJump {
         allow_in_air: true,
         ..Default::default()
-    }
+    })
 }
 
 // ============================================================================
@@ -107,19 +96,19 @@ fn movement(
     navigate: Query<&Action<Navigate>>,
     crouch: Query<&Action<Crouch>>,
     camera: Query<&Transform, With<SceneCamera>>,
-    mut player_query: Query<(&mut Player, &mut TnuaController, &mut StepTimer)>,
+    mut player_query: Query<(
+        &mut Player,
+        &mut TnuaController<ControlScheme>,
+        &mut StepTimer,
+    )>,
 ) -> Result {
     let Ok(navigate) = navigate.single() else {
         // PlayerCtx removed (paused/menu) — zero velocity but keep float height
         for (_player, mut controller, _step_timer) in player_query.iter_mut() {
-            controller.basis(TnuaBuiltinWalk {
-                desired_velocity: Vec3::ZERO,
-                float_height: 0.15,
-                cling_distance: 0.20,
-                spring_strength: 500.0,
-                spring_dampening: 1.0,
-                ..Default::default()
-            });
+            controller.basis = TnuaBuiltinWalk {
+                desired_motion: Vec3::ZERO,
+                desired_forward: None,
+            };
         }
         return Ok(());
     };
@@ -131,31 +120,15 @@ fn movement(
         let curved_input = apply_response_curve(*navigate, MOVEMENT_CURVE_EXPONENT);
         let direction = cam_transform.movement_direction(curved_input);
 
-        let float_height = 0.15;
-        controller.basis(TnuaBuiltinWalk {
-            float_height,
-            cling_distance: float_height + 0.05,
-            spring_strength: 500.0,
-            spring_dampening: 1.0,
-            acceleration: 80.0,
-            air_acceleration: 50.0,
-            free_fall_extra_gravity: 70.0,
-            tilt_offset_angvel: 7.0,
-            tilt_offset_angacl: 700.0,
-            turning_angvel: 12.0,
-            desired_velocity: direction * player.speed,
+        controller.initiate_action_feeding();
+        controller.basis = TnuaBuiltinWalk {
+            desired_motion: direction * player.speed,
             desired_forward: Dir3::new(direction).ok(),
-            ..Default::default()
-        });
+        };
 
         // Check if crouch is currently active and apply TnuaBuiltinCrouch as an action
         if *crouch {
-            controller.action(TnuaBuiltinCrouch {
-                float_offset: 0.0,
-                height_change_impulse_for_duration: 0.1,
-                height_change_impulse_limit: 80.0,
-                uncancellable: false,
-            });
+            controller.action(ControlScheme::Crouch(TnuaBuiltinCrouch));
         }
 
         // update step timer dynamically based on actual speed
@@ -163,15 +136,11 @@ fn movement(
         // normal step: 0.475
         // sprint step (x1.5): 0.354
         // step on sprint timer: 0.317
-        let Some((_, basis_state)) = controller.concrete_basis::<TnuaBuiltinWalk>() else {
-            return Ok(());
-        };
-        let current_actual_speed = basis_state.running_velocity.length();
+        let current_actual_speed = controller.basis_memory.running_velocity.length();
         if current_actual_speed > IDLE_TO_RUN_TRESHOLD {
             let ratio = cfg.player.movement.speed / current_actual_speed;
             let adjusted_step_time_f32 = cfg.timers.step * ratio;
             let adjusted_step_time = Duration::from_secs_f32(adjusted_step_time_f32);
-            // info!("step timer:{adjusted_step_time_f32}s");
             step_timer.set_duration(adjusted_step_time);
         }
     }
@@ -180,28 +149,17 @@ fn movement(
 }
 
 /// Check if player is grounded (for input buffering)
-fn is_grounded(controller: &TnuaController) -> bool {
-    controller
-        .concrete_basis::<TnuaBuiltinWalk>()
-        .is_some_and(|(_, state)| state.standing_on_entity().is_some())
+fn is_grounded(controller: &TnuaController<ControlScheme>) -> bool {
+    controller.basis_memory.standing_on_entity().is_some()
 }
 
 fn handle_jump(
     on: On<Fire<Jump>>,
     mut buffer: ResMut<InputBuffer>,
-    mut player_query: Query<
-        (
-            &mut TnuaController,
-            &mut TnuaSimpleAirActionsCounter,
-            &mut JumpTimer,
-        ),
-        With<Player>,
-    >,
+    mut player_query: Query<(&mut TnuaController<ControlScheme>, &mut JumpTimer), With<Player>>,
 ) -> Result {
-    let (mut controller, mut air_counter, mut _jump_timer) = player_query.get_mut(on.context)?;
+    let (mut controller, mut _jump_timer) = player_query.get_mut(on.context)?;
 
-    // If not grounded and no air jumps left, buffer the input
-    air_counter.update(controller.as_mut());
     let grounded = is_grounded(&controller);
 
     if !grounded {
@@ -210,6 +168,7 @@ fn handle_jump(
     }
 
     // Still attempt the jump (Tnua will reject if invalid)
+    controller.initiate_action_feeding();
     controller.action(jump_action());
     Ok(())
 }
@@ -217,13 +176,13 @@ fn handle_jump(
 /// Execute buffered jump when landing
 fn process_buffered_jump(
     mut buffer: ResMut<InputBuffer>,
-    mut player_query: Query<(&mut TnuaController, &mut TnuaSimpleAirActionsCounter), With<Player>>,
+    mut player_query: Query<&mut TnuaController<ControlScheme>, With<Player>>,
 ) {
     if buffer.jump.is_none() {
         return;
     }
 
-    let Ok((mut controller, mut air_counter)) = player_query.single_mut() else {
+    let Ok(mut controller) = player_query.single_mut() else {
         return;
     };
 
@@ -234,7 +193,7 @@ fn process_buffered_jump(
 
     // Clear buffer and execute jump
     buffer.jump = None;
-    air_counter.update(controller.as_mut());
+    controller.initiate_action_feeding();
     controller.action(jump_action());
 }
 
@@ -245,8 +204,8 @@ fn handle_dash(
     navigate: Single<&Action<Navigate>>,
     camera: Query<&Transform, With<SceneCamera>>,
     mut player_query: Query<(
-        &mut TnuaController,
-        &TnuaSimpleAirActionsCounter,
+        &mut TnuaController<ControlScheme>,
+        &TnuaActionsCounter<AirActionSlots>,
         Option<&mut AttackState>,
     )>,
 ) -> Result {
@@ -254,7 +213,8 @@ fn handle_dash(
 
     let grounded = is_grounded(&controller);
     let air_dashes_allowed = cfg.player.movement.actions_in_air as usize;
-    let can_air_dash = air_counter.air_count_for(TnuaBuiltinDash::NAME) <= air_dashes_allowed;
+    let can_air_dash =
+        air_counter.count_for(ControlSchemeActionDiscriminant::Dash) <= air_dashes_allowed;
 
     // Buffer if we can't dash right now (in air and over limit)
     if !grounded && !can_air_dash {
@@ -273,13 +233,12 @@ fn handle_dash(
     let navigate = **navigate.into_inner();
     let direction = cam_transform.movement_direction(navigate);
 
-    controller.action(TnuaBuiltinDash {
-        speed: 12.,
+    controller.initiate_action_feeding();
+    controller.action(ControlScheme::Dash(TnuaBuiltinDash {
         displacement: direction * cfg.player.movement.dash_distance,
         desired_forward: Dir3::new(direction).ok(),
         allow_in_air: can_air_dash,
-        ..Default::default()
-    });
+    }));
 
     Ok(())
 }
@@ -290,7 +249,10 @@ fn process_buffered_dash(
     mut buffer: ResMut<InputBuffer>,
     navigate: Query<&Action<Navigate>>,
     camera: Query<&Transform, With<SceneCamera>>,
-    mut player_query: Query<(&mut TnuaController, Option<&mut AttackState>), With<Player>>,
+    mut player_query: Query<
+        (&mut TnuaController<ControlScheme>, Option<&mut AttackState>),
+        With<Player>,
+    >,
 ) {
     if buffer.dash.is_none() {
         return;
@@ -324,13 +286,12 @@ fn process_buffered_dash(
     let nav = **nav_action;
     let direction = cam_transform.movement_direction(nav);
 
-    controller.action(TnuaBuiltinDash {
-        speed: 12.,
+    controller.initiate_action_feeding();
+    controller.action(ControlScheme::Dash(TnuaBuiltinDash {
         displacement: direction * cfg.player.movement.dash_distance,
         desired_forward: Dir3::new(direction).ok(),
         allow_in_air: true, // We're grounded, doesn't matter
-        ..Default::default()
-    });
+    }));
 }
 
 pub fn crouch_in(

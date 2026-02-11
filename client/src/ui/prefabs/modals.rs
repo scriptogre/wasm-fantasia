@@ -1,10 +1,6 @@
 use super::*;
 
-pub fn click_to_menu(
-    _: On<Pointer<Click>>,
-    mut commands: Commands,
-    mut modals: ResMut<Modals>,
-) {
+pub fn click_to_menu(_: On<Pointer<Click>>, mut commands: Commands, mut modals: ResMut<Modals>) {
     // Don't reset session here — keep game paused during the transition
     // frames so gameplay systems don't tick. setup_menu resets on OnEnter(Title).
     modals.clear();

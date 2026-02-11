@@ -126,10 +126,10 @@ fn spawn_connecting_screen(
                     padding: UiRect::all(Px(16.0)),
                     min_width: Vw(50.0),
                     min_height: Vh(15.0),
+                    border_radius: BorderRadius::all(Px(4.0)),
                     ..default()
                 },
                 BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.3)),
-                BorderRadius::all(Px(4.0)),
             ))
             .with_children(|log_area| {
                 log_area.spawn((

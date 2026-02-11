@@ -261,4 +261,3 @@ fn add_modal_ctx(add: On<Add, ModalCtx>, mut commands: Commands) {
         ]),
     ));
 }
-

@@ -1,10 +1,7 @@
 use super::*;
 use crate::combat::AttackState;
 use crate::rules::{Stat, Stats};
-use bevy_tnua::{
-    TnuaAnimatingState, TnuaAnimatingStateDirective,
-    builtins::{TnuaBuiltinDashState, *},
-};
+use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 
 mod anim_knobs {
     pub const GENERAL_SPEED: f32 = 0.1;
@@ -229,7 +226,7 @@ pub fn animating(
     cfg: Res<Config>,
     time: Res<Time>,
     mut player_q: Query<(
-        &TnuaController,
+        &TnuaController<ControlScheme>,
         &mut Player,
         &mut TnuaAnimatingState<AnimationState>,
         Option<&AttackState>,
@@ -275,7 +272,7 @@ pub fn animating(
 
     // Check if player is attacking - override Tnua animation
     // Dash takes visual priority over attack (attack hit still triggers via timer)
-    let dashing = controller.action_name() == Some(TnuaBuiltinDash::NAME);
+    let dashing = controller.action_discriminant() == Some(ControlSchemeActionDiscriminant::Dash);
     if let Some(attack) = attack_state {
         if attack.is_attacking() && !dashing {
             player.animation_state = AnimationState::Attack;
@@ -330,84 +327,56 @@ pub fn animating(
         }
     }
 
-    // First check Tnua animation directive
     // Here we use the data from TnuaController to determine what the character is currently doing,
     // so that we can later use that information to decide which animation to play.
-    // First we look at the `action_name` to determine which action (if at all) the character is currently performing:
-    let current_animation = match controller.action_name() {
-        Some(TnuaBuiltinKnockback::NAME) => {
-            let (_, knockback_state) = controller
-                .concrete_action::<TnuaBuiltinKnockback>()
-                .expect("action name mismatch: Knockback");
-            match knockback_state {
-                TnuaBuiltinKnockbackState::Shove => AnimationState::KnockBack,
-                TnuaBuiltinKnockbackState::Pushback { .. } => AnimationState::KnockBack,
-            }
-        }
-        Some(TnuaBuiltinCrouch::NAME) => {
-            let (_, crouch_state) = controller
-                .concrete_action::<TnuaBuiltinCrouch>()
-                .expect("action name mismatch: Crouch");
+    let current_animation = match controller.current_action.as_ref() {
+        Some(ControlSchemeActionState::Knockback(state)) => match &state.memory {
+            TnuaBuiltinKnockbackMemory::Shove => AnimationState::KnockBack,
+            TnuaBuiltinKnockbackMemory::Pushback { .. } => AnimationState::KnockBack,
+        },
+        Some(ControlSchemeActionState::Crouch(state)) => {
             // In case of crouch, we need the state of the basis to determine - based on
-            // the speed - if the charcter is just crouching or also crawling.
-            let Some((_, basis_state)) = controller.concrete_basis::<TnuaBuiltinWalk>() else {
-                return;
-            };
-            let basis_speed = basis_state.running_velocity.length();
+            // the speed - if the character is just crouching or also crawling.
+            let basis_speed = controller.basis_memory.running_velocity.length();
             let speed = Some(basis_speed)
                 .filter(|speed| cfg.player.movement.idle_to_run_threshold < *speed);
-            let is_crouching = basis_state.standing_offset.y < 0.05;
-            // info!(
-            //     "CROUCH: {is_crouching} speed: {basis_speed}, state:{crouch_state:?}, standing_offset: {}",
-            //     basis_state.standing_offset.y
-            // );
+            let is_crouching = controller.basis_memory.standing_offset.y < 0.05;
             match (speed, is_crouching) {
                 (None, false) => AnimationState::StandIdle,
-                (None, true) => match crouch_state {
-                    TnuaBuiltinCrouchState::Maintaining => AnimationState::CrouchIdle,
+                (None, true) => match &state.memory {
+                    TnuaBuiltinCrouchMemory::Maintaining => AnimationState::CrouchIdle,
                     // TODO: have rise animation
-                    TnuaBuiltinCrouchState::Rising => AnimationState::CrouchIdle,
+                    TnuaBuiltinCrouchMemory::Rising => AnimationState::CrouchIdle,
                     // TODO: sink animation
-                    TnuaBuiltinCrouchState::Sinking => AnimationState::CrouchIdle,
+                    TnuaBuiltinCrouchMemory::Sinking => AnimationState::CrouchIdle,
                 },
                 (Some(speed), false) => AnimationState::Run(speed),
                 // TODO: place to handle slide here
                 (Some(speed), true) => AnimationState::Crouch(speed),
             }
         }
-        // Unless you provide the action names yourself, prefer matching against the `NAME` const
-        // of the `TnuaAction` trait. Once `type_name` is stabilized as `const` Tnua will use it to
-        // generate these names automatically, which may result in a change to the name.
-        Some(TnuaBuiltinJump::NAME) => {
-            // In case of jump, we want to cast it so that we can get the concrete jump state.
-            let (_, jump_state) = controller
-                .concrete_action::<TnuaBuiltinJump>()
-                .expect("action name mismatch: Jump");
+        Some(ControlSchemeActionState::Jump(state)) => {
             // Depending on the state of the jump, we need to decide if we want to play the jump
             // animation or the fall animation.
-            match jump_state {
-                TnuaBuiltinJumpState::NoJump => return,
-                TnuaBuiltinJumpState::StartingJump { .. } => AnimationState::JumpStart,
-                TnuaBuiltinJumpState::SlowDownTooFastSlopeJump { .. } => AnimationState::JumpStart,
-                TnuaBuiltinJumpState::MaintainingJump { .. } => AnimationState::JumpLoop,
-                TnuaBuiltinJumpState::StoppedMaintainingJump => AnimationState::JumpLand,
-                TnuaBuiltinJumpState::FallSection => AnimationState::Fall,
+            match &state.memory {
+                TnuaBuiltinJumpMemory::NoJump => return,
+                TnuaBuiltinJumpMemory::StartingJump { .. } => AnimationState::JumpStart,
+                TnuaBuiltinJumpMemory::SlowDownTooFastSlopeJump { .. } => AnimationState::JumpStart,
+                TnuaBuiltinJumpMemory::MaintainingJump { .. } => AnimationState::JumpLoop,
+                TnuaBuiltinJumpMemory::StoppedMaintainingJump => AnimationState::JumpLand,
+                TnuaBuiltinJumpMemory::FallSection => AnimationState::Fall,
             }
         }
-        Some(TnuaBuiltinClimb::NAME) => {
-            let Some((_, action_state)) = controller.concrete_action::<TnuaBuiltinClimb>() else {
-                return;
-            };
-            let TnuaBuiltinClimbState::Climbing { climbing_velocity } = action_state else {
+        Some(ControlSchemeActionState::Climb(state)) => {
+            let TnuaBuiltinClimbMemory::Climbing {
+                climbing_velocity, ..
+            } = &state.memory
+            else {
                 return;
             };
             AnimationState::Climb(0.3 * climbing_velocity.dot(Vec3::Y))
         }
-        Some(TnuaBuiltinDash::NAME) => {
-            let (_, dash_state) = controller
-                .concrete_action::<TnuaBuiltinDash>()
-                .expect("action name mismatch: Dash");
-
+        Some(ControlSchemeActionState::Dash(state)) => {
             // Track dash timing ourselves since Tnua transitions too fast
             if !dash_anim.active {
                 // Just started dashing
@@ -417,34 +386,26 @@ pub fn animating(
                 dash_anim.timer += time.delta_secs();
             }
 
-            match dash_state {
-                TnuaBuiltinDashState::PreDash => AnimationState::SlideStart,
-                TnuaBuiltinDashState::During { .. } if dash_anim.timer < SLIDE_START_DURATION => {
+            match &state.memory {
+                TnuaBuiltinDashMemory::PreDash => AnimationState::SlideStart,
+                TnuaBuiltinDashMemory::During { .. } if dash_anim.timer < SLIDE_START_DURATION => {
                     AnimationState::SlideStart
                 }
-                TnuaBuiltinDashState::During { .. } => AnimationState::SlideLoop,
-                TnuaBuiltinDashState::Braking { .. } => AnimationState::SlideExit,
+                TnuaBuiltinDashMemory::During { .. } => AnimationState::SlideLoop,
+                TnuaBuiltinDashMemory::Braking { .. } => AnimationState::SlideExit,
             }
         }
-        Some(TnuaBuiltinWallSlide::NAME) => {
+        Some(ControlSchemeActionState::WallSlide(_)) => {
             dash_anim.active = false; // Reset dash tracker
             AnimationState::WallSlide
         }
-        Some("walljump") => {
-            dash_anim.active = false;
-            AnimationState::WallJump
-        }
-        Some(other) => panic!("Unknown action {other}"),
         None => {
             dash_anim.active = false; // Reset dash tracker
             // If there is no action going on, we'll base the animation on the state of the basis.
-            let Some((_, basis_state)) = controller.concrete_basis::<TnuaBuiltinWalk>() else {
-                return;
-            };
-            if basis_state.standing_on_entity().is_none() {
+            if controller.basis_memory.standing_on_entity().is_none() {
                 AnimationState::Fall
             } else {
-                let basis_speed = basis_state.running_velocity.length();
+                let basis_speed = controller.basis_memory.running_velocity.length();
                 if basis_speed > cfg.player.movement.idle_to_run_threshold {
                     let speed = anim_knobs::GENERAL_SPEED * basis_speed;
                     // Use sprint animation when at 90%+ of max speed

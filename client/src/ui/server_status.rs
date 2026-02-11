@@ -88,10 +88,10 @@ fn spawn_status_hud(mut commands: Commands, font: Res<HudFont>) {
                         Node {
                             width: Val::Px(8.0),
                             height: Val::Px(8.0),
+                            border_radius: BorderRadius::all(Val::Px(4.0)),
                             ..default()
                         },
                         BackgroundColor(RED),
-                        BorderRadius::all(Val::Px(4.0)),
                     ));
                 });
 

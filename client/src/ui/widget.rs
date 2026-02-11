@@ -27,7 +27,6 @@ pub fn icon(opts: impl Into<Props>) -> impl Bundle {
         Label,
         Name::new("Icon"),
         opts.node.clone(),
-        opts.border_radius,
         children![opts.into_image_bundle()],
         Pickable::IGNORE,
     )
@@ -38,7 +37,6 @@ pub fn label(opts: impl Into<Props>) -> impl Bundle {
         Label,
         Name::new("Label"),
         opts.node.clone(),
-        opts.border_radius,
         opts.into_text_bundle(),
         Pickable::IGNORE,
     )
@@ -60,7 +58,6 @@ pub fn btn_disabled(opts: impl Into<Props>) -> impl Bundle {
         opts.node,
         BackgroundColor(disabled.bg),
         disabled.border,
-        opts.border_radius,
         Pickable::IGNORE,
         children![(text, Pickable::IGNORE)],
     )
@@ -98,7 +95,6 @@ where
                 .spawn((
                     Name::new("Button Content"),
                     opts.bg_color,
-                    opts.border_radius,
                     opts.border_color,
                     opts.palette_set.clone(),
                 ))

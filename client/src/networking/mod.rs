@@ -13,7 +13,7 @@ pub mod local_server;
 mod reconcile;
 mod sync;
 
-pub use connection::{try_connect, ReconnectTimer};
+pub use connection::{ReconnectTimer, try_connect};
 pub use diagnostics::ServerDiagnostics;
 pub use generated::{DbConnection, Player, Reducer};
 pub use reconcile::{CombatEventData, CombatStats, ServerId, WorldEntity};
@@ -108,10 +108,16 @@ impl Plugin for NetworkingPlugin {
                 connection::reset_reconnect_timer.run_if(resource_exists::<ServerTarget>),
             )
             .add_systems(Update, connection::auto_connect)
-            .add_systems(OnExit(Screen::Connecting), connection::cleanup_connecting_exit)
+            .add_systems(
+                OnExit(Screen::Connecting),
+                connection::cleanup_connecting_exit,
+            )
             .add_systems(
                 OnExit(Screen::Gameplay),
-                (connection::disconnect_from_spacetimedb, connection::remove_server_target)
+                (
+                    connection::disconnect_from_spacetimedb,
+                    connection::remove_server_target,
+                )
                     .run_if(is_server_connected)
                     .before(GameplayCleanup),
             );
@@ -123,8 +129,7 @@ impl Plugin for NetworkingPlugin {
                 connection::handle_connection_events
                     .run_if(resource_exists::<SpacetimeDbConnection>),
                 reconcile::reconcile.run_if(resource_exists::<SpacetimeDbConnection>),
-                sync::interpolate_synced_entities
-                    .run_if(resource_exists::<SpacetimeDbConnection>),
+                sync::interpolate_synced_entities.run_if(resource_exists::<SpacetimeDbConnection>),
                 sync::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
                 combat::request_respawn_on_death.run_if(resource_exists::<SpacetimeDbConnection>),
                 sync::measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),

@@ -25,88 +25,55 @@ dev = [
 ]
 
 [dependencies.bevy]
-version = "^0.17"
+version = "^0.18"
 default-features = false
 # opinionated list without bevy_audio
 features = [
-    # TODO: use shorter list on 0.18
-    # "default_app",
-    # "default_platform",
-    # "3d_api",
-    # "3d_bevy_render",
-    # "ui",
-    # "scene",
-    # "picking",
-    # DELETE after 0.18 >
-    "std",
-    "zstd_rust",
-    "sysinfo_plugin",
-    "multi_threaded",
-    "smaa_luts",
-    "bevy_core_pipeline",
-    "bevy_anti_alias",
-    "bevy_render",
-    "bevy_color",
-    "reflect_auto_register",
-    "tonemapping_luts",
-    "bevy_post_process",
-    "bevy_winit",
-    "bevy_state",
-    "hotpatching",
-    "bevy_asset",
-    "bevy_gltf",
-    "bevy_scene",
-    "bevy_picking",
-    "bevy_ui_picking_backend",
-    "bevy_mesh_picking_backend",
-    "bevy_text",
-    "animation",
-    "png",
-    "ktx2",
-    # < DELETE after 0.18
+    "default_app",
+    "default_platform",
+    "3d_api",
+    "3d_bevy_render",
+    "ui",
+    "scene",
+    "picking",
+    "gltf_animation",
     # specific plugins
     "jpeg",
-    "bevy_ui",
-    "bevy_ui_render",
     "experimental_bevy_ui_widgets",
-    "reflect_auto_register",
     "serialize",
     "hotpatching",
     "bevy_gilrs",
-    "bevy_pbr",
     "meshlet",
     "pbr_specular_textures",
-    # TODO: play with these features
-    # "pbr_light_textures"
 ]
 
 [dependencies]
 wasm-fantasia-shared = { path = "../shared" }
 
 # plugins
-bevy_fix_cursor_unlock_web = "^0.2.0-rc"
-bevy-inspector-egui = { version = "^0.35", optional = true }
-bevy_skein = "^0.4"                                                                         # blender integration
+bevy_fix_cursor_unlock_web = "^0.3"
+bevy-inspector-egui = { version = "^0.36", optional = true }
+bevy_skein = "^0.5"                                                                         # blender integration
 # iyes_perf_ui = "0.5"                                                                      # diagnostics overlay
 
-avian3d = { version = "^0.4", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics
-bevy_seedling = { version = "^0.6", features = ["hrtf", "ogg", "web_audio"] }                # audio plugin using firewheel
-bevy_shuffle_bag = "^0.3"                                                                   # random container for audio
-firewheel = "^0.9"
+avian3d = { version = "^0.5", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics
+bevy_seedling = { version = "^0.7", features = ["hrtf", "ogg", "web_audio"] }                # audio plugin using firewheel
+bevy_shuffle_bag = "^0.4"                                                                   # random container for audio
+firewheel = "^0.10"
 
 
-bevy_third_person_camera = "^0.3"                                                           # 3rd person camera
+bevy_third_person_camera = "^0.4"                                                           # 3rd person camera
 spacetimedb-sdk = { path = "../crates/spacetimedb-sdk" }
 web-time = "1.1"
 
-# characrter control
-bevy-tnua = "^0.26"                                                                         # floating character control
-bevy-tnua-avian3d = "^0.8"                                                                  # tnua-avian interaction
-bevy_enhanced_input = { version = "^0.20", features = ["serialize"] }                       # keyboard/gamepad input
+# character control
+bevy-tnua = "^0.30"                                                                         # floating character control
+bevy-tnua-avian3d = "^0.10"                                                                 # tnua-avian interaction
+bevy_enhanced_input = { version = "^0.23", features = ["serialize"] }                       # keyboard/gamepad input
 
 # dialogue
-bevy_yarnspinner = "^0.6.0-rc"
-bevy_yarnspinner_example_dialogue_view = "^0.6.0-rc"
+bevy_yarnspinner = "^0.7"
+bevy_yarnspinner_example_dialogue_view = "^0.7"
 
 # misc
 # itertools = "0.14.0"
@@ -136,6 +103,9 @@ spacetimedb-sdk = { path = "../crates/spacetimedb-sdk", features = ["web"] }
 
 [build-dependencies]
 serde_json = "1"
+
+[package.metadata.cargo-machete]
+ignored = ["tracing", "winit", "firewheel", "smol_str", "bevy_yarnspinner", "bevy_yarnspinner_example_dialogue_view"]
 
 [lints]
 workspace = true

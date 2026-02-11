@@ -7,10 +7,10 @@ use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
 use spacetimedb_sdk::{DbContext, Table};
 use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 
+use super::SpacetimeDbConnection;
 use super::generated::combat_event_table::CombatEventTableAccess;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::player_table::PlayerTableAccess;
-use super::SpacetimeDbConnection;
 use crate::combat::{Combatant, Enemy, EnemyBehavior, Health};
 use crate::models::Player as LocalPlayer;
 use crate::rules::{Stat, Stats};

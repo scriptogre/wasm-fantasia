@@ -4,10 +4,10 @@
 use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Table};
 
+use super::SpacetimeDbConnection;
 use super::generated::combat_event_table::CombatEventTableAccess;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::player_table::PlayerTableAccess;
-use super::SpacetimeDbConnection;
 use crate::combat::{Health, PlayerCombatant};
 
 #[derive(Default)]

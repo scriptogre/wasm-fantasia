@@ -1,5 +1,6 @@
 use super::*;
 use bevy::time::common_conditions::on_timer;
+use bevy_seedling::prelude::PlaybackSettings;
 use std::time::Duration;
 
 const FADE_TIME: f64 = 2.0; // seconds

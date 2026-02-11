@@ -48,9 +48,7 @@ fn setup_menu(
                     });
 
                     if has_running_server {
-                        let half = || {
-                            Props::default().padding(UiRect::axes(Vw(2.0), Vh(2.0)))
-                        };
+                        let half = || Props::default().padding(UiRect::axes(Vw(2.0), Vh(2.0)));
                         let half_slot = || Node {
                             flex_grow: 1.0,
                             flex_basis: Percent(0.0),
@@ -70,10 +68,7 @@ fn setup_menu(
                                 ),
                                 (
                                     half_slot(),
-                                    children![btn(
-                                        half().text("New Game"),
-                                        to::new_singleplayer
-                                    )]
+                                    children![btn(half().text("New Game"), to::new_singleplayer)]
                                 ),
                             ],
                         ));

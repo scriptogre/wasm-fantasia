@@ -6,6 +6,7 @@
 use bevy::{
     asset::{Asset, AssetApp, AssetLoader, LoadContext, io::Reader},
     prelude::*,
+    reflect::TypePath,
 };
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -25,6 +26,7 @@ where
 }
 
 /// Loads your asset type `A` from ron files
+#[derive(TypePath)]
 pub struct RonAssetLoader<A>(PhantomData<A>);
 
 /// Possible errors that can be produced by [`RonAssetLoader`]

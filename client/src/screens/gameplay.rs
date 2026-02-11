@@ -141,8 +141,8 @@ fn toggle_mute(
     _: On<ToggleMute>,
     settings: ResMut<Settings>,
     mut session: ResMut<Session>,
-    mut music: Single<&mut VolumeNode, (With<MusicPool>, Without<SfxBus>)>,
-    mut sfx: Single<&mut VolumeNode, (With<SfxBus>, Without<MusicPool>)>,
+    mut music: Single<&mut VolumeNode, (With<MusicPool>, Without<SoundEffectsBus>)>,
+    mut sfx: Single<&mut VolumeNode, (With<SoundEffectsBus>, Without<MusicPool>)>,
 ) {
     if session.muted {
         music.volume = settings.music();

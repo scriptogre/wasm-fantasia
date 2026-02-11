@@ -109,9 +109,7 @@ pub(super) fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
 pub(super) fn cleanup_connecting_exit(
     conn: Option<Res<SpacetimeDbConnection>>,
     mut commands: Commands,
-    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
-        Res<local_server::LocalServerState>,
-    >,
+    #[cfg(not(target_arch = "wasm32"))] server_state: Option<Res<local_server::LocalServerState>>,
 ) {
     if conn
         .as_ref()
@@ -131,8 +129,8 @@ pub(super) fn cleanup_connecting_exit(
     // would block the next auto_connect attempt.
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let is_ready = server_state
-            .is_some_and(|s| matches!(*s, local_server::LocalServerState::Ready));
+        let is_ready =
+            server_state.is_some_and(|s| matches!(*s, local_server::LocalServerState::Ready));
         if !is_ready {
             commands.remove_resource::<local_server::LocalServer>();
             commands.remove_resource::<local_server::LocalServerState>();
@@ -145,9 +143,7 @@ pub(super) fn disconnect_from_spacetimedb(
     mut commands: Commands,
     mut ping: ResMut<super::PingTracker>,
     mut mode: ResMut<GameMode>,
-    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
-        Res<local_server::LocalServerState>,
-    >,
+    #[cfg(not(target_arch = "wasm32"))] server_state: Option<Res<local_server::LocalServerState>>,
 ) {
     // In singleplayer with a running local server, keep the connection alive
     // so the player can resume from the title screen without losing world state.

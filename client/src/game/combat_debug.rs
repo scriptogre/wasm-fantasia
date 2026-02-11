@@ -118,10 +118,10 @@ fn spawn_panel(mut commands: Commands) {
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             overflow: Overflow::clip_y(),
+            border_radius: BorderRadius::all(size::BORDER_RADIUS),
             ..default()
         },
         BackgroundColor(colors::NEUTRAL920.with_alpha(0.92)),
-        BorderRadius::all(size::BORDER_RADIUS),
         Visibility::Hidden,
     ));
 }
@@ -339,7 +339,11 @@ fn update_overlay(
             );
         }
         if server_diag.players.len() > MAX_PLAYER_ROWS {
-            let _ = writeln!(body, "+{} more", server_diag.players.len() - MAX_PLAYER_ROWS);
+            let _ = writeln!(
+                body,
+                "+{} more",
+                server_diag.players.len() - MAX_PLAYER_ROWS
+            );
         }
         spawn_body(&mut commands, panel_entity, body.trim_end());
 

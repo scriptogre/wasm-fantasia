@@ -6,11 +6,35 @@ use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::*;
 use bevy_third_person_camera::*;
+use bevy_tnua::TnuaAnimatingState;
+use bevy_tnua::builtins::*;
+use bevy_tnua::control_helpers::{TnuaActionSlots, TnuaAirActionsPlugin};
 use bevy_tnua::prelude::*;
-use bevy_tnua::{TnuaAnimatingState, control_helpers::TnuaSimpleAirActionsCounter};
 use bevy_tnua_avian3d::*;
 use std::time::Duration;
 use wasm_fantasia_shared::combat::defaults;
+
+// ── Tnua Control Scheme ─────────────────────────────────────────────
+
+#[derive(TnuaScheme)]
+#[scheme(basis = TnuaBuiltinWalk)]
+pub enum ControlScheme {
+    Jump(TnuaBuiltinJump),
+    Dash(TnuaBuiltinDash),
+    Crouch(TnuaBuiltinCrouch),
+    Knockback(TnuaBuiltinKnockback),
+    Climb(TnuaBuiltinClimb),
+    WallSlide(TnuaBuiltinWallSlide),
+}
+
+#[derive(TnuaActionSlots)]
+#[slots(scheme = ControlScheme)]
+pub struct AirActionSlots {
+    #[slots(Jump)]
+    jump: usize,
+    #[slots(Dash)]
+    dash: usize,
+}
 
 mod animation;
 pub mod control;
@@ -22,8 +46,9 @@ pub use animation::*;
 /// Player logic is only active during the State `Screen::Playing`
 pub fn plugin(app: &mut App) {
     app.add_plugins((
-        TnuaControllerPlugin::new(FixedUpdate),
+        TnuaControllerPlugin::<ControlScheme>::new(FixedUpdate),
         TnuaAvian3dPlugin::new(FixedUpdate),
+        TnuaAirActionsPlugin::<AirActionSlots>::new(FixedUpdate),
         control::plugin,
         sound::plugin,
     ));
@@ -50,6 +75,7 @@ pub fn spawn_player(
     models: Res<Models>,
     gltf_assets: Res<Assets<Gltf>>,
     mut commands: Commands,
+    mut control_scheme_configs: ResMut<Assets<ControlSchemeConfig>>,
     // DEBUG
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -77,12 +103,51 @@ pub fn spawn_player(
             // when no BlocksGameplay entities exist and the game isn't paused.
             // tnua character control bundles
             (
-                TnuaController::default(),
+                TnuaController::<ControlScheme>::default(),
+                TnuaConfig::<ControlScheme>(control_scheme_configs.add(ControlSchemeConfig {
+                    basis: TnuaBuiltinWalkConfig {
+                        // speed=1.0 so desired_motion carries the full velocity
+                        speed: 1.0,
+                        float_height: 0.15,
+                        cling_distance: 0.20,
+                        spring_strength: 500.0,
+                        spring_dampening: 1.0,
+                        acceleration: 80.0,
+                        air_acceleration: 50.0,
+                        free_fall_extra_gravity: 70.0,
+                        tilt_offset_angvel: 7.0,
+                        tilt_offset_angacl: 700.0,
+                        turning_angvel: 12.0,
+                        ..default()
+                    },
+                    jump: TnuaBuiltinJumpConfig {
+                        height: 5.0,
+                        takeoff_extra_gravity: 40.0,
+                        fall_extra_gravity: 35.0,
+                        shorten_extra_gravity: 80.0,
+                        peak_prevention_at_upward_velocity: 0.5,
+                        peak_prevention_extra_gravity: 25.0,
+                        reschedule_cooldown: Some(0.1),
+                        disable_force_forward_after_peak: true,
+                        ..default()
+                    },
+                    dash: TnuaBuiltinDashConfig {
+                        speed: 12.0,
+                        ..default()
+                    },
+                    crouch: TnuaBuiltinCrouchConfig {
+                        float_offset: 0.0,
+                        height_change_impulse_for_duration: 0.1,
+                        height_change_impulse_limit: 80.0,
+                    },
+                    knockback: TnuaBuiltinKnockbackConfig::default(),
+                    climb: TnuaBuiltinClimbConfig::default(),
+                    wall_slide: TnuaBuiltinWallSlideConfig::default(),
+                })),
                 // Tnua can fix the rotation, but the character will still get rotated before it can do so.
                 // By locking the rotation we can prevent this.
                 LockedAxes::ROTATION_LOCKED.unlock_rotation_y(),
                 TnuaAnimatingState::<AnimationState>::default(),
-                TnuaSimpleAirActionsCounter::default(),
                 animation::DashAnimationState::default(),
                 animation::AttackAnimationState::default(),
                 // A sensor shape is not strictly necessary, but without it we'll get weird results.
