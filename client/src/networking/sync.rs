@@ -1,0 +1,135 @@
+//! Outbound position relay, entity interpolation, and ping measurement.
+
+use bevy::prelude::*;
+use spacetimedb_sdk::DbContext;
+use web_time::Instant;
+
+use super::generated::player_table::PlayerTableAccess;
+use super::generated::update_position_reducer::update_position;
+use super::reconcile::{ServerId, WorldEntity};
+use super::SpacetimeDbConnection;
+use crate::combat::AttackState;
+use crate::models::Player as LocalPlayer;
+use crate::player::Animation;
+
+const INTERPOLATION_SPEED: f32 = 12.0;
+
+// =============================================================================
+// Resources
+// =============================================================================
+
+/// Tracks round-trip time by comparing position send timestamps against server acks.
+#[derive(Resource, Default)]
+pub struct PingTracker {
+    pub last_send: Option<Instant>,
+    pub last_seen_update: i64,
+    pub smoothed_rtt_ms: f32,
+    pub last_ack: Option<Instant>,
+}
+
+/// Timer for position sync rate limiting.
+#[derive(Resource)]
+pub struct PositionSyncTimer {
+    pub timer: Timer,
+}
+
+impl Default for PositionSyncTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(0.05, TimerMode::Repeating),
+        }
+    }
+}
+
+// =============================================================================
+// Systems
+// =============================================================================
+
+/// Smoothly move `Transform` toward the server-authoritative `WorldEntity` target.
+pub(super) fn interpolate_synced_entities(
+    time: Res<Time>,
+    mut query: Query<(&WorldEntity, &mut Transform), With<ServerId>>,
+) {
+    let alpha = (time.delta_secs() * INTERPOLATION_SPEED).min(1.0);
+    for (world_entity, mut transform) in &mut query {
+        let target = Vec3::new(world_entity.x, world_entity.y, world_entity.z);
+        transform.translation = transform.translation.lerp(target, alpha);
+        transform.rotation = Quat::slerp(
+            transform.rotation,
+            Quat::from_rotation_y(world_entity.rotation_y),
+            alpha,
+        );
+    }
+}
+
+/// Send local player position to the server at a fixed rate.
+pub(super) fn send_local_position(
+    conn: Res<SpacetimeDbConnection>,
+    mut timer: ResMut<PositionSyncTimer>,
+    mut ping: ResMut<PingTracker>,
+    time: Res<Time>,
+    query: Query<(&Transform, &LocalPlayer, Option<&AttackState>), With<LocalPlayer>>,
+) {
+    timer.timer.tick(time.delta());
+    if !timer.timer.just_finished() {
+        return;
+    }
+
+    let Ok((transform, player, attack_state)) = query.single() else {
+        return;
+    };
+
+    let pos = transform.translation;
+    let rotation_y = transform.rotation.to_euler(EulerRot::YXZ).0;
+    let animation_state = player.animation_state.server_name().to_string();
+
+    let (attack_sequence, attack_animation) = if let Some(attack) = attack_state {
+        let anim = if attack.is_crit {
+            Animation::MeleeHook
+        } else if attack.attack_count % 2 == 1 {
+            Animation::PunchJab
+        } else {
+            Animation::PunchCross
+        };
+        (attack.attack_count, anim.clip_name().to_string())
+    } else {
+        (0, String::new())
+    };
+
+    ping.last_send = Some(Instant::now());
+
+    if let Err(e) = conn.conn.reducers.update_position(
+        pos.x,
+        pos.y,
+        pos.z,
+        rotation_y,
+        animation_state,
+        attack_sequence,
+        attack_animation,
+    ) {
+        warn!("Failed to send position update: {:?}", e);
+    }
+}
+
+pub(super) fn measure_ping(conn: Res<SpacetimeDbConnection>, mut tracker: ResMut<PingTracker>) {
+    let Some(identity) = conn.conn.try_identity() else {
+        return;
+    };
+    let Some(player) = conn.conn.db.player().identity().find(&identity) else {
+        return;
+    };
+
+    if player.last_update != tracker.last_seen_update {
+        tracker.last_seen_update = player.last_update;
+        tracker.last_ack = Some(Instant::now());
+
+        if let Some(send_time) = tracker.last_send.take() {
+            let rtt_ms = send_time.elapsed().as_secs_f32() * 1000.0;
+            if tracker.smoothed_rtt_ms <= 0.0 {
+                tracker.smoothed_rtt_ms = rtt_ms;
+            } else {
+                tracker.smoothed_rtt_ms = tracker.smoothed_rtt_ms * 0.8 + rtt_ms * 0.2;
+            }
+        }
+    }
+}
