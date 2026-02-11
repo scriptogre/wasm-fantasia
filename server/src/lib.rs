@@ -406,7 +406,6 @@ pub fn spawn_enemies(
 
     let world_id = player.world_id;
 
-    // TODO(server-abstraction): spawn logic is duplicated in client's spawn_enemy_in_front.
     // Per-enemy scatter using hash that varies meaningfully per index
     let seed = ctx.timestamp.to_micros_since_unix_epoch() as u64;
     let count = 80 + (seed % 41) as u32; // 80–120 enemies
@@ -442,13 +441,6 @@ pub fn spawn_enemies(
 // =============================================================================
 // Server-side enemy AI tick
 // =============================================================================
-//
-// TODO(server-abstraction): This reducer duplicates the movement + facing logic
-// that also lives in the client's `enemy_ai` system (combat/enemy.rs). When the
-// SP/MP backend trait lands, both code paths collapse into a single
-// `GameServer::tick_enemies` implementation. The shared decision function
-// `enemy_ai_decision()` (shared/src/combat.rs) already centralises the
-// state-machine; what remains duplicated is the movement application and facing.
 
 /// Periodic server tick — drives enemy AI for multiplayer.
 #[spacetimedb::reducer]

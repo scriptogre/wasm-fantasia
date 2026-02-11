@@ -32,10 +32,6 @@ pub mod defaults {
 /// Pure decision function for enemy AI state machine.
 /// Both client (singleplayer) and server (multiplayer) call this to ensure
 /// identical behavior logic. The caller handles movement/DB writes.
-///
-/// TODO(server-abstraction): When the SP/MP backend trait lands, this moves
-/// into the shared `GameServer` trait impl and the callers disappear.
-/// Search for `TODO(server-abstraction)` to find all marked locations.
 pub fn enemy_ai_decision(distance: f32, attack_cooldown_ready: bool) -> EnemyBehaviorKind {
     if distance > defaults::ENEMY_ATTACK_RANGE {
         EnemyBehaviorKind::Chase
