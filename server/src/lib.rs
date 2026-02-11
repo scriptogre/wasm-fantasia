@@ -505,7 +505,10 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 new_z += dz * inv_dist * defaults::ENEMY_WALK_SPEED * dt;
             }
 
-            // Enemy-enemy separation — push apart to prevent stacking
+            // Enemy-enemy separation — push apart to prevent stacking.
+            // Uses squared falloff and proportional (non-normalized) force so
+            // enemies near the edge of the radius get negligible push, avoiding
+            // visible trembling.
             let mut sep_x = 0.0_f32;
             let mut sep_z = 0.0_f32;
             for other in enemies {
@@ -518,15 +521,14 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 if dist < defaults::ENEMY_SEPARATION_RADIUS && dist > 0.01 {
                     let inv = 1.0 / dist;
                     let weight = 1.0 - dist / defaults::ENEMY_SEPARATION_RADIUS;
-                    sep_x += dx * inv * weight;
-                    sep_z += dz * inv * weight;
+                    sep_x += dx * inv * weight * weight;
+                    sep_z += dz * inv * weight * weight;
                 }
             }
             let sep_len = (sep_x * sep_x + sep_z * sep_z).sqrt();
-            if sep_len > 0.01 {
-                let inv = 1.0 / sep_len;
-                new_x += sep_x * inv * defaults::ENEMY_SEPARATION_STRENGTH * dt;
-                new_z += sep_z * inv * defaults::ENEMY_SEPARATION_STRENGTH * dt;
+            if sep_len > 0.1 {
+                new_x += sep_x * defaults::ENEMY_SEPARATION_STRENGTH * dt;
+                new_z += sep_z * defaults::ENEMY_SEPARATION_STRENGTH * dt;
             }
 
             // Reset cooldown on attack

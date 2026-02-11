@@ -20,9 +20,9 @@ pub mod defaults {
     pub const ENEMY_ATTACK_COOLDOWN: f32 = 2.0;
     pub const ENEMY_ATTACK_DAMAGE: f32 = 10.0;
     /// Enemies within this radius push each other apart.
-    pub const ENEMY_SEPARATION_RADIUS: f32 = 2.5;
+    pub const ENEMY_SEPARATION_RADIUS: f32 = 1.2;
     /// Separation speed in m/s (higher than walk speed so separation wins).
-    pub const ENEMY_SEPARATION_STRENGTH: f32 = 3.0;
+    pub const ENEMY_SEPARATION_STRENGTH: f32 = 2.0;
     /// Spawn ring inner radius (meters from player).
     pub const ENEMY_SPAWN_RADIUS_MIN: f32 = 10.0;
     /// Spawn ring outer radius (meters from player).
