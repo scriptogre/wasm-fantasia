@@ -111,6 +111,9 @@ bevy_heavy = { version = "0.4", features = ["approx"] }
 [package.metadata.cargo-machete]
 ignored = ["rayon"]
 
+[lints.rust]
+dead_code = "allow"
+
 [lints.clippy]
 alloc_instead_of_core = "warn"
 std_instead_of_alloc = "warn"

@@ -65,11 +65,13 @@ fn default_uri() -> String {
                     Some("https:") => "wss",
                     _ => "ws",
                 };
-                let port = match scheme {
-                    "wss" => 8443,
-                    _ => 3000,
+                // HTTPS (production): use default port 443 — Caddy routes
+                // /database/* to SpacetimeDB on the same domain.
+                // HTTP (dev): SpacetimeDB runs on port 3000 locally.
+                return match scheme {
+                    "wss" => format!("wss://{host}"),
+                    _ => format!("ws://{host}:3000"),
                 };
-                return format!("{scheme}://{host}:{port}");
             }
         }
     }

@@ -43,7 +43,6 @@ features = [
     "hotpatching",
     "bevy_gilrs",
     "meshlet",
-    "pbr_specular_textures",
 ]
 
 [dependencies]
