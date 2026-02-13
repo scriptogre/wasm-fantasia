@@ -174,14 +174,6 @@ pub enum EnemyBehavior {
     Attack,
 }
 
-/// Tracks the enemy's animation graph and currently playing clip.
-#[derive(Component, Default)]
-pub struct EnemyAnimations {
-    pub animations: std::collections::HashMap<crate::player::Animation, AnimationNodeIndex>,
-    pub animation_player_entity: Option<Entity>,
-    pub current_animation: Option<crate::player::Animation>,
-}
-
 /// Queued knockback shove to apply on the next Tnua action feeding cycle.
 /// Inserted by the damage observer, consumed by the knockback system that
 /// runs after movement so `initiate_action_feeding()` has already been called.

@@ -1,6 +1,7 @@
 use crate::*;
 use bevy::asset::Asset;
 use bevy::gltf::{GltfLoaderSettings, convert_coordinates::GltfConvertCoordinates};
+use bevy_open_vat::prelude::RemapInfo;
 use bevy_seedling::sample::AudioSample;
 use bevy_shuffle_bag::ShuffleBag;
 
@@ -51,6 +52,12 @@ pub struct Models {
     pub player: Handle<Gltf>,
     #[dependency]
     pub scene: Handle<Gltf>,
+    #[dependency]
+    pub enemy_scene: Handle<Gltf>,
+    #[dependency]
+    pub enemy_vat_texture: Handle<Image>,
+    #[dependency]
+    pub enemy_remap_info: Handle<RemapInfo>,
 }
 
 const PLAYER_MODEL: &str = "models/player.glb";
@@ -66,6 +73,9 @@ impl FromWorld for Models {
                 });
             }),
             scene: assets.load("models/scene.glb"),
+            enemy_scene: assets.load("models/zombie_vat/zombie.glb"),
+            enemy_vat_texture: assets.load("models/zombie_vat/zombie_vat.exr"),
+            enemy_remap_info: assets.load("models/zombie_vat/zombie-remap_info.json"),
         }
     }
 }

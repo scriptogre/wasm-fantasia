@@ -60,6 +60,10 @@ build:
     cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
     echo "WASM bundle ready at dist/web/"
 
+# Profile with Tracy — run `tracy` GUI first, then `just profile`
+profile: spacetimedb
+    cargo run -p wasm_fantasia --features trace
+
 # Pre-commit checks: lint + web compilation
 check:
     cargo clippy --workspace -- -D warnings
@@ -82,6 +86,17 @@ generate:
     sed -i '' 's/    pub fn run_threaded/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn run_threaded/' client/src/networking/generated/mod.rs
     echo "Bindings regenerated and WASM-patched."
 
+
+# Deploy to production
+deploy: build-web
+    rsync -az --delete target/bevy_web/web-release/wasm_fantasia/ pi:~/game/web/
+    scp -q target/wasm32-unknown-unknown/release/wasm_fantasia_module.wasm thinkcentre:/tmp/
+    ssh thinkcentre "docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/wasm_fantasia_module.wasm --yes wasm-fantasia"
+
+# Build WASM client + server module
+build-web:
+    cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release
+    cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
 
 # Wipe SpacetimeDB data and redeploy module
 db-reset:

@@ -1,15 +1,15 @@
 use super::*;
 use avian3d::prelude::{Collider, RigidBody};
-use crate::asset_loading::Models;
-use crate::models::SpawnEnemy;
-use crate::player::{Animation, find_animation_player_descendant};
+use bevy::mesh::MeshTag;
+use bevy::pbr::ExtendedMaterial;
+use bevy::render::storage::ShaderStorageBuffer;
 use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::Start;
-use std::time::Duration;
+use bevy_open_vat::data::VatInstanceData;
+use bevy_open_vat::prelude::*;
 
-/// Enemies beyond this distance from the camera have their animations paused.
-const ANIMATION_CULL_DISTANCE: f32 = 30.0;
-const ANIMATION_CULL_DISTANCE_SQ: f32 = ANIMATION_CULL_DISTANCE * ANIMATION_CULL_DISTANCE;
+use crate::asset_loading::Models;
+use crate::models::SpawnEnemy;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(spawn_enemy_in_front)
@@ -17,12 +17,131 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                cull_enemy_animations.run_if(in_state(Screen::Gameplay)),
+                initialize_vat_enemy_resources
+                    .run_if(not(resource_exists::<VatEnemyState>).and(in_state(Screen::Gameplay))),
                 animate_enemies
                     .in_set(PostPhysicsAppSystems::PlayAnimations)
                     .run_if(in_state(Screen::Gameplay)),
             ),
+        )
+        .add_systems(
+            PostUpdate,
+            (
+                bevy_open_vat::system::update_anim_controller,
+                debug_vat_ssbo,
+            ),
         );
+}
+
+fn debug_vat_ssbo(
+    mat_query: Query<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
+    materials: Res<Assets<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
+    buffers: Res<Assets<ShaderStorageBuffer>>,
+    controllers: Query<&VatAnimationController>,
+    time: Res<Time>,
+    mut timer: Local<f32>,
+    mut logged: Local<bool>,
+) {
+    if *logged {
+        return;
+    }
+    // Wait 5 seconds for everything to stabilize
+    *timer += time.delta_secs();
+    if *timer < 5.0 {
+        return;
+    }
+    *logged = true;
+
+    let controller_count = controllers.iter().len();
+    warn!("VAT SSBO DEBUG: {} controllers", controller_count);
+
+    for mat_handle in mat_query.iter().take(1) {
+        if let Some(mat) = materials.get(&mat_handle.0) {
+            warn!(
+                "  Material found. min_pos={:?} max_pos={:?} frame_count={} y_res={}",
+                mat.extension.min_pos,
+                mat.extension.max_pos,
+                mat.extension.frame_count,
+                mat.extension.y_resolution,
+            );
+            if let Some(buffer) = buffers.get(&mat.extension.instance) {
+                match &buffer.data {
+                    Some(raw) => {
+                        warn!("  SSBO: {} bytes (expect 16 per entry, {} entries)", raw.len(), raw.len() / 16);
+                        if raw.len() >= 16 {
+                            let sf = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
+                            let fc = u32::from_le_bytes([raw[4], raw[5], raw[6], raw[7]]);
+                            let rate = f32::from_le_bytes([raw[8], raw[9], raw[10], raw[11]]);
+                            let ofs = f32::from_le_bytes([raw[12], raw[13], raw[14], raw[15]]);
+                            warn!("  Entry[0]: start_frame={sf} frame_count={fc} rate={rate:.4} offset={ofs:.4}");
+                        }
+                    }
+                    None => warn!("  SSBO: data is None (empty buffer)"),
+                }
+            } else {
+                warn!("  SSBO: buffer handle invalid (get returned None)");
+            }
+        } else {
+            warn!("  Material handle invalid");
+        }
+    }
+}
+
+// =============================================================================
+// VAT resources — shared across all enemy instances
+// =============================================================================
+
+/// Shared VAT rendering resources for all enemy instances, created once on
+/// first gameplay frame when all assets are loaded.
+#[derive(Resource)]
+struct VatEnemyState {
+    material: Handle<ExtendedMaterial<StandardMaterial, OpenVatExtension>>,
+    next_mesh_tag: u32,
+}
+
+/// Links an enemy entity to the child mesh entity that holds the
+/// `VatAnimationController`, so `animate_enemies` can update the clip.
+#[derive(Component)]
+struct VatMeshLink(Entity);
+
+fn initialize_vat_enemy_resources(
+    models: Res<Models>,
+    images: Res<Assets<Image>>,
+    remap_infos: Res<Assets<RemapInfo>>,
+    mut vat_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
+    mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
+    mut commands: Commands,
+) {
+    let Some(remap_info) = remap_infos.get(&models.enemy_remap_info) else {
+        return;
+    };
+    let Some(image) = images.get(&models.enemy_vat_texture) else {
+        return;
+    };
+
+    let y_resolution = image.texture_descriptor.size.height as f32;
+    let buffer = buffers.add(ShaderStorageBuffer::from(&Vec::<VatInstanceData>::new()));
+
+    let material = vat_materials.add(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: crate::ui::colors::HEALTH_RED,
+            ..default()
+        },
+        extension: OpenVatExtension {
+            vat_texture: models.enemy_vat_texture.clone(),
+            min_pos: remap_info.os_remap.min.into(),
+            frame_count: remap_info.os_remap.frames,
+            max_pos: remap_info.os_remap.max.into(),
+            y_resolution,
+            instance: buffer,
+            ..Default::default()
+        },
+    });
+
+    commands.insert_resource(VatEnemyState {
+        material,
+        next_mesh_tag: 0,
+    });
 }
 
 // =============================================================================
@@ -56,7 +175,7 @@ fn spawn_enemy_in_front(
 }
 
 // =============================================================================
-// On<Add, Enemy> — attach GLTF model + animation setup to any Enemy entity
+// On<Add, Enemy> — attach VAT model to any Enemy entity
 // =============================================================================
 
 fn on_enemy_added(
@@ -78,53 +197,46 @@ fn on_enemy_added(
     // player's dynamic body out of the way on collision).
     commands.entity(entity).insert((
         EnemyBehavior::default(),
-        EnemyAnimations::default(),
         InheritedVisibility::default(),
         Collider::capsule(0.5, 1.0),
         RigidBody::Kinematic,
     ));
 
-    let Some(gltf) = gltf_assets.get(&models.player) else {
-        warn!("Player GLTF not loaded when enemy spawned");
+    let Some(gltf) = gltf_assets.get(&models.enemy_scene) else {
+        warn!("Enemy VAT GLB not loaded when enemy spawned");
         return;
     };
 
     let scene = SceneRoot(gltf.scenes[0].clone());
     commands.entity(entity).with_children(|parent| {
-        let mut child = parent.spawn((Transform::from_xyz(0.0, -1.0, 0.0), scene));
-        child.observe(prepare_enemy_scene);
+        let mut child = parent.spawn((
+            Transform::from_xyz(0.0, -0.15, 0.0)
+                .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
+            scene,
+        ));
+        child.observe(prepare_enemy_vat_scene);
     });
 }
 
 // =============================================================================
-// Scene ready — wire up animation graph + red material
+// Scene ready — swap material for VAT extended material
 // =============================================================================
 
-fn prepare_enemy_scene(
+fn prepare_enemy_vat_scene(
     on: On<SceneInstanceReady>,
+    mut vat_state: Option<ResMut<VatEnemyState>>,
     models: Res<Models>,
-    gltf_assets: Res<Assets<Gltf>>,
     children_q: Query<&Children>,
-    anim_players: Query<Entity, With<AnimationPlayer>>,
+    mesh_entities: Query<Entity, With<Mesh3d>>,
     parents: Query<&ChildOf>,
-    mut enemy_q: Query<&mut EnemyAnimations>,
     mut commands: Commands,
-    mut animation_graphs: ResMut<Assets<AnimationGraph>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mesh_materials: Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
 ) {
+    let Some(vat_state) = vat_state.as_mut() else {
+        warn!("VatEnemyState not ready when enemy scene loaded");
+        return;
+    };
+
     let scene_entity = on.entity;
-
-    let Some(gltf) = gltf_assets.get(&models.player) else {
-        return;
-    };
-
-    // Find AnimationPlayer descendant
-    let Some(animation_player_entity) =
-        find_animation_player_descendant(scene_entity, &children_q, &anim_players)
-    else {
-        return;
-    };
 
     // Walk up to the Enemy entity (scene entity → enemy entity)
     let enemy_entity = if let Ok(parent) = parents.get(scene_entity) {
@@ -133,172 +245,85 @@ fn prepare_enemy_scene(
         scene_entity
     };
 
-    let Ok(mut enemy_animations) = enemy_q.get_mut(enemy_entity) else {
-        return;
-    };
-
-    // Build animation graph with only zombie clips
-    let mut graph = AnimationGraph::new();
-    let root_node = graph.root;
-
-    let zombie_clips = [
-        Animation::ZombieIdle,
-        Animation::ZombieWalkForward,
-        Animation::ZombieScratch,
-    ];
-
-    for anim in zombie_clips {
-        if let Some(clip_handle) = gltf.named_animations.get(anim.clip_name()) {
-            // Share the original clip handle — each AnimationPlayer tracks its own
-            // playback state independently, so the clip data itself can be shared.
-            let node_index = graph.add_clip(clip_handle.clone(), 1.0, root_node);
-            enemy_animations.animations.insert(anim, node_index);
-        }
-    }
-
-    enemy_animations.animation_player_entity = Some(animation_player_entity);
-
-    let idle_node = enemy_animations
-        .animations
-        .get(&Animation::ZombieIdle)
-        .copied();
-    let graph_handle = animation_graphs.add(graph);
-
-    commands.entity(animation_player_entity).insert((
-        AnimationGraphHandle(graph_handle),
-        AnimationTransitions::new(),
-    ));
-
-    // Start idle animation immediately
-    if let Some(index) = idle_node {
-        commands
-            .entity(animation_player_entity)
-            .queue(move |mut entity: EntityWorldMut| {
-                let Some(mut transitions) = entity.take::<AnimationTransitions>() else {
-                    return;
-                };
-                if let Some(mut player) = entity.get_mut::<AnimationPlayer>() {
-                    transitions
-                        .play(&mut player, index, Duration::ZERO)
-                        .repeat();
-                }
-                entity.insert(transitions);
-            });
-    }
-
-    enemy_animations.current_animation = Some(Animation::ZombieIdle);
-
-    // Replace all descendant materials with flat red
-    let red_material = materials.add(StandardMaterial {
-        base_color: crate::ui::colors::HEALTH_RED,
-        ..default()
-    });
-
-    fn recolor_descendants(
-        entity: Entity,
-        children_q: &Query<&Children>,
-        mesh_materials: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-        commands: &mut Commands,
-        material: &Handle<StandardMaterial>,
-    ) {
-        if mesh_materials.get(entity).is_ok() {
-            commands
-                .entity(entity)
-                .insert(MeshMaterial3d(material.clone()));
-        }
-        if let Ok(children) = children_q.get(entity) {
-            for child in children.iter() {
-                recolor_descendants(child, children_q, mesh_materials, commands, material);
-            }
-        }
-    }
-
-    recolor_descendants(
+    // Find mesh entities in the scene subtree and apply VAT material + controller
+    apply_vat_to_descendants(
         scene_entity,
         &children_q,
-        &mesh_materials,
+        &mesh_entities,
         &mut commands,
-        &red_material,
+        vat_state,
+        &models,
+        enemy_entity,
     );
 }
 
-// =============================================================================
-// Distance-based animation culling — pause animations for far enemies
-// =============================================================================
-
-fn cull_enemy_animations(
-    enemies: Query<(&Transform, &EnemyAnimations), With<Enemy>>,
-    camera: Query<&Transform, (With<SceneCamera>, Without<Enemy>)>,
-    mut animation_players: Query<&mut AnimationPlayer>,
+fn apply_vat_to_descendants(
+    entity: Entity,
+    children_q: &Query<&Children>,
+    mesh_entities: &Query<Entity, With<Mesh3d>>,
+    commands: &mut Commands,
+    vat_state: &mut VatEnemyState,
+    models: &Models,
+    enemy_entity: Entity,
 ) {
-    let Ok(camera_transform) = camera.single() else {
-        return;
-    };
-    let camera_pos = camera_transform.translation;
+    if mesh_entities.get(entity).is_ok() {
+        let tag = vat_state.next_mesh_tag;
+        vat_state.next_mesh_tag += 1;
 
-    for (transform, anims) in &enemies {
-        let Some(anim_entity) = anims.animation_player_entity else {
-            continue;
-        };
-        let Ok(mut anim_player) = animation_players.get_mut(anim_entity) else {
-            continue;
-        };
+        commands
+            .entity(entity)
+            .remove::<MeshMaterial3d<StandardMaterial>>()
+            .insert((
+                MeshMaterial3d(vat_state.material.clone()),
+                VatAnimationController {
+                    remap_info: models.enemy_remap_info.clone(),
+                    current_clip: "Zombie_Idle_Loop".to_string(),
+                    speed: 1.0,
+                    is_playing: true,
+                    ..Default::default()
+                },
+                MeshTag(tag),
+            ));
 
-        let distance_sq = transform.translation.distance_squared(camera_pos);
-        if distance_sq > ANIMATION_CULL_DISTANCE_SQ {
-            anim_player.pause_all();
-        } else {
-            anim_player.resume_all();
+        commands.entity(enemy_entity).insert(VatMeshLink(entity));
+    }
+
+    if let Ok(children) = children_q.get(entity) {
+        for child in children.iter() {
+            apply_vat_to_descendants(
+                child,
+                children_q,
+                mesh_entities,
+                commands,
+                vat_state,
+                models,
+                enemy_entity,
+            );
         }
     }
 }
 
 // =============================================================================
-// Animation driver — maps EnemyBehavior to zombie clips (all enemies)
+// Animation driver — maps EnemyBehavior to VAT clip names
 // =============================================================================
 
 fn animate_enemies(
-    mut enemies: Query<(&EnemyBehavior, &mut EnemyAnimations)>,
-    mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
+    enemies: Query<(&EnemyBehavior, &VatMeshLink), Changed<EnemyBehavior>>,
+    mut controllers: Query<&mut VatAnimationController>,
 ) {
-    const BLEND_DURATION: Duration = Duration::from_millis(200);
-
-    for (behavior, mut anims) in &mut enemies {
-        let Some(anim_entity) = anims.animation_player_entity else {
-            continue;
-        };
-        let Ok((mut anim_player, mut transitions)) = animation_query.get_mut(anim_entity) else {
+    for (behavior, vat_link) in &enemies {
+        let Ok(mut controller) = controllers.get_mut(vat_link.0) else {
             continue;
         };
 
-        let target_animation = match behavior {
-            EnemyBehavior::Idle => Animation::ZombieIdle,
-            EnemyBehavior::Chase => Animation::ZombieWalkForward,
-            EnemyBehavior::Attack => Animation::ZombieScratch,
+        let clip_name = match behavior {
+            EnemyBehavior::Idle => "Zombie_Idle_Loop",
+            EnemyBehavior::Chase => "Zombie_Walk_Fwd_Loop",
+            EnemyBehavior::Attack => "Zombie_Scratch",
         };
 
-        if anims.current_animation == Some(target_animation) {
-            continue;
-        }
-
-        let Some(&index) = anims.animations.get(&target_animation) else {
-            continue;
-        };
-
-        anims.current_animation = Some(target_animation);
-
-        match behavior {
-            EnemyBehavior::Attack => {
-                transitions
-                    .play(&mut anim_player, index, BLEND_DURATION)
-                    .set_speed(1.0);
-            }
-            _ => {
-                transitions
-                    .play(&mut anim_player, index, BLEND_DURATION)
-                    .set_speed(1.0)
-                    .repeat();
-            }
+        if controller.current_clip != clip_name {
+            controller.current_clip = clip_name.to_string();
         }
     }
 }

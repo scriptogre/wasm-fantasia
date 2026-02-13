@@ -54,6 +54,7 @@ fn main() {
     };
 
     app.add_plugins(DefaultPlugins.set(window).set(assets).set(log_level));
+    app.add_plugins(bevy_open_vat::prelude::OpenVatPlugin);
 
     // custom plugins. the order is important
     // be sure you use resources/types AFTER you add plugins that insert them

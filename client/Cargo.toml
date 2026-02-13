@@ -22,6 +22,7 @@ dev = [
     "bevy/bevy_ui_debug",
     "bevy/track_location",          # Improve error messages coming from Bevy
 ]
+trace = ["bevy/trace", "bevy/trace_tracy"]  # Per-system profiling via Tracy (just profile)
 
 [dependencies.bevy]
 version = "^0.18"
@@ -40,9 +41,9 @@ features = [
     "jpeg",
     "experimental_bevy_ui_widgets",
     "serialize",
-    "hotpatching",
     "bevy_gilrs",
     "meshlet",
+    "exr",
 ]
 
 [dependencies]
@@ -55,6 +56,7 @@ bevy_skein = "^0.5"                                                             
 # iyes_perf_ui = "0.5"                                                                      # diagnostics overlay
 
 avian3d = { package = "bevy_avian3d", path = "../crates/avian/crates/bevy_avian3d", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics (forked)
+bevy_open_vat = "^0.18"                                                                     # vertex animation textures for GPU-driven enemy animation
 bevy_seedling = { version = "^0.7", features = ["hrtf", "ogg", "web_audio"] }                # audio plugin using firewheel
 bevy_shuffle_bag = "^0.4"                                                                   # random container for audio
 firewheel = "^0.10"
@@ -83,9 +85,8 @@ thiserror = "2"
 smol_str = { version = "0.3", default-features = false }
 # keep the following in sync with Bevy's dependencies
 winit = { version = "^0.30", default-features = false }
-# Compile low-severity logs out of builds for performance.
-# Remove these features if you want to profile your game with tracy.
-# (see <https://github.com/bevyengine/bevy/blob/main/docs/profiling.md#tracy-profiler>)
+# Compile low-severity logs out of release builds for performance.
+# The `trace` feature overrides these limits so Tracy can see all spans.
 tracing = { version = "^0.1", features = ["max_level_debug", "release_max_level_warn"] }
 easy-ext = "1.0.2"
 
