@@ -16,7 +16,9 @@ mod sync;
 pub use connection::{ReconnectTimer, try_connect};
 pub use diagnostics::ServerDiagnostics;
 pub use generated::{DbConnection, Player, Reducer};
-pub use reconcile::{CombatEventData, CombatStats, ServerId, WorldEntity};
+pub use reconcile::{
+    CombatEventData, CombatStats, RemotePlayerState, ServerId, ServerSnapshot, WorldEntity,
+};
 pub use sync::PingTracker;
 
 // =============================================================================

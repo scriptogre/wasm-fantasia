@@ -52,17 +52,69 @@ pub enum AnimationState {
 }
 
 impl AnimationState {
-    /// Lossy mapping to a simplified server animation name.
-    /// Blend weights and sub-states are collapsed to broad categories.
+    /// Serialize to a server animation name for broadcast to other clients.
+    /// Speed parameters are dropped — remote players use default playback speeds.
     pub fn server_name(&self) -> &'static str {
         match self {
-            Self::StandIdle | Self::CrouchIdle => "Idle",
+            Self::StandIdle => "Idle",
             Self::Run(_) | Self::Climb(_) => "Walk",
-            Self::Sprint(_) | Self::SlideStart | Self::SlideLoop | Self::SlideExit => "Run",
+            Self::Sprint(_) => "Run",
             Self::Crouch(_) => "Crouch",
-            Self::JumpStart | Self::JumpLoop | Self::WallJump => "Jump",
-            Self::Fall | Self::JumpLand | Self::WallSlide => "Fall",
-            Self::Attack | Self::KnockBack => "Idle",
+            Self::CrouchIdle => "CrouchIdle",
+            Self::JumpStart => "JumpStart",
+            Self::JumpLoop | Self::WallJump => "Jump",
+            Self::JumpLand => "JumpLand",
+            Self::Fall | Self::WallSlide => "Fall",
+            Self::SlideStart => "SlideStart",
+            Self::SlideLoop => "SlideLoop",
+            Self::SlideExit => "SlideExit",
+            Self::KnockBack => "KnockBack",
+            Self::Attack => "Idle", // Attacks handled by attack_sequence/attack_animation
+        }
+    }
+
+    /// Deserialize from a server animation name. Speed-parameterized variants
+    /// get default display speeds since the exact value isn't transmitted.
+    pub fn from_server_name(name: &str) -> Self {
+        match name {
+            "Walk" => Self::Run(1.0),
+            "Run" => Self::Sprint(1.0),
+            "Crouch" => Self::Crouch(1.0),
+            "CrouchIdle" => Self::CrouchIdle,
+            "JumpStart" => Self::JumpStart,
+            "Jump" => Self::JumpLoop,
+            "JumpLand" => Self::JumpLand,
+            "Fall" => Self::Fall,
+            "SlideStart" => Self::SlideStart,
+            "SlideLoop" => Self::SlideLoop,
+            "SlideExit" => Self::SlideExit,
+            "KnockBack" => Self::KnockBack,
+            _ => Self::StandIdle,
+        }
+    }
+
+    /// Canonical clip, speed, and looping for display. This is the single source
+    /// of truth for which animation clip plays for a given state — used by both
+    /// the local player's animation system and remote player replication.
+    pub fn playback(&self) -> (Animation, f32, bool) {
+        match self {
+            Self::StandIdle => (Animation::Idle, 1.0, true),
+            Self::Run(_) => (Animation::JogFwd, 1.0, true),
+            Self::Sprint(_) => (Animation::Sprint, 1.0, true),
+            Self::JumpStart => (Animation::JumpStart, 1.0, false),
+            Self::JumpLoop => (Animation::JumpLoop, 0.5, true),
+            Self::JumpLand => (Animation::JumpLand, 1.0, false),
+            Self::Fall => (Animation::JumpLoop, 1.0, true),
+            Self::Crouch(_) => (Animation::CrouchFwd, 1.0, true),
+            Self::CrouchIdle => (Animation::CrouchIdle, 1.0, true),
+            Self::SlideStart => (Animation::SlideStart, 2.5, false),
+            Self::SlideLoop => (Animation::SlideLoop, 1.0, true),
+            Self::SlideExit => (Animation::SlideExit, 1.2, false),
+            Self::WallSlide => (Animation::JumpLoop, 1.0, true),
+            Self::WallJump => (Animation::JumpStart, 2.0, false),
+            Self::Climb(_) => (Animation::JumpLoop, 1.0, true),
+            Self::KnockBack => (Animation::HitChest, 1.0, false),
+            Self::Attack => (Animation::Idle, 1.0, true),
         }
     }
 }

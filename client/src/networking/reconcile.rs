@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-use avian3d::prelude::{Collider, LockedAxes, Mass, RigidBody};
+
 use spacetimedb_sdk::{DbContext, Table};
 use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 
@@ -13,6 +13,7 @@ use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::player_table::PlayerTableAccess;
 use crate::combat::{Combatant, Enemy, EnemyBehavior, Health};
 use crate::models::Player as LocalPlayer;
+use crate::player::RemotePlayer;
 use crate::rules::{Stat, Stats};
 
 // =============================================================================
@@ -33,6 +34,29 @@ pub struct WorldEntity {
     pub y: f32,
     pub z: f32,
     pub rotation_y: f32,
+    /// Server velocity — used to extrapolate between subscription updates.
+    pub velocity_x: f32,
+    pub velocity_y: f32,
+    pub velocity_z: f32,
+}
+
+/// Tracks the last received server snapshot so the interpolation system can
+/// detect when new data arrives and extrapolate over the full elapsed time.
+#[derive(Component, Debug)]
+pub struct ServerSnapshot {
+    pub position: Vec3,
+    pub velocity: Vec3,
+    pub received_at: f32,
+}
+
+impl Default for ServerSnapshot {
+    fn default() -> Self {
+        Self {
+            position: Vec3::ZERO,
+            velocity: Vec3::ZERO,
+            received_at: 0.0,
+        }
+    }
 }
 
 /// Offensive combat stats synced from server.
@@ -56,6 +80,14 @@ pub struct CombatEventData {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+/// Server-synced animation state for remote players.
+#[derive(Component, Clone, Debug, Default)]
+pub struct RemotePlayerState {
+    pub animation_state: String,
+    pub attack_sequence: u32,
+    pub attack_animation: String,
 }
 
 // =============================================================================
@@ -83,13 +115,12 @@ pub(super) fn reconcile(
             &mut WorldEntity,
             &mut Health,
             Option<&mut EnemyBehavior>,
+            Option<&mut RemotePlayerState>,
         ),
         Without<LocalPlayer>,
     >,
     mut local_health: Query<(&mut Health, &mut Stats), With<LocalPlayer>>,
     mut tracker: ResMut<CombatEventTracker>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut commands: Commands,
 ) {
     let my_id = conn.conn.try_identity();
@@ -102,6 +133,8 @@ pub(super) fn reconcile(
         health: f32,
         max_health: f32,
         animation_state: String,
+        attack_sequence: u32,
+        attack_animation: String,
     }
 
     let rows: Vec<Row> = conn
@@ -117,10 +150,15 @@ pub(super) fn reconcile(
                 y: p.y,
                 z: p.z,
                 rotation_y: p.rotation_y,
+                velocity_x: 0.0,
+                velocity_y: 0.0,
+                velocity_z: 0.0,
             },
             health: p.health,
             max_health: p.max_health,
-            animation_state: String::new(),
+            animation_state: p.animation_state.clone(),
+            attack_sequence: p.attack_sequence,
+            attack_animation: p.attack_animation.clone(),
         })
         .chain(conn.conn.db.enemy().iter().map(|e| Row {
             id: ServerId::Enemy(e.id),
@@ -129,10 +167,15 @@ pub(super) fn reconcile(
                 y: e.y,
                 z: e.z,
                 rotation_y: e.rotation_y,
+                velocity_x: e.velocity_x,
+                velocity_y: e.velocity_y,
+                velocity_z: e.velocity_z,
             },
             health: e.health,
             max_health: e.max_health,
             animation_state: e.animation_state.clone(),
+            attack_sequence: 0,
+            attack_animation: String::new(),
         }))
         .collect();
 
@@ -152,7 +195,9 @@ pub(super) fn reconcile(
     }
 
     // ── Patch or despawn existing remote entities ──────
-    for (bevy_entity, id, mut world_entity, mut health, enemy_behavior) in &mut remote_entities {
+    for (bevy_entity, id, mut world_entity, mut health, enemy_behavior, remote_state) in
+        &mut remote_entities
+    {
         if let Some(row) = rows.iter().find(|r| &r.id == id) {
             seen.insert(id.clone());
             *world_entity = row.world.clone();
@@ -170,6 +215,13 @@ pub(super) fn reconcile(
                 if *behavior != new_behavior {
                     *behavior = new_behavior;
                 }
+            }
+
+            // Patch remote player animation state
+            if let Some(mut state) = remote_state {
+                state.animation_state = row.animation_state.clone();
+                state.attack_sequence = row.attack_sequence;
+                state.attack_animation = row.attack_animation.clone();
             }
         } else {
             commands.entity(bevy_entity).despawn();
@@ -194,6 +246,7 @@ pub(super) fn reconcile(
                 Name::new(name),
                 row.id.clone(),
                 row.world.clone(),
+                ServerSnapshot::default(),
                 Transform::from_xyz(row.world.x, row.world.y, row.world.z),
                 Health::new(row.max_health),
                 Enemy,
@@ -203,25 +256,20 @@ pub(super) fn reconcile(
                     .with(Stat::Health, row.health),
             ));
         } else {
-            // Remote player: capsule mesh (TODO: player model for remotes)
-            let material = materials.add(StandardMaterial {
-                base_color: Color::srgb(0.2, 0.6, 1.0),
-                ..default()
-            });
-            let mesh = meshes.add(Capsule3d::new(0.5, 1.0));
-
+            // Remote player: On<Add, RemotePlayer> observer attaches GLTF model + animations
             commands.spawn((
                 Name::new(name),
                 row.id.clone(),
                 row.world.clone(),
+                ServerSnapshot::default(),
                 Transform::from_xyz(row.world.x, row.world.y, row.world.z),
                 Health::new(row.max_health),
-                Mesh3d(mesh),
-                MeshMaterial3d(material),
-                Collider::capsule(0.5, 1.0),
-                RigidBody::Dynamic,
-                LockedAxes::ROTATION_LOCKED,
-                Mass(500.0),
+                RemotePlayer,
+                RemotePlayerState {
+                    animation_state: row.animation_state.clone(),
+                    attack_sequence: row.attack_sequence,
+                    attack_animation: row.attack_animation.clone(),
+                },
             ));
         }
     }

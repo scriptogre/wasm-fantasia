@@ -11,6 +11,7 @@ use bevy_tnua::builtins::*;
 use bevy_tnua::control_helpers::{TnuaActionSlots, TnuaAirActionsPlugin};
 use bevy_tnua::prelude::*;
 use bevy_tnua_avian3d::*;
+use std::collections::HashMap;
 use std::time::Duration;
 use wasm_fantasia_shared::combat::defaults;
 
@@ -63,11 +64,14 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 animating.in_set(TnuaUserControlsSystems),
+                animate_remote_players
+                    .in_set(PostPhysicsAppSystems::PlayAnimations),
                 sync_debug_colliders,
             )
                 .run_if(in_state(Screen::Gameplay)),
         )
-        .add_observer(player_post_spawn);
+        .add_observer(player_post_spawn)
+        .add_observer(on_remote_player_added);
 }
 
 pub fn spawn_player(
@@ -230,6 +234,212 @@ fn sync_debug_colliders(
 fn player_post_spawn(on: On<Add, Player>, mut players: Query<&mut Player>) {
     if let Ok(mut p) = players.get_mut(on.entity) {
         p.id = on.entity; // update player id with spawned entity
-        // info!("player entity: Player.id: {}", p.id);
+    }
+}
+
+// =============================================================================
+// Remote players — GLTF model, animations, debug collider
+// =============================================================================
+
+/// Marker for remote (non-local) player entities.
+#[derive(Component)]
+pub struct RemotePlayer;
+
+/// Animation state for a remote player, driven by server-synced data.
+#[derive(Component, Default)]
+struct RemotePlayerAnimations {
+    animations: HashMap<Animation, AnimationNodeIndex>,
+    animation_player_entity: Option<Entity>,
+    current_animation: Option<Animation>,
+    last_attack_sequence: u32,
+    /// Time (elapsed secs) when the current attack animation should yield to movement.
+    attack_playing_until: f32,
+}
+
+const ATTACK_ANIMATION_DURATION: f32 = 0.4;
+
+fn on_remote_player_added(
+    on: On<Add, RemotePlayer>,
+    cfg: Res<Config>,
+    models: Res<Models>,
+    gltf_assets: Res<Assets<Gltf>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut commands: Commands,
+) {
+    let entity = on.entity;
+
+    commands.entity(entity).insert((
+        RemotePlayerAnimations::default(),
+        InheritedVisibility::default(),
+    ));
+
+    let Some(gltf) = gltf_assets.get(&models.player) else {
+        warn!("Player GLTF not loaded when remote player spawned");
+        return;
+    };
+
+    let scene = SceneRoot(gltf.scenes[0].clone());
+    commands.entity(entity).with_children(|parent| {
+        let mut child = parent.spawn((Transform::from_xyz(0.0, -1.0, 0.0), scene));
+        child.observe(prepare_remote_player_scene);
+
+        // Debug collider visualization (toggled by sync_debug_colliders)
+        let collider_mesh = meshes.add(Capsule3d::new(
+            cfg.player.hitbox.radius,
+            cfg.player.hitbox.height,
+        ));
+        parent.spawn((
+            DebugCollider,
+            Mesh3d(collider_mesh),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgba(0.2, 0.6, 1.0, 0.15),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            })),
+            Transform::from_xyz(0.0, -0.1, 0.0),
+            Visibility::Hidden,
+        ));
+    });
+}
+
+fn prepare_remote_player_scene(
+    on: On<SceneInstanceReady>,
+    models: Res<Models>,
+    gltf_assets: Res<Assets<Gltf>>,
+    children_q: Query<&Children>,
+    anim_players: Query<Entity, With<AnimationPlayer>>,
+    parents: Query<&ChildOf>,
+    mut remote_q: Query<&mut RemotePlayerAnimations>,
+    mut commands: Commands,
+    mut animation_graphs: ResMut<Assets<AnimationGraph>>,
+) {
+    let scene_entity = on.entity;
+
+    let Some(gltf) = gltf_assets.get(&models.player) else {
+        return;
+    };
+
+    let Some(animation_player_entity) =
+        find_animation_player_descendant(scene_entity, &children_q, &anim_players)
+    else {
+        return;
+    };
+
+    // Walk up to the RemotePlayer entity (scene entity → remote player entity)
+    let remote_entity = if let Ok(parent) = parents.get(scene_entity) {
+        parent.parent()
+    } else {
+        scene_entity
+    };
+
+    let Ok(mut anims) = remote_q.get_mut(remote_entity) else {
+        return;
+    };
+
+    // Build animation graph with all player clips (same set as local player)
+    let mut graph = AnimationGraph::new();
+    let root_node = graph.root;
+
+    for (name, clip_handle) in gltf.named_animations.iter() {
+        let Some(anim) = Animation::from_clip_name(name) else {
+            continue;
+        };
+        let node_index = graph.add_clip(clip_handle.clone(), 1.0, root_node);
+        anims.animations.insert(anim, node_index);
+    }
+
+    anims.animation_player_entity = Some(animation_player_entity);
+
+    let idle_node = anims.animations.get(&Animation::Idle).copied();
+    let graph_handle = animation_graphs.add(graph);
+
+    commands.entity(animation_player_entity).insert((
+        AnimationGraphHandle(graph_handle),
+        AnimationTransitions::new(),
+    ));
+
+    // Start idle animation immediately
+    if let Some(index) = idle_node {
+        commands
+            .entity(animation_player_entity)
+            .queue(move |mut entity: EntityWorldMut| {
+                let Some(mut transitions) = entity.take::<AnimationTransitions>() else {
+                    return;
+                };
+                if let Some(mut player) = entity.get_mut::<AnimationPlayer>() {
+                    transitions
+                        .play(&mut player, index, Duration::ZERO)
+                        .repeat();
+                }
+                entity.insert(transitions);
+            });
+    }
+
+    anims.current_animation = Some(Animation::Idle);
+}
+
+/// Drive remote player animations from server-synced state.
+/// Uses `AnimationState::from_server_name()` + `playback()` — the same source
+/// of truth the local player's animation system is built around.
+fn animate_remote_players(
+    time: Res<Time>,
+    mut remotes: Query<(
+        &crate::networking::RemotePlayerState,
+        &mut RemotePlayerAnimations,
+    )>,
+    mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
+) {
+    const BLEND_DURATION: Duration = Duration::from_millis(150);
+    let now = time.elapsed_secs();
+
+    for (state, mut anims) in &mut remotes {
+        let Some(anim_entity) = anims.animation_player_entity else {
+            continue;
+        };
+        let Ok((mut anim_player, mut transitions)) = animation_query.get_mut(anim_entity) else {
+            continue;
+        };
+
+        // Detect new attack (takes priority over movement animations)
+        if state.attack_sequence != anims.last_attack_sequence && state.attack_sequence > 0 {
+            anims.last_attack_sequence = state.attack_sequence;
+
+            if let Some(attack_anim) = Animation::from_clip_name(&state.attack_animation) {
+                if let Some(&index) = anims.animations.get(&attack_anim) {
+                    anims.current_animation = Some(attack_anim);
+                    anims.attack_playing_until = now + ATTACK_ANIMATION_DURATION;
+                    transitions
+                        .play(&mut anim_player, index, BLEND_DURATION)
+                        .set_speed(1.3);
+                    continue;
+                }
+            }
+        }
+
+        // Don't interrupt a playing attack animation
+        if now < anims.attack_playing_until {
+            continue;
+        }
+
+        // Movement animation via shared AnimationState mapping
+        let anim_state = AnimationState::from_server_name(&state.animation_state);
+        let (clip, speed, looping) = anim_state.playback();
+
+        if anims.current_animation == Some(clip) {
+            continue;
+        }
+
+        let Some(&index) = anims.animations.get(&clip) else {
+            continue;
+        };
+
+        anims.current_animation = Some(clip);
+        let active = transitions.play(&mut anim_player, index, BLEND_DURATION);
+        active.set_speed(speed);
+        if looping {
+            active.repeat();
+        }
     }
 }

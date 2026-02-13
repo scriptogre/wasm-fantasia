@@ -7,12 +7,13 @@ use web_time::Instant;
 use super::SpacetimeDbConnection;
 use super::generated::player_table::PlayerTableAccess;
 use super::generated::update_position_reducer::update_position;
-use super::reconcile::{ServerId, WorldEntity};
+use super::reconcile::{ServerId, ServerSnapshot, WorldEntity};
 use crate::combat::AttackState;
 use crate::models::Player as LocalPlayer;
 use crate::player::Animation;
 
 const INTERPOLATION_SPEED: f32 = 12.0;
+const GRAVITY: f32 = -9.81;
 
 // =============================================================================
 // Resources
@@ -45,14 +46,55 @@ impl Default for PositionSyncTimer {
 // Systems
 // =============================================================================
 
-/// Smoothly move `Transform` toward the server-authoritative `WorldEntity` target.
+/// Dead reckoning: detect new server snapshots, extrapolate position using
+/// velocity + gravity over the full time since the snapshot, then lerp toward
+/// the extrapolated target. This produces smooth continuous falling/movement
+/// even when subscription updates arrive at ~10Hz.
 pub(super) fn interpolate_synced_entities(
     time: Res<Time>,
-    mut query: Query<(&WorldEntity, &mut Transform), With<ServerId>>,
+    mut query: Query<(&WorldEntity, &mut ServerSnapshot, &mut Transform), With<ServerId>>,
 ) {
-    let alpha = (time.delta_secs() * INTERPOLATION_SPEED).min(1.0);
-    for (world_entity, mut transform) in &mut query {
-        let target = Vec3::new(world_entity.x, world_entity.y, world_entity.z);
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    let alpha = (dt * INTERPOLATION_SPEED).min(1.0);
+
+    for (world_entity, mut snapshot, mut transform) in &mut query {
+        let server_pos = Vec3::new(world_entity.x, world_entity.y, world_entity.z);
+        let server_vel = Vec3::new(
+            world_entity.velocity_x,
+            world_entity.velocity_y,
+            world_entity.velocity_z,
+        );
+
+        // Detect when the reconciler wrote new data from a subscription update.
+        // Between updates the cache returns identical values, so an exact
+        // comparison is reliable.
+        if server_pos != snapshot.position {
+            snapshot.position = server_pos;
+            snapshot.velocity = server_vel;
+            snapshot.received_at = now;
+        }
+
+        // Time elapsed since the last real server update.
+        let elapsed = now - snapshot.received_at;
+
+        // Extrapolate: project the snapshot forward by the full elapsed time
+        // using the velocity at that snapshot plus gravitational acceleration.
+        // This predicts where the entity *should* be right now, producing
+        // smooth parabolic arcs between the ~10Hz subscription updates.
+        //
+        // Only apply gravity when the entity has vertical velocity — otherwise
+        // grounded entities sink through the floor as elapsed grows unbounded
+        // (position-based snapshot detection doesn't reset when standing still).
+        let gravity_term = if snapshot.velocity.y.abs() > 0.01 {
+            0.5 * GRAVITY * elapsed * elapsed
+        } else {
+            0.0
+        };
+        let target = snapshot.position
+            + snapshot.velocity * elapsed
+            + Vec3::new(0.0, gravity_term, 0.0);
+
         transform.translation = transform.translation.lerp(target, alpha);
         transform.rotation = Quat::slerp(
             transform.rotation,
