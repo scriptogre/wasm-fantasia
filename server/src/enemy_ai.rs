@@ -1,3 +1,4 @@
+use avian3d::prelude::*;
 use spacetimedb::Table;
 use std::collections::HashMap;
 use wasm_fantasia_shared::combat::{self, defaults, enemy_ai_decision};
@@ -42,6 +43,9 @@ pub fn spawn_enemies(
             y,
             z: z + angle.sin() * radius,
             rotation_y: 0.0,
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+            velocity_z: 0.0,
             animation_state: "Idle".to_string(),
             health: defaults::ENEMY_HEALTH,
             max_health: defaults::ENEMY_HEALTH,
@@ -58,6 +62,11 @@ pub fn spawn_enemies(
 // =============================================================================
 
 /// Periodic server tick — drives enemy AI for multiplayer.
+/// Uses avian3d PhysicsWorld for physics-based movement and knockback.
+///
+/// The physics world is recreated each tick from DB state. Persistent
+/// in-memory state is not viable because SpacetimeDB may dispatch reducers
+/// across multiple WASM module instances, each with independent memory.
 #[spacetimedb::reducer]
 pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     let dt = TICK_INTERVAL_MICROS as f32 / 1_000_000.0;
@@ -90,6 +99,15 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             .push(e);
     }
 
+    // Collect knockback impulses by world
+    let mut impulses_by_world: HashMap<String, Vec<KnockbackImpulse>> = HashMap::new();
+    for impulse in ctx.db.knockback_impulse().iter() {
+        impulses_by_world
+            .entry(impulse.world_id.clone())
+            .or_default()
+            .push(impulse);
+    }
+
     for (world_id, enemies) in &enemies_by_world {
         if ctx.db.world_pause().world_id().find(world_id).is_some() {
             continue;
@@ -98,7 +116,33 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             continue;
         };
 
+        // Create a physics world for this tick
+        let mut physics = PhysicsWorld::new(PhysicsConfig {
+            gravity: Vector::new(0.0, -9.81, 0.0),
+            substeps: 4,
+            ..Default::default()
+        });
+
+        // Add a static floor
+        let floor = physics.add_body(RigidBodyBundle::static_body(Vector::ZERO));
+        physics.add_collider(floor, ColliderBundle::half_space(Vector::Y));
+
+        // Add enemies as dynamic bodies
+        let mut enemy_handles: Vec<(BodyHandle, &Enemy)> = Vec::with_capacity(enemies.len());
         for enemy in enemies {
+            let handle = physics.add_body(RigidBodyBundle {
+                body_type: RigidBodyType::Dynamic,
+                position: Vector::new(enemy.x, enemy.y, enemy.z),
+                linear_velocity: Vector::new(enemy.velocity_x, enemy.velocity_y, enemy.velocity_z),
+                mass: 50.0,
+                ..Default::default()
+            });
+            physics.add_collider(handle, ColliderBundle::capsule(0.5, 1.0));
+            enemy_handles.push((handle, enemy));
+        }
+
+        // Apply AI-driven velocities and knockback impulses
+        for (handle, enemy) in &enemy_handles {
             // Find nearest player (XZ distance)
             let mut nearest_dist = f32::MAX;
             let mut nearest_pos = (0.0_f32, 0.0_f32);
@@ -115,69 +159,92 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             // Check attack cooldown
             let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
             let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
-
             let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
 
-            let mut new_x = enemy.x;
-            let mut new_z = enemy.z;
-            let mut new_rotation_y = enemy.rotation_y;
-            let mut new_last_attack_time = enemy.last_attack_time;
+            // Apply knockback impulses for this enemy (before AI velocity so
+            // we can skip chase when being knocked back)
+            let has_knockback = impulses_by_world
+                .get(world_id)
+                .is_some_and(|impulses| {
+                    impulses.iter().any(|i| i.enemy_id == enemy.id)
+                });
+            if let Some(impulses) = impulses_by_world.get(world_id) {
+                for impulse in impulses.iter().filter(|i| i.enemy_id == enemy.id) {
+                    physics.apply_impulse(
+                        *handle,
+                        Vector::new(impulse.impulse_x, impulse.impulse_y, impulse.impulse_z),
+                    );
+                }
+            }
 
-            // Face the player when not idle
+            // Move toward player when chasing — but skip when being knocked
+            // back so the impulse isn't immediately overridden by chase velocity.
+            if !has_knockback
+                && decision == combat::EnemyBehaviorKind::Chase
+                && nearest_dist > 0.01
+            {
+                let dx = nearest_pos.0 - enemy.x;
+                let dz = nearest_pos.1 - enemy.z;
+                let inv_dist = 1.0 / nearest_dist;
+                let move_x = dx * inv_dist * defaults::ENEMY_WALK_SPEED;
+                let move_z = dz * inv_dist * defaults::ENEMY_WALK_SPEED;
+                physics.set_linear_velocity(
+                    *handle,
+                    Vector::new(move_x, physics.body(*handle).linear_velocity().y, move_z),
+                );
+            }
+        }
+
+        // Step physics
+        let _result = physics.step(dt);
+
+        // Write back physics state to DB and update AI state
+        for (handle, enemy) in &enemy_handles {
+            let body = physics.body(*handle);
+
+            // AI decision (recomputed — cheap)
+            let mut nearest_dist = f32::MAX;
+            let mut nearest_pos = (0.0_f32, 0.0_f32);
+            for p in players {
+                let dx = p.x - enemy.x;
+                let dz = p.z - enemy.z;
+                let dist = (dx * dx + dz * dz).sqrt();
+                if dist < nearest_dist {
+                    nearest_dist = dist;
+                    nearest_pos = (p.x, p.z);
+                }
+            }
+            let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
+            let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
+            let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
+
+            let mut new_rotation_y = enemy.rotation_y;
             if decision != combat::EnemyBehaviorKind::Idle && nearest_dist > 0.01 {
                 let dx = nearest_pos.0 - enemy.x;
                 let dz = nearest_pos.1 - enemy.z;
                 new_rotation_y = f32::atan2(-dx, -dz);
             }
 
-            // Move toward player when chasing
-            if decision == combat::EnemyBehaviorKind::Chase && nearest_dist > 0.01 {
-                let dx = nearest_pos.0 - enemy.x;
-                let dz = nearest_pos.1 - enemy.z;
-                let inv_dist = 1.0 / nearest_dist;
-                new_x += dx * inv_dist * defaults::ENEMY_WALK_SPEED * dt;
-                new_z += dz * inv_dist * defaults::ENEMY_WALK_SPEED * dt;
-            }
+            let new_last_attack_time = if decision == combat::EnemyBehaviorKind::Attack {
+                now
+            } else {
+                enemy.last_attack_time
+            };
 
-            // Enemy-enemy separation — push apart to prevent stacking.
-            // Uses squared falloff and proportional (non-normalized) force so
-            // enemies near the edge of the radius get negligible push, avoiding
-            // visible trembling.
-            let mut sep_x = 0.0_f32;
-            let mut sep_z = 0.0_f32;
-            for other in enemies {
-                if other.id == enemy.id {
-                    continue;
-                }
-                let dx = enemy.x - other.x;
-                let dz = enemy.z - other.z;
-                let dist = (dx * dx + dz * dz).sqrt();
-                if dist < defaults::ENEMY_SEPARATION_RADIUS && dist > 0.01 {
-                    let inv = 1.0 / dist;
-                    let weight = 1.0 - dist / defaults::ENEMY_SEPARATION_RADIUS;
-                    sep_x += dx * inv * weight * weight;
-                    sep_z += dz * inv * weight * weight;
-                }
-            }
-            let sep_len = (sep_x * sep_x + sep_z * sep_z).sqrt();
-            if sep_len > 0.1 {
-                new_x += sep_x * defaults::ENEMY_SEPARATION_STRENGTH * dt;
-                new_z += sep_z * defaults::ENEMY_SEPARATION_STRENGTH * dt;
-            }
-
-            // Reset cooldown on attack
-            if decision == combat::EnemyBehaviorKind::Attack {
-                new_last_attack_time = now;
-            }
+            let pos = body.position();
+            let vel = body.linear_velocity();
 
             ctx.db.enemy().id().update(Enemy {
                 id: enemy.id,
                 enemy_type: enemy.enemy_type.clone(),
                 world_id: enemy.world_id.clone(),
-                x: new_x,
-                y: enemy.y,
-                z: new_z,
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
                 rotation_y: new_rotation_y,
+                velocity_x: vel.x,
+                velocity_y: vel.y,
+                velocity_z: vel.z,
                 animation_state: decision.as_str().to_string(),
                 health: enemy.health,
                 max_health: enemy.max_health,
@@ -187,5 +254,10 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 last_attack_time: new_last_attack_time,
             });
         }
+    }
+
+    // Delete consumed knockback impulses
+    for impulse in ctx.db.knockback_impulse().iter().collect::<Vec<_>>() {
+        ctx.db.knockback_impulse().id().delete(impulse.id);
     }
 }
