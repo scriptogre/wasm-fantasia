@@ -7,8 +7,8 @@ pub mod schema;
 
 pub use schema::*;
 
-/// Server tick interval: 100ms (10 ticks/second).
-pub const TICK_INTERVAL_MICROS: i64 = 100_000;
+/// Server tick interval: ~33ms (30 ticks/second).
+pub const TICK_INTERVAL_MICROS: i64 = 33_333;
 
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &spacetimedb::ReducerContext) {

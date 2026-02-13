@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `just web` - Start SpacetimeDB, deploy module, run WASM dev server
 - `just spacetimedb` - Only start SpacetimeDB and deploy module
 - `just check` - Pre-commit checks: clippy, fmt, machete, web compilation check
+- `just generate` - Regenerate SpacetimeDB bindings (also patches for WASM compatibility)
 
 **Release**
 - `just build` - Full release bundle (native → `dist/native/`, WASM → `dist/web/`)
@@ -18,16 +19,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Architecture
 
-Bevy 0.17 3D action RPG targeting native and WebAssembly. Flat module architecture within each crate.
+Bevy 0.18 3D action RPG targeting native and WebAssembly. Flat module architecture within each crate.
 
 ### Workspace
 
-| Crate | Purpose |
-|-------|---------|
-| `client/` | Bevy game client — all gameplay, rendering, UI, audio |
-| `shared/` | Pure functions shared between client and server (combat resolution, rules, RNG). No Bevy types. |
-| `server/` | SpacetimeDB module — authoritative game state, reducers |
-| `crates/spacetimedb-sdk/` | Local SpacetimeDB SDK fork (WASM compatibility patches) |
+| Crate                     | Purpose                                                                                         |
+|---------------------------|-------------------------------------------------------------------------------------------------|
+| `client/`                 | Bevy game client — all gameplay, rendering, UI, audio                                           |
+| `shared/`                 | Pure functions shared between client and server (combat resolution, rules, RNG). No Bevy types. |
+| `server/`                 | SpacetimeDB module — authoritative game state, reducers                                         |
+| `crates/spacetimedb-sdk/` | Local SpacetimeDB SDK fork (WASM compatibility patches)                                         |
 
 ### Major Systems (all under `client/src/`)
 
@@ -35,12 +36,12 @@ Bevy 0.17 3D action RPG targeting native and WebAssembly. Flat module architectu
 - **rules** — Data-driven behavior system via triggers and composable building blocks (stats, conditions, effects)
 - **rule_presets** — Reusable rule compositions (crit, stacking buff)
 - **player** — Character control (Tnua + Avian3d physics), animation state machine, footstep sounds
-- **networking** — SpacetimeDB connection with auto-reconnect, session persistence, dead connection reaping, player sync, combat sync, local server management (native SP), world isolation (`world_id`), auto-generated bindings
+- **networking** — SpacetimeDB connection lifecycle, single reconciler that diffs server cache against ECS, interpolation, diagnostics resource for debug UI, local server management (native SP), world isolation (`world_id`)
 - **camera** — Third-person orbit camera (Metin2-style, elevated pitch for combat visibility)
 - **audio** — bevy_seedling (Firewheel) music and sound
 - **scene** — Environment loading via bevy_skein (Blender workflow), skybox with day/night cycle
 - **screens** — Screen state management (splash, loading, title, connecting, settings, gameplay), modal system
-- **ui** — Reusable UI components: modals, settings panels, keybinding editors, interaction observers
+- **ui** — Reusable UI components: modals, settings panels, interaction observers
 - **models** — Shared data layer: input actions, game state, settings, screen states
 - **asset_loading** — Centralized asset loading with RON config, progress tracking
 - **postfx** — ReShade-style post-processing (color grading, toggle with F2)
@@ -93,7 +94,6 @@ Full-length, explicit names. No abbreviations in struct fields, function names, 
 ## Architecture Conventions
 
 Reference: `docs/architecture/PATTERNS.md`
-Refactoring plan: `REFACTOR.md`
 
 ### Module Dependency Direction
 
@@ -146,6 +146,6 @@ Every game session connects to SpacetimeDB. Native singleplayer launches a local
 
 **Direction**: `docs/architecture/VISION.md`
 
-The rules system enables data-driven reactive behaviors. The current implementation uses Rust enums for conditions/effects; the long-term plan is embedded Lua scripting over the same building blocks.
+The rules system enables data-driven reactive behaviors. The current implementation uses Rust enums for conditions/effects; the long-term plan is embedded Lua scripting over the same building blocks. Dynamic effects (buffs, debuffs, DoTs) use the `ActiveEffect` SpacetimeDB satellite table rather than hardcoded columns on entity tables.
 
 **Always prefer composing existing blocks over writing custom code.** When adding behaviors: first check if existing Stats, Conditions, Effects, and Triggers can do it. If not, add the smallest new building block. Never bypass the rules system with one-off observers.

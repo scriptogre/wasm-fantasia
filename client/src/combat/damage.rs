@@ -1,13 +1,23 @@
 use super::*;
+use bevy_tnua::builtins::TnuaBuiltinKnockback;
+use bevy_tnua::prelude::{TnuaController, TnuaUserControlsSystems};
+use crate::player::ControlScheme;
 
-/// Same interpolation speed as MP entity sync — knockback looks identical.
-/// TODO(server-physics): Remove once knockback is physics-based.
-const KNOCKBACK_LERP_SPEED: f32 = 12.0;
+/// Scale applied to the knockback vector before passing it to Tnua as a shove.
+/// The knockback value from `defaults::KNOCKBACK` is already in m/s (6.0), so
+/// the scale only needs to compensate for Tnua's walk basis counteracting the
+/// shove. 1.0 = shove velocity equals knockback value directly.
+const KNOCKBACK_SHOVE_SCALE: f32 = 1.0;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(on_damage)
         .add_observer(on_death)
-        .add_systems(Update, drain_knockback.run_if(in_state(Screen::Gameplay)));
+        .add_systems(
+            Update,
+            apply_pending_knockback
+                .after(TnuaUserControlsSystems)
+                .run_if(in_state(Screen::Gameplay)),
+        );
 }
 
 /// Observer: apply damage and knockback when [`DamageDealt`] is triggered.
@@ -19,13 +29,13 @@ pub fn plugin(app: &mut App) {
 /// (as a prediction — reconciler overwrites it from the server each frame).
 fn on_damage(
     on: On<DamageDealt>,
-    mut targets: Query<(&mut Health, Option<&mut KnockbackRemaining>)>,
+    mut targets: Query<&mut Health>,
     server_entities: Query<(), With<crate::networking::ServerId>>,
     mut commands: Commands,
 ) {
     let event = on.event();
 
-    let Ok((mut health, knockback)) = targets.get_mut(event.target) else {
+    let Ok(mut health) = targets.get_mut(event.target) else {
         return;
     };
 
@@ -37,13 +47,13 @@ fn on_damage(
         false
     } else {
         let died = health.take_damage(event.damage);
-        // Queue knockback displacement — drained smoothly by drain_knockback
-        if let Some(mut kb) = knockback {
-            kb.0 += event.force;
-        } else {
+        // Queue knockback for the next Tnua action feeding cycle.
+        // Applied by apply_pending_knockback after movement() has called
+        // initiate_action_feeding(), ensuring the shove isn't cleared.
+        if event.force.length_squared() > 0.0001 {
             commands
                 .entity(event.target)
-                .insert(KnockbackRemaining(event.force));
+                .insert(PendingKnockback(event.force * KNOCKBACK_SHOVE_SCALE));
         }
         died
     };
@@ -65,6 +75,22 @@ fn on_damage(
     }
 }
 
+/// Feed the pending knockback shove into Tnua's action pipeline.
+/// Runs after `TnuaUserControlsSystems` so that `initiate_action_feeding()`
+/// in the movement system has already been called this frame.
+fn apply_pending_knockback(
+    mut query: Query<(Entity, &PendingKnockback, &mut TnuaController<ControlScheme>)>,
+    mut commands: Commands,
+) {
+    for (entity, knockback, mut controller) in &mut query {
+        controller.action_interrupt(ControlScheme::Knockback(TnuaBuiltinKnockback {
+            shove: knockback.0,
+            force_forward: None,
+        }));
+        commands.entity(entity).remove::<PendingKnockback>();
+    }
+}
+
 /// Observer: handle entity death.
 /// Server-owned entities are handled by the reconciler, not despawned locally.
 fn on_death(
@@ -79,23 +105,4 @@ fn on_death(
     }
 
     commands.entity(event.entity).despawn();
-}
-
-/// Smoothly apply remaining knockback displacement each frame.
-/// Uses the same lerp speed as MP interpolation for visual consistency.
-/// TODO(server-physics): Delete — physics impulse + engine deceleration replaces this.
-fn drain_knockback(
-    time: Res<Time>,
-    mut query: Query<(Entity, &mut KnockbackRemaining, &mut Transform)>,
-    mut commands: Commands,
-) {
-    let alpha = (time.delta_secs() * KNOCKBACK_LERP_SPEED).min(1.0);
-    for (entity, mut kb, mut transform) in &mut query {
-        let step = kb.0 * alpha;
-        transform.translation += step;
-        kb.0 -= step;
-        if kb.0.length_squared() < 0.0001 {
-            commands.entity(entity).remove::<KnockbackRemaining>();
-        }
-    }
 }

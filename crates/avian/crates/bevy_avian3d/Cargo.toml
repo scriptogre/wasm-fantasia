@@ -1,0 +1,35 @@
+[package]
+name = "bevy_avian3d"
+version = "0.6.0-rc.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Bevy integration for avian3d physics engine"
+
+[features]
+default = ["3d", "f32", "parry-f32", "debug-plugin", "xpbd_joints", "parallel", "collider-from-mesh", "bevy_scene", "bevy_picking"]
+3d = ["avian3d/3d"]
+f32 = ["avian3d/f32"]
+f64 = ["avian3d/f64"]
+debug-plugin = ["avian3d/debug-plugin"]
+simd = ["avian3d/simd"]
+parallel = ["avian3d/parallel"]
+enhanced-determinism = ["avian3d/enhanced-determinism"]
+default-collider = ["avian3d/default-collider"]
+parry-f32 = ["avian3d/parry-f32"]
+parry-f64 = ["avian3d/parry-f64"]
+xpbd_joints = ["avian3d/xpbd_joints"]
+collider-from-mesh = ["avian3d/collider-from-mesh"]
+bevy_scene = ["avian3d/bevy_scene"]
+bevy_picking = ["avian3d/bevy_picking"]
+serialize = ["avian3d/serialize"]
+bevy_diagnostic = ["avian3d/bevy_diagnostic"]
+diagnostic_ui = ["avian3d/diagnostic_ui"]
+validate = ["avian3d/validate"]
+
+[dependencies]
+avian3d = { path = "../avian3d", features = ["bevy"] }
+
+[lints.clippy]
+alloc_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+std_instead_of_core = "warn"

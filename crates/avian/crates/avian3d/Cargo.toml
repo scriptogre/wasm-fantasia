@@ -1,0 +1,117 @@
+[package]
+name = "avian3d"
+version = "0.6.0-rc.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Joona Aalto <jondolf.dev@gmail.com>"]
+description = "An ECS-driven physics engine for the Bevy game engine"
+documentation = "https://docs.rs/avian3d"
+repository = "https://github.com/avianphysics/avian"
+readme = "README.md"
+keywords = ["gamedev", "physics", "simulation", "bevy"]
+categories = ["game-development", "science", "simulation"]
+
+[features]
+default = [
+    "3d",
+    "f32",
+    "parry-f32",
+]
+3d = []
+f32 = []
+f64 = []
+
+bevy = [
+    "dep:bevy",
+    "dep:bevy_math",
+    "dep:bevy_heavy",
+    "dep:bevy_transform_interpolation",
+    "glam_matrix_extras/bevy_reflect",
+]
+debug-plugin = ["bevy", "bevy/bevy_gizmos", "bevy/bevy_render"]
+simd = ["parry3d?/simd-stable", "parry3d-f64?/simd-stable"]
+parallel = ["dep:rayon", "bevy?/multi_threaded", "parry3d?/parallel", "parry3d-f64?/parallel"]
+enhanced-determinism = [
+    "dep:libm",
+    "glam/libm",
+    "bevy_math?/libm",
+    "bevy_heavy?/libm",
+    "parry3d?/enhanced-determinism",
+    "parry3d-f64?/enhanced-determinism",
+]
+
+default-collider = []
+# We unfortunately can't reuse the f32 and f64 features for this,
+# because Parry uses separate crates for f32 and f64.
+parry-f32 = ["f32", "dep:parry3d", "default-collider"]
+parry-f64 = ["f64", "dep:parry3d-f64", "default-collider"]
+
+# Enables the XPBD constraint solver for joints.
+xpbd_joints = []
+
+collider-from-mesh = ["bevy", "bevy/bevy_mesh", "bevy/bevy_mikktspace", "3d"]
+bevy_scene = ["bevy", "bevy/bevy_scene"]
+bevy_picking = ["bevy", "bevy/bevy_picking"]
+serialize = [
+    "dep:serde",
+    "bevy?/serialize",
+    "glam_matrix_extras/serde",
+    "bevy_heavy?/serialize",
+    "bevy_transform_interpolation?/serialize",
+    "parry3d?/serde-serialize",
+    "parry3d-f64?/serde-serialize",
+    "smallvec/serde",
+    "bitflags/serde",
+]
+
+# Enables writing timer and counter information to the `DiagnosticsStore` in `bevy_diagnostic`.
+bevy_diagnostic = ["bevy"]
+
+# Enables the `PhysicsDiagnosticsUiPlugin` for visualizing physics diagnostics data with a debug UI.
+diagnostic_ui = ["bevy_diagnostic", "bevy", "bevy/bevy_ui"]
+
+# Enables additional correctness checks and validation at the cost of worse performance.
+validate = []
+
+[lib]
+name = "avian3d"
+path = "../../src/lib.rs"
+required-features = ["3d"]
+bench = false
+
+[dependencies]
+avian_derive = { path = "../avian_derive", version = "0.2" }
+glam = { version = "0.30", default-features = false, features = ["std"] }
+bevy = { version = "0.18.0", default-features = false, features = ["std", "bevy_log"], optional = true }
+bevy_math = { version = "0.18.0", features = ["approx"], optional = true }
+glam_matrix_extras = { version = "0.2" }
+bevy_heavy = { version = "0.4", optional = true, features = ["approx"] }
+bevy_transform_interpolation = { version = "0.4", optional = true }
+libm = { version = "0.2", optional = true }
+approx = "0.5"
+parry3d = { version = "0.26", optional = true }
+parry3d-f64 = { version = "0.26", optional = true }
+obvhs = { version = "0.3" }
+obvhs_glam = { package = "glam", version = "0.31" }
+serde = { version = "1", features = ["derive"], optional = true }
+derive_more = { version = "2", features = ["from", "deref", "deref_mut", "display", "debug"] }
+log = "0.4"
+thiserror = "2"
+smallvec = "1.15"
+itertools = "0.14"
+bitflags = "2.5.0"
+thread_local = { version = "1.1" }
+disqualified = { version = "1.0" }
+rayon = { version = "1", optional = true }
+
+[dev-dependencies]
+bevy = { version = "0.18.0", features = ["3d", "ui"] }
+bevy_heavy = { version = "0.4", features = ["approx"] }
+
+[package.metadata.cargo-machete]
+ignored = ["rayon"]
+
+[lints.clippy]
+alloc_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+std_instead_of_core = "warn"

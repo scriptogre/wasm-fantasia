@@ -1,4 +1,5 @@
 use super::*;
+use avian3d::prelude::{Collider, RigidBody};
 use crate::asset_loading::Models;
 use crate::models::SpawnEnemy;
 use crate::player::{Animation, find_animation_player_descendant};
@@ -72,11 +73,15 @@ fn on_enemy_added(
         .remove::<Mesh3d>()
         .remove::<MeshMaterial3d<StandardMaterial>>();
 
-    // Insert behavior components + visibility
+    // Insert behavior, visibility, and physics (kinematic so the server
+    // controls position via interpolation, but avian3d still pushes the
+    // player's dynamic body out of the way on collision).
     commands.entity(entity).insert((
         EnemyBehavior::default(),
         EnemyAnimations::default(),
         InheritedVisibility::default(),
+        Collider::capsule(0.5, 1.0),
+        RigidBody::Kinematic,
     ));
 
     let Some(gltf) = gltf_assets.get(&models.player) else {

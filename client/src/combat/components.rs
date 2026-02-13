@@ -182,9 +182,10 @@ pub struct EnemyAnimations {
     pub current_animation: Option<crate::player::Animation>,
 }
 
-/// Remaining knockback displacement to apply smoothly over frames.
-/// TODO(server-physics): Remove once Avian3d runs on the server — knockback
-/// becomes a physics impulse and the engine handles smooth movement natively.
+/// Queued knockback shove to apply on the next Tnua action feeding cycle.
+/// Inserted by the damage observer, consumed by the knockback system that
+/// runs after movement so `initiate_action_feeding()` has already been called.
 #[derive(Component, Debug)]
 #[component(storage = "SparseSet")]
-pub struct KnockbackRemaining(pub Vec3);
+pub struct PendingKnockback(pub Vec3);
+

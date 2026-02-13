@@ -3,6 +3,11 @@ use super::*;
 /// Range for showing target indicator and soft targeting
 pub const INDICATOR_RANGE: f32 = 8.0;
 
+/// Rotation assist speed (rad/sec) during attack windup — higher for responsive aiming.
+const ASSIST_STRENGTH_WINDUP: f32 = 4.0;
+/// Rotation assist speed (rad/sec) during attack recovery — gentler to avoid jitter.
+const ASSIST_STRENGTH_RECOVERY: f32 = 2.0;
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<LockedTarget>().add_systems(
         Update,
@@ -74,9 +79,9 @@ fn soft_target_assist(
         let direction = Vec3::new(best_angle.cos(), 0.0, best_angle.sin()).normalize();
         let target_rotation = Quat::from_rotation_arc(Vec3::NEG_Z, direction);
         let assist_strength = if attack_state.progress() < 0.4 {
-            15.0
+            ASSIST_STRENGTH_WINDUP
         } else {
-            8.0
+            ASSIST_STRENGTH_RECOVERY
         };
         player_tf.rotation = player_tf
             .rotation
@@ -87,7 +92,6 @@ fn soft_target_assist(
     // Sort angles for sliding-window sweep
     angles.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    let half_arc = (ATTACK_ARC / 2.0_f32).to_radians();
     let arc_rad = ATTACK_ARC.to_radians();
     let n = angles.len();
 
@@ -98,7 +102,8 @@ fn soft_target_assist(
     }
 
     let mut best_count = 0usize;
-    let mut best_center = 0.0_f32;
+    let mut best_left = 0usize;
+    let mut best_right = 0usize;
     let mut right = 0usize;
 
     for left in 0..n {
@@ -109,8 +114,8 @@ fn soft_target_assist(
         let count = right - left;
         if count > best_count {
             best_count = count;
-            // Center of the window
-            best_center = extended[left] + half_arc;
+            best_left = left;
+            best_right = right;
         }
     }
 
@@ -118,15 +123,18 @@ fn soft_target_assist(
         return;
     }
 
-    // Convert angle back to XZ direction vector, then to a Bevy rotation
-    // atan2(z, x) angle → direction Vec3(cos, 0, sin)
-    let direction = Vec3::new(best_center.cos(), 0.0, best_center.sin()).normalize();
+    // Face the mean direction of the enemies within the best window, not the
+    // geometric center of the window itself. All angles in the window span at
+    // most arc_rad (~2.6 rad), so the arithmetic mean is safe.
+    let mean_angle: f32 =
+        extended[best_left..best_right].iter().sum::<f32>() / best_count as f32;
+    let direction = Vec3::new(mean_angle.cos(), 0.0, mean_angle.sin()).normalize();
     let target_rotation = Quat::from_rotation_arc(Vec3::NEG_Z, direction);
 
     let assist_strength = if attack_state.progress() < 0.4 {
-        15.0
+        ASSIST_STRENGTH_WINDUP
     } else {
-        8.0
+        ASSIST_STRENGTH_RECOVERY
     };
 
     player_tf.rotation = player_tf

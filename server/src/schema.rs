@@ -49,6 +49,11 @@ pub struct Enemy {
     pub z: f32,
     pub rotation_y: f32,
 
+    // Velocity (for physics-based movement and knockback)
+    pub velocity_x: f32,
+    pub velocity_y: f32,
+    pub velocity_z: f32,
+
     // Animation
     pub animation_state: String,
 
@@ -99,6 +104,20 @@ pub struct TickSchedule {
     #[auto_inc]
     pub scheduled_id: u64,
     pub scheduled_at: spacetimedb::ScheduleAt,
+}
+
+/// Knockback impulse to be applied to an enemy during the next physics tick.
+/// Inserted by combat reducers, consumed by game_tick.
+#[spacetimedb::table(name = knockback_impulse, public)]
+pub struct KnockbackImpulse {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub enemy_id: u64,
+    pub world_id: String,
+    pub impulse_x: f32,
+    pub impulse_y: f32,
+    pub impulse_z: f32,
 }
 
 /// Tracks which worlds are paused (singleplayer ESC menu).

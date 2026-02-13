@@ -8,7 +8,6 @@ mod enemy;
 pub mod events;
 mod feedback;
 mod floaters;
-mod separation;
 mod sound;
 mod targeting;
 mod vfx;
@@ -25,7 +24,6 @@ pub fn plugin(app: &mut App) {
         components::plugin,
         attack::plugin,
         damage::plugin,
-        separation::plugin,
         enemy::plugin,
         feedback::plugin,
         floaters::plugin,

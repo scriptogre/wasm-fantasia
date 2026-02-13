@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 spacetimedb = "=1.12.0"
 wasm-fantasia-shared = { path = "../shared" }
 glam = { workspace = true }
+avian3d = { path = "../crates/avian/crates/avian3d", default-features = false, features = ["3d", "f32", "parry-f32", "enhanced-determinism"] }
 
 [lints]
 workspace = true

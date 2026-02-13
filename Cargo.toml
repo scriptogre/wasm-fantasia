@@ -13,9 +13,10 @@ collapsible_if = "allow"
 nonstandard_macro_braces = "warn"
 
 [patch.crates-io]
-firewheel-web-audio = { git = "https://github.com/CorvusPrudens/firewheel-web-audio", rev = "ad810af" }
+firewheel-web-audio = { path = "crates/firewheel-web-audio" }
 tokio-tungstenite-wasm = { path = "crates/tokio-tungstenite-wasm" }
-bevy_third_person_camera = { git = "https://github.com/olekspickle/bevy_third_person_camera", branch = "main" }
+bevy_third_person_camera = { path = "crates/bevy_third_person_camera" }
+bevy-tnua-avian3d = { path = "crates/bevy-tnua-avian3d" }
 
 [profile.dev]
 opt-level = 1

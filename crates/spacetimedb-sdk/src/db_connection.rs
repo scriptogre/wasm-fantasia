@@ -281,8 +281,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
             ParsedMessage::ProcedureResult { request_id, result } => {
                 let ctx = self.make_event_ctx(());
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .procedure_callbacks
                     .resolve(&ctx, request_id, result);
                 Ok(())
@@ -358,8 +357,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                     .subscriptions
                     .register_legacy_subscription(sub_id, on_applied, on_error);
                 self.send_chan
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .as_mut()
                     .ok_or(crate::Error::Disconnected)?
                     .unbounded_send(ws::ClientMessage::Subscribe(ws::Subscribe {
@@ -378,8 +376,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                     .register_subscription(query_id, handle.clone());
                 if let Some(msg) = handle.start() {
                     self.send_chan
-                        .lock()
-                        .unwrap()
+                        .wasm_lock()
                         .as_mut()
                         .ok_or(crate::Error::Disconnected)?
                         .unbounded_send(ws::ClientMessage::SubscribeMulti(msg))
@@ -402,8 +399,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                     }
                     PendingUnsubscribeResult::SendUnsubscribe(m) => {
                         self.send_chan
-                            .lock()
-                            .unwrap()
+                            .wasm_lock()
                             .as_mut()
                             .ok_or(crate::Error::Disconnected)?
                             .unbounded_send(ws::ClientMessage::UnsubscribeMulti(m))
@@ -429,8 +425,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                     flags,
                 });
                 self.send_chan
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .as_mut()
                     .ok_or(crate::Error::Disconnected)?
                     .unbounded_send(msg)
@@ -446,8 +441,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                 // We need to include a request_id in the message so that we can find the callback once it completes.
                 let request_id = next_request_id();
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .procedure_callbacks
                     .insert(request_id, callback);
 
@@ -458,8 +452,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                     flags: ws::CallProcedureFlags::Default,
                 });
                 self.send_chan
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .as_mut()
                     .ok_or(crate::Error::Disconnected)?
                     .unbounded_send(msg)
@@ -482,8 +475,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                 callback,
             } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .db_callbacks
                     .get_table_callbacks(table)
                     .register_on_insert(callback_id, callback);
@@ -494,8 +486,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                 callback,
             } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .db_callbacks
                     .get_table_callbacks(table)
                     .register_on_delete(callback_id, callback);
@@ -506,8 +497,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                 callback,
             } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .db_callbacks
                     .get_table_callbacks(table)
                     .register_on_update(callback_id, callback);
@@ -518,31 +508,27 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                 callback,
             } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .reducer_callbacks
                     .register_on_reducer(reducer, callback_id, callback);
             }
             PendingMutation::RemoveInsertCallback { table, callback_id } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .db_callbacks
                     .get_table_callbacks(table)
                     .remove_on_insert(callback_id);
             }
             PendingMutation::RemoveDeleteCallback { table, callback_id } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .db_callbacks
                     .get_table_callbacks(table)
                     .remove_on_delete(callback_id);
             }
             PendingMutation::RemoveUpdateCallback { table, callback_id } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .db_callbacks
                     .get_table_callbacks(table)
                     .remove_on_update(callback_id);
@@ -552,8 +538,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                 callback_id,
             } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .reducer_callbacks
                     .remove_on_reducer(reducer, callback_id);
             }
@@ -562,8 +547,7 @@ impl<M: SpacetimeModule> DbContextImpl<M> {
                 flags,
             } => {
                 self.inner
-                    .lock()
-                    .unwrap()
+                    .wasm_lock()
                     .call_reducer_flags
                     .set_flags(reducer_name, flags);
             }

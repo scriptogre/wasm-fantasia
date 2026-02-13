@@ -2,12 +2,11 @@
 name = "wasm_fantasia"
 edition = "2024"
 version = "0.1.5"
-authors = ["Oleks Pickle <22867443+olekspickle@users.noreply.github.com>"]
+authors = ["Oleks Pickle <22867443+olekspickle@users.noreply.github.com>", "Christian Tanul <git@christiantanul.com>"]
 license = "MIT OR Apache-2.0"
 exclude = ["assets"]
-repository = "https://github.com/olekspickle/wasm_fantasia"
-description = "Simple but comprehensive 3D RPG game template with gamepad support"
-keywords = ["bevy", "game", "template", "devkit", "third person", "topdown", "gamedev"]
+description = "3D action RPG targeting native and WebAssembly"
+keywords = ["bevy", "game", "rpg", "wasm", "multiplayer"]
 
 [features]
 default = [
@@ -56,7 +55,7 @@ bevy-inspector-egui = { version = "^0.36", optional = true }
 bevy_skein = "^0.5"                                                                         # blender integration
 # iyes_perf_ui = "0.5"                                                                      # diagnostics overlay
 
-avian3d = { version = "^0.5", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics
+avian3d = { package = "bevy_avian3d", path = "../crates/avian/crates/bevy_avian3d", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics (forked)
 bevy_seedling = { version = "^0.7", features = ["hrtf", "ogg", "web_audio"] }                # audio plugin using firewheel
 bevy_shuffle_bag = "^0.4"                                                                   # random container for audio
 firewheel = "^0.10"
@@ -68,7 +67,7 @@ web-time = "1.1"
 
 # character control
 bevy-tnua = "^0.30"                                                                         # floating character control
-bevy-tnua-avian3d = "^0.10"                                                                 # tnua-avian interaction
+bevy-tnua-avian3d = "^0.10"                                                                 # tnua-avian interaction (patched in workspace for avian3d 0.6)
 bevy_enhanced_input = { version = "^0.23", features = ["serialize"] }                       # keyboard/gamepad input
 
 # dialogue
