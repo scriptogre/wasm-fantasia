@@ -19,6 +19,7 @@ pub mod rules;
 pub mod scene;
 pub mod screens;
 pub mod ui;
+pub mod venom_voice;
 
 use asset_loading::{AudioSources, Models, ResourceHandles};
 use audio::*;
@@ -63,6 +64,7 @@ fn main() {
     ));
 
     app.add_plugins(networking::NetworkingPlugin);
+    app.add_plugins(venom_voice::plugin);
 
     // override default font
     load_internal_binary_asset!(

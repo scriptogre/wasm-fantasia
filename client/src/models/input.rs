@@ -14,11 +14,12 @@ pub fn plugin(app: &mut App) {
         .add_observer(add_player_ctx)
         .add_observer(log_navigate)
         .add_observer(log_jump)
-        .add_observer(log_dash)
+        .add_observer(log_sprint)
         .add_observer(log_crouch_start)
         .add_observer(log_crouch_end)
         .add_observer(log_attack)
-        .add_observer(log_escape);
+        .add_observer(log_escape)
+        .add_observer(log_venom_speak);
 }
 
 fn log_gamepad_events(
@@ -76,8 +77,8 @@ fn log_jump(_on: On<Start<Jump>>) {
     debug!("Jump");
 }
 
-fn log_dash(_on: On<Start<Dash>>) {
-    debug!("Dash");
+fn log_sprint(_on: On<Start<Sprint>>) {
+    debug!("Sprint");
 }
 
 fn log_crouch_start(_on: On<Start<Crouch>>) {
@@ -94,6 +95,10 @@ fn log_attack(_on: On<Start<Attack>>) {
 
 fn log_escape(_on: On<Start<Escape>>) {
     debug!("Escape");
+}
+
+fn log_venom_speak(_on: On<Start<VenomSpeak>>) {
+    debug!("VenomSpeak");
 }
 
 markers!(GlobalCtx, PlayerCtx, ModalCtx);
@@ -120,6 +125,10 @@ pub struct Dash;
 
 #[derive(InputAction)]
 #[action_output(bool)]
+pub struct Sprint;
+
+#[derive(InputAction)]
+#[action_output(bool)]
 pub struct Crouch;
 
 #[derive(InputAction)]
@@ -141,6 +150,10 @@ pub struct SpawnEnemy;
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct ClearEnemies;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct VenomSpeak;
 
 #[derive(InputAction)]
 #[action_output(Vec2)]
@@ -190,8 +203,8 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
             bindings![KeyCode::Space, GamepadButton::South],
         ),
         (
-            Action::<Dash>::new(),
-            bindings![KeyCode::ShiftLeft, GamepadButton::East],
+            Action::<Sprint>::new(),
+            bindings![KeyCode::ShiftLeft, GamepadButton::LeftTrigger],
         ),
         (
             Action::<Attack>::new(),
@@ -221,6 +234,10 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         (
             Action::<ClearEnemies>::new(),
             bindings![KeyCode::KeyQ],
+        ),
+        (
+            Action::<VenomSpeak>::new(),
+            bindings![KeyCode::KeyT],
         ),
     ]));
 }
