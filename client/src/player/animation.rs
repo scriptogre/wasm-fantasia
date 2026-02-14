@@ -1,5 +1,6 @@
 use super::*;
 use crate::combat::AttackState;
+use crate::player::control::{GroundPoundState, JumpCharge, LandingStun, RollingState};
 use crate::rules::{Stat, Stats};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 
@@ -8,21 +9,12 @@ mod anim_knobs {
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
 }
 
-/// Track dash animation phase timing (Tnua's states transition too fast)
-#[derive(Component, Default)]
-pub struct DashAnimationState {
-    pub active: bool,
-    pub timer: f32,
-}
-
 /// Track which attack animation is playing to detect new attacks reliably
 #[derive(Component, Default)]
 pub struct AttackAnimationState {
     /// Last attack count we started an animation for
     pub last_attack_count: u32,
 }
-
-const SLIDE_START_DURATION: f32 = 0.05; // How long to play SlideStart before SlideLoop
 
 /// GLTF animation clips the game uses. Single source of truth for both local and remote players.
 /// Unused clips are skipped during loading to save memory (especially on WASM).
@@ -34,11 +26,12 @@ pub enum Animation {
     JumpStart,
     JumpLand,
     JumpLoop,
+    NinjaJumpStart,
+    NinjaJumpIdle,
+    NinjaJumpLand,
+    Roll,
     CrouchFwd,
     CrouchIdle,
-    SlideStart,
-    SlideLoop,
-    SlideExit,
     HitChest,
     PunchJab,
     PunchCross,
@@ -57,11 +50,12 @@ impl Animation {
         Self::JumpStart,
         Self::JumpLand,
         Self::JumpLoop,
+        Self::NinjaJumpStart,
+        Self::NinjaJumpIdle,
+        Self::NinjaJumpLand,
+        Self::Roll,
         Self::CrouchFwd,
         Self::CrouchIdle,
-        Self::SlideStart,
-        Self::SlideLoop,
-        Self::SlideExit,
         Self::HitChest,
         Self::PunchJab,
         Self::PunchCross,
@@ -80,11 +74,12 @@ impl Animation {
             Self::JumpStart => "Jump_Start",
             Self::JumpLand => "Jump_Land",
             Self::JumpLoop => "Jump_Loop",
+            Self::NinjaJumpStart => "NinjaJump_Start",
+            Self::NinjaJumpIdle => "NinjaJump_Idle_Loop",
+            Self::NinjaJumpLand => "NinjaJump_Land",
+            Self::Roll => "Roll",
             Self::CrouchFwd => "Crouch_Fwd_Loop",
             Self::CrouchIdle => "Crouch_Idle_Loop",
-            Self::SlideStart => "Slide_Start",
-            Self::SlideLoop => "Slide_Loop",
-            Self::SlideExit => "Slide_Exit",
             Self::HitChest => "Hit_Chest",
             Self::PunchJab => "Punch_Jab",
             Self::PunchCross => "Punch_Cross",
@@ -224,28 +219,31 @@ pub fn prepare_animations(
 /// all tnua related stuff and it should still work
 pub fn animating(
     cfg: Res<Config>,
-    time: Res<Time>,
     mut player_q: Query<(
         &TnuaController<ControlScheme>,
         &mut Player,
         &mut TnuaAnimatingState<AnimationState>,
         Option<&AttackState>,
         Option<&Stats>,
-        &mut DashAnimationState,
         &mut AttackAnimationState,
+        &JumpCharge,
+        Option<&RollingState>,
+        Option<&LandingStun>,
+        Option<&GroundPoundState>,
     )>,
     mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
-    // An actual game should match the animation player and the controller. Here we cheat for
-    // simplicity and use the only controller and only player.
     let Ok((
         controller,
         mut player,
         mut animating_state,
         attack_state,
         stats,
-        mut dash_anim,
         mut attack_anim,
+        jump_charge,
+        rolling_state,
+        landing_stun,
+        ground_pound,
     )) = player_q.single_mut()
     else {
         return;
@@ -271,10 +269,8 @@ pub fn animating(
     const BLEND_DURATION: Duration = Duration::from_millis(150);
 
     // Check if player is attacking - override Tnua animation
-    // Dash takes visual priority over attack (attack hit still triggers via timer)
-    let dashing = controller.action_discriminant() == Some(ControlSchemeActionDiscriminant::Dash);
     if let Some(attack) = attack_state {
-        if attack.is_attacking() && !dashing {
+        if attack.is_attacking() {
             player.animation_state = AnimationState::Attack;
             // Keep TnuaAnimatingState in sync (for when attack ends)
             animating_state.update_by_discriminant(AnimationState::Attack);
@@ -327,6 +323,86 @@ pub fn animating(
         }
     }
 
+    // Dodge roll: force Roll animation while rolling.
+    if rolling_state.is_some() {
+        player.animation_state = AnimationState::Roll;
+        let directive = animating_state.update_by_discriminant(AnimationState::Roll);
+        if let TnuaAnimatingStateDirective::Alter { .. } = directive {
+            if let Some(index) = player.animations.get(&Animation::Roll) {
+                transitions
+                    .play(&mut animation_player, *index, Duration::from_millis(120))
+                    .set_speed(1.3);
+            }
+        }
+        return;
+    }
+
+    // Ground pound: diving animation while slamming down.
+    if ground_pound.is_some() {
+        player.animation_state = AnimationState::GroundPound;
+        let directive = animating_state.update_by_discriminant(AnimationState::GroundPound);
+        if let TnuaAnimatingStateDirective::Alter { .. } = directive {
+            if let Some(index) = player.animations.get(&Animation::NinjaJumpStart) {
+                transitions
+                    .play(&mut animation_player, *index, Duration::from_millis(80))
+                    .set_speed(1.5);
+            }
+        }
+        return;
+    }
+
+    // Landing stun: force landing animation on impact — slow crouch-in, fast snap-out.
+    if let Some(stun) = landing_stun {
+        player.animation_state = AnimationState::LandingStun;
+        let directive = animating_state.update_by_discriminant(AnimationState::LandingStun);
+        match directive {
+            TnuaAnimatingStateDirective::Alter { .. } => {
+                if let Some(index) = player.animations.get(&Animation::NinjaJumpLand) {
+                    transitions
+                        .play(&mut animation_player, *index, Duration::from_millis(50))
+                        .set_speed(0.6);
+                }
+            }
+            TnuaAnimatingStateDirective::Maintain { .. } => {
+                // Ramp from 0.6x (dramatic impact) to 1.8x (fast recovery)
+                let frac = stun.timer.fraction();
+                let speed = 0.6 + 1.2 * frac;
+                for (_, active_animation) in animation_player.playing_animations_mut() {
+                    active_animation.set_speed(speed);
+                }
+            }
+        }
+        return;
+    }
+
+    // Charge jump: wind-up pose while storing energy — only show when grounded.
+    // Uses JumpStart animation slowed down to convey coiling power.
+    if jump_charge.charging && controller.basis_memory.standing_on_entity().is_some() {
+        player.animation_state = AnimationState::JumpStart;
+        let directive = animating_state.update_by_discriminant(AnimationState::JumpStart);
+        match directive {
+            TnuaAnimatingStateDirective::Alter { .. } => {
+                if let Some(index) = player.animations.get(&Animation::NinjaJumpStart) {
+                    transitions
+                        .play(&mut animation_player, *index, Duration::from_millis(100))
+                        .set_speed(0.3);
+                }
+            }
+            TnuaAnimatingStateDirective::Maintain { .. } => {
+                // Hold near the coiled-down pose — slow down further as charge builds
+                let charge_t = (jump_charge.charge_time
+                    / crate::player::control::MAX_CHARGE_TIME)
+                    .clamp(0.0, 1.0);
+                // Start at 0.3x, slow to near-freeze at 0.05x as energy builds
+                let speed = 0.3 - 0.25 * charge_t;
+                for (_, active_animation) in animation_player.playing_animations_mut() {
+                    active_animation.set_speed(speed);
+                }
+            }
+        }
+        return;
+    }
+
     // Here we use the data from TnuaController to determine what the character is currently doing,
     // so that we can later use that information to decide which animation to play.
     let current_animation = match controller.current_action.as_ref() {
@@ -376,31 +452,12 @@ pub fn animating(
             };
             AnimationState::Climb(0.3 * climbing_velocity.dot(Vec3::Y))
         }
-        Some(ControlSchemeActionState::Dash(state)) => {
-            // Track dash timing ourselves since Tnua transitions too fast
-            if !dash_anim.active {
-                // Just started dashing
-                dash_anim.active = true;
-                dash_anim.timer = 0.0;
-            } else {
-                dash_anim.timer += time.delta_secs();
-            }
-
-            match &state.memory {
-                TnuaBuiltinDashMemory::PreDash => AnimationState::SlideStart,
-                TnuaBuiltinDashMemory::During { .. } if dash_anim.timer < SLIDE_START_DURATION => {
-                    AnimationState::SlideStart
-                }
-                TnuaBuiltinDashMemory::During { .. } => AnimationState::SlideLoop,
-                TnuaBuiltinDashMemory::Braking { .. } => AnimationState::SlideExit,
-            }
+        Some(ControlSchemeActionState::Dash(_)) => {
+            // Dash action may still fire from Tnua internals; treat as no-op
+            AnimationState::StandIdle
         }
-        Some(ControlSchemeActionState::WallSlide(_)) => {
-            dash_anim.active = false; // Reset dash tracker
-            AnimationState::WallSlide
-        }
+        Some(ControlSchemeActionState::WallSlide(_)) => AnimationState::WallSlide,
         None => {
-            dash_anim.active = false; // Reset dash tracker
             // If there is no action going on, we'll base the animation on the state of the basis.
             if controller.basis_memory.standing_on_entity().is_none() {
                 AnimationState::Fall
@@ -446,8 +503,6 @@ pub fn animating(
                     animation_player.seek_all_by(0.0);
                 }
             }
-            // Slide states - let them play through naturally
-            AnimationState::SlideStart | AnimationState::SlideLoop | AnimationState::SlideExit => {}
             // For other animations we don't have anything special to do - so we just let them continue.
             _ => {}
         },
@@ -482,36 +537,36 @@ pub fn animating(
                     }
                 }
                 AnimationState::JumpStart => {
-                    if let Some(index) = player.animations.get(&Animation::JumpStart) {
+                    if let Some(index) = player.animations.get(&Animation::NinjaJumpStart) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(0.01);
+                            .set_speed(1.5);
                     }
                 }
                 AnimationState::JumpLand => {
-                    if let Some(index) = player.animations.get(&Animation::JumpLand) {
+                    if let Some(index) = player.animations.get(&Animation::NinjaJumpLand) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(0.01);
+                            .set_speed(1.5);
                     }
                 }
                 AnimationState::JumpLoop => {
-                    if let Some(index) = player.animations.get(&Animation::JumpLoop) {
+                    if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(0.5)
+                            .set_speed(1.0)
                             .repeat();
                     }
                 }
                 AnimationState::WallJump => {
-                    if let Some(index) = player.animations.get(&Animation::JumpStart) {
+                    if let Some(index) = player.animations.get(&Animation::NinjaJumpStart) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
                             .set_speed(2.0);
                     }
                 }
                 AnimationState::WallSlide => {
-                    if let Some(index) = player.animations.get(&Animation::JumpLoop) {
+                    if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
                             .set_speed(1.0)
@@ -519,7 +574,7 @@ pub fn animating(
                     }
                 }
                 AnimationState::Fall => {
-                    if let Some(index) = player.animations.get(&Animation::JumpLoop) {
+                    if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
                             .set_speed(1.0)
@@ -542,27 +597,11 @@ pub fn animating(
                             .repeat();
                     }
                 }
-                AnimationState::SlideStart => {
-                    if let Some(index) = player.animations.get(&Animation::SlideStart) {
-                        transitions
-                            .play(&mut animation_player, *index, Duration::from_millis(30))
-                            .set_speed(2.5); // Fast wind-up
-                    }
+                AnimationState::Roll => {
+                    // Handled in early return above
                 }
-                AnimationState::SlideLoop => {
-                    if let Some(index) = player.animations.get(&Animation::SlideLoop) {
-                        transitions
-                            .play(&mut animation_player, *index, Duration::from_millis(50))
-                            .set_speed(1.0)
-                            .repeat();
-                    }
-                }
-                AnimationState::SlideExit => {
-                    if let Some(index) = player.animations.get(&Animation::SlideExit) {
-                        transitions
-                            .play(&mut animation_player, *index, Duration::from_millis(50))
-                            .set_speed(1.2);
-                    }
+                AnimationState::LandingStun => {
+                    // Handled in early return above
                 }
                 AnimationState::KnockBack => {
                     if let Some(index) = player.animations.get(&Animation::HitChest) {
@@ -572,14 +611,14 @@ pub fn animating(
                     }
                 }
                 AnimationState::Climb(speed) => {
-                    if let Some(index) = player.animations.get(&Animation::JumpLoop) {
+                    if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
                             .set_speed(*speed)
                             .repeat();
                     }
                 }
-                AnimationState::Attack => {
+                AnimationState::Attack | AnimationState::GroundPound => {
                     // Handled in early return above
                 }
             }

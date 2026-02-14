@@ -14,9 +14,9 @@
         zoom: (4.0, 16.0),  // More zoomed out for better combat visibility
         movement: (
             speed: 8,
+            sprint_factor: 1.5,
             crouch_factor: 0.2,
             actions_in_air: 3,
-            dash_distance: 3,
             idle_to_run_threshold: 0.01,
         ),
         hitbox:(

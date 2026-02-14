@@ -126,7 +126,10 @@ impl Plugin for NetworkingPlugin {
                     .before(GameplayCleanup),
             );
 
-        app.add_observer(combat::send_attack_to_server).add_systems(
+        app.add_observer(combat::send_attack_to_server)
+            .add_observer(combat::send_ground_pound_to_server)
+            .add_observer(combat::send_landing_aoe_to_server)
+            .add_systems(
             Update,
             (
                 connection::reap_dead_connections.run_if(resource_exists::<SpacetimeDbConnection>),

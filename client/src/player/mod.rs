@@ -1,4 +1,4 @@
-use crate::combat::{AttackPhase, AttackState, Combatant, Health, PlayerCombatant};
+use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
 use crate::rule_presets;
 use crate::rules::{Stat, Stats};
 use crate::*;
@@ -116,22 +116,22 @@ pub fn spawn_player(
                         spring_strength: 500.0,
                         spring_dampening: 1.0,
                         acceleration: 80.0,
-                        air_acceleration: 50.0,
-                        free_fall_extra_gravity: 70.0,
+                        air_acceleration: 60.0,
+                        free_fall_extra_gravity: 60.0,
                         tilt_offset_angvel: 7.0,
                         tilt_offset_angacl: 700.0,
                         turning_angvel: 12.0,
                         ..default()
                     },
                     jump: TnuaBuiltinJumpConfig {
-                        height: 5.0,
-                        takeoff_extra_gravity: 40.0,
-                        fall_extra_gravity: 35.0,
-                        shorten_extra_gravity: 80.0,
-                        peak_prevention_at_upward_velocity: 0.5,
+                        height: control::MIN_JUMP_HEIGHT,
+                        takeoff_extra_gravity: 20.0,
+                        fall_extra_gravity: 60.0,
+                        shorten_extra_gravity: 10.0,
+                        peak_prevention_at_upward_velocity: 2.0,
                         peak_prevention_extra_gravity: 25.0,
-                        reschedule_cooldown: Some(0.1),
-                        disable_force_forward_after_peak: true,
+                        reschedule_cooldown: Some(0.05),
+                        disable_force_forward_after_peak: false,
                         ..default()
                     },
                     dash: TnuaBuiltinDashConfig {
@@ -151,7 +151,6 @@ pub fn spawn_player(
                 // By locking the rotation we can prevent this.
                 LockedAxes::ROTATION_LOCKED.unlock_rotation_y(),
                 TnuaAnimatingState::<AnimationState>::default(),
-                animation::DashAnimationState::default(),
                 animation::AttackAnimationState::default(),
                 // A sensor shape is not strictly necessary, but without it we'll get weird results.
                 TnuaAvian3dSensorShape(collider.clone()),
@@ -166,6 +165,8 @@ pub fn spawn_player(
             (
                 JumpTimer(Timer::from_seconds(cfg.timers.jump, TimerMode::Repeating)),
                 StepTimer(Timer::from_seconds(cfg.timers.step, TimerMode::Repeating)),
+                control::JumpCharge::default(),
+                control::AirborneTracker::default(),
                 InheritedVisibility::default(), // silence the warning because of adding SceneRoot as a child
             ),
             // combat components

@@ -23,7 +23,6 @@ pub struct InputSettings {
     pub backward: [Binding; BINDINGS_COUNT],
     pub right: [Binding; BINDINGS_COUNT],
     pub jump: [Binding; BINDINGS_COUNT],
-    pub dash: [Binding; BINDINGS_COUNT],
     pub sprint: [Binding; BINDINGS_COUNT],
     pub crouch: [Binding; BINDINGS_COUNT],
     pub attack: [Binding; BINDINGS_COUNT],
@@ -36,7 +35,6 @@ impl InputSettings {
         self.backward.fill(Binding::None);
         self.right.fill(Binding::None);
         self.jump.fill(Binding::None);
-        self.dash.fill(Binding::None);
         self.sprint.fill(Binding::None);
         self.crouch.fill(Binding::None);
         self.attack.fill(Binding::None);
@@ -63,7 +61,6 @@ impl Default for InputSettings {
                 Binding::None,
             ],
             jump: [KeyCode::Space.into(), Binding::None, Binding::None],
-            dash: [KeyCode::AltLeft.into(), Binding::None, Binding::None],
             crouch: [KeyCode::ControlLeft.into(), Binding::None, Binding::None],
             sprint: [KeyCode::ShiftLeft.into(), Binding::None, Binding::None],
             attack: [MouseButton::Left.into(), Binding::None, Binding::None],

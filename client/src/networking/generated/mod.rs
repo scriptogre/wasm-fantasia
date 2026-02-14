@@ -15,9 +15,11 @@ pub mod combat_event_type;
 pub mod enemy_table;
 pub mod enemy_type;
 pub mod game_tick_reducer;
+pub mod ground_pound_hit_reducer;
 pub mod join_game_reducer;
 pub mod knockback_impulse_table;
 pub mod knockback_impulse_type;
+pub mod landing_aoe_hit_reducer;
 pub mod leave_game_reducer;
 pub mod on_disconnect_reducer;
 pub mod pause_world_reducer;
@@ -43,9 +45,15 @@ pub use combat_event_type::CombatEvent;
 pub use enemy_table::*;
 pub use enemy_type::Enemy;
 pub use game_tick_reducer::{game_tick, set_flags_for_game_tick, GameTickCallbackId};
+pub use ground_pound_hit_reducer::{
+    ground_pound_hit, set_flags_for_ground_pound_hit, GroundPoundHitCallbackId,
+};
 pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
 pub use knockback_impulse_table::*;
 pub use knockback_impulse_type::KnockbackImpulse;
+pub use landing_aoe_hit_reducer::{
+    landing_aoe_hit, set_flags_for_landing_aoe_hit, LandingAoeHitCallbackId,
+};
 pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
 pub use on_disconnect_reducer::{
     on_disconnect, set_flags_for_on_disconnect, OnDisconnectCallbackId,
@@ -79,9 +87,20 @@ pub enum Reducer {
     GameTick {
         args: TickSchedule,
     },
+    GroundPoundHit {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
     JoinGame {
         name: Option<String>,
         world_id: String,
+    },
+    LandingAoeHit {
+        velocity_y: f32,
+        x: f32,
+        y: f32,
+        z: f32,
     },
     LeaveGame,
     OnDisconnect,
@@ -116,7 +135,9 @@ impl __sdk::Reducer for Reducer {
             Reducer::AttackHit => "attack_hit",
             Reducer::ClearEnemies => "clear_enemies",
             Reducer::GameTick { .. } => "game_tick",
+            Reducer::GroundPoundHit { .. } => "ground_pound_hit",
             Reducer::JoinGame { .. } => "join_game",
+            Reducer::LandingAoeHit { .. } => "landing_aoe_hit",
             Reducer::LeaveGame => "leave_game",
             Reducer::OnDisconnect => "on_disconnect",
             Reducer::PauseWorld => "pause_world",
@@ -150,6 +171,10 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
                 )?
                 .into(),
             ),
+            "ground_pound_hit" => Ok(__sdk::parse_reducer_args::<
+                ground_pound_hit_reducer::GroundPoundHitArgs,
+            >("ground_pound_hit", &value.args)?
+            .into()),
             "join_game" => Ok(
                 __sdk::parse_reducer_args::<join_game_reducer::JoinGameArgs>(
                     "join_game",
@@ -157,6 +182,10 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
                 )?
                 .into(),
             ),
+            "landing_aoe_hit" => Ok(__sdk::parse_reducer_args::<
+                landing_aoe_hit_reducer::LandingAoeHitArgs,
+            >("landing_aoe_hit", &value.args)?
+            .into()),
             "leave_game" => Ok(
                 __sdk::parse_reducer_args::<leave_game_reducer::LeaveGameArgs>(
                     "leave_game",

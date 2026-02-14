@@ -386,3 +386,39 @@ pub fn resolve_combat(input: &CombatInput) -> CombatOutput {
         hit_any,
     }
 }
+
+// ============================================================================
+// AOE CONSTANTS — shared between client and server
+// ============================================================================
+
+/// Ground pound AOE constants.
+pub mod ground_pound {
+    pub const RADIUS: f32 = 6.0;
+    pub const KNOCKBACK: f32 = 20.0;
+    pub const LAUNCH: f32 = 8.0;
+    pub const DAMAGE_MULTIPLIER: f32 = 1.0;
+    /// Minimum downward velocity to allow ground pound activation.
+    pub const MIN_VELOCITY: f32 = 2.0;
+}
+
+/// Landing AOE constants — high-velocity landings damage nearby enemies.
+pub mod landing_aoe {
+    /// Minimum fall velocity to trigger landing AOE damage.
+    pub const MIN_VELOCITY: f32 = 10.0;
+    /// Fall velocity that gives maximum AOE radius and knockback.
+    pub const MAX_VELOCITY: f32 = 25.0;
+    pub const MIN_RADIUS: f32 = 3.0;
+    pub const MAX_RADIUS: f32 = 8.0;
+    pub const KNOCKBACK: f32 = 14.0;
+    pub const LAUNCH: f32 = 6.0;
+    pub const DAMAGE_MULTIPLIER: f32 = 8.0;
+
+    /// Compute velocity-scaled AOE parameters. Returns (radius, knockback, launch).
+    pub fn scaled_params(velocity_y: f32) -> (f32, f32, f32) {
+        let t = ((velocity_y - MIN_VELOCITY) / (MAX_VELOCITY - MIN_VELOCITY)).clamp(0.0, 1.0);
+        let radius = MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * t;
+        let kb = KNOCKBACK * (0.5 + 0.5 * t);
+        let launch = LAUNCH * (0.5 + 0.5 * t);
+        (radius, kb, launch)
+    }
+}

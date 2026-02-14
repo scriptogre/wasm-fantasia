@@ -42,13 +42,13 @@ pub enum AnimationState {
     Fall,
     Crouch(f32),
     CrouchIdle,
-    SlideStart,
-    SlideLoop,
-    SlideExit,
+    Roll,
+    LandingStun,
     WallSlide,
     WallJump,
     KnockBack,
     Attack,
+    GroundPound,
 }
 
 impl AnimationState {
@@ -65,11 +65,11 @@ impl AnimationState {
             Self::JumpLoop | Self::WallJump => "Jump",
             Self::JumpLand => "JumpLand",
             Self::Fall | Self::WallSlide => "Fall",
-            Self::SlideStart => "SlideStart",
-            Self::SlideLoop => "SlideLoop",
-            Self::SlideExit => "SlideExit",
+            Self::Roll => "Roll",
+            Self::LandingStun => "LandingStun",
             Self::KnockBack => "KnockBack",
             Self::Attack => "Idle", // Attacks handled by attack_sequence/attack_animation
+            Self::GroundPound => "Fall", // Diving pose for remote players
         }
     }
 
@@ -85,9 +85,8 @@ impl AnimationState {
             "Jump" => Self::JumpLoop,
             "JumpLand" => Self::JumpLand,
             "Fall" => Self::Fall,
-            "SlideStart" => Self::SlideStart,
-            "SlideLoop" => Self::SlideLoop,
-            "SlideExit" => Self::SlideExit,
+            "Roll" => Self::Roll,
+            "LandingStun" => Self::LandingStun,
             "KnockBack" => Self::KnockBack,
             _ => Self::StandIdle,
         }
@@ -101,20 +100,20 @@ impl AnimationState {
             Self::StandIdle => (Animation::Idle, 1.0, true),
             Self::Run(_) => (Animation::JogFwd, 1.0, true),
             Self::Sprint(_) => (Animation::Sprint, 1.0, true),
-            Self::JumpStart => (Animation::JumpStart, 1.0, false),
-            Self::JumpLoop => (Animation::JumpLoop, 0.5, true),
-            Self::JumpLand => (Animation::JumpLand, 1.0, false),
-            Self::Fall => (Animation::JumpLoop, 1.0, true),
+            Self::JumpStart => (Animation::NinjaJumpStart, 1.5, false),
+            Self::JumpLoop => (Animation::NinjaJumpIdle, 1.0, true),
+            Self::JumpLand => (Animation::NinjaJumpLand, 1.5, false),
+            Self::Fall => (Animation::NinjaJumpIdle, 1.0, true),
             Self::Crouch(_) => (Animation::CrouchFwd, 1.0, true),
             Self::CrouchIdle => (Animation::CrouchIdle, 1.0, true),
-            Self::SlideStart => (Animation::SlideStart, 2.5, false),
-            Self::SlideLoop => (Animation::SlideLoop, 1.0, true),
-            Self::SlideExit => (Animation::SlideExit, 1.2, false),
-            Self::WallSlide => (Animation::JumpLoop, 1.0, true),
-            Self::WallJump => (Animation::JumpStart, 2.0, false),
-            Self::Climb(_) => (Animation::JumpLoop, 1.0, true),
+            Self::Roll => (Animation::Roll, 2.0, false),
+            Self::LandingStun => (Animation::NinjaJumpLand, 1.2, false),
+            Self::WallSlide => (Animation::NinjaJumpIdle, 1.0, true),
+            Self::WallJump => (Animation::NinjaJumpStart, 2.0, false),
+            Self::Climb(_) => (Animation::NinjaJumpIdle, 1.0, true),
             Self::KnockBack => (Animation::HitChest, 1.0, false),
             Self::Attack => (Animation::Idle, 1.0, true),
+            Self::GroundPound => (Animation::NinjaJumpStart, 1.5, false),
         }
     }
 }

@@ -22,11 +22,9 @@ pub fn plugin(app: &mut App) {
 
 /// Observer: apply damage and knockback when [`DamageDealt`] is triggered.
 ///
-/// Server-owned entities: health AND knockback are server-authoritative —
-/// the reconciler handles both. VFX still fires for immediate feedback.
-///
-/// The local player is the only entity whose health is mutated client-side
-/// (as a prediction — reconciler overwrites it from the server each frame).
+/// Server-owned entities: health is server-authoritative (reconciler syncs it).
+/// Knockback is always applied client-side for immediate visual feedback — the
+/// server also applies it via KnockbackImpulse, and reconciler corrects drift.
 fn on_damage(
     on: On<DamageDealt>,
     mut targets: Query<&mut Health>,
@@ -39,24 +37,21 @@ fn on_damage(
         return;
     };
 
-    // Server-owned entities: server handles health + knockback, reconciler propagates.
-    // Only the local player (no ServerId) gets client-side damage applied.
     let is_server_owned = server_entities.get(event.target).is_ok();
 
     let died = if is_server_owned {
+        // Server handles health — but apply knockback locally for responsive feel
         false
     } else {
-        let died = health.take_damage(event.damage);
-        // Queue knockback for the next Tnua action feeding cycle.
-        // Applied by apply_pending_knockback after movement() has called
-        // initiate_action_feeding(), ensuring the shove isn't cleared.
-        if event.force.length_squared() > 0.0001 {
-            commands
-                .entity(event.target)
-                .insert(PendingKnockback(event.force * KNOCKBACK_SHOVE_SCALE));
-        }
-        died
+        health.take_damage(event.damage)
     };
+
+    // Always apply knockback client-side for immediate visual response
+    if event.force.length_squared() > 0.0001 {
+        commands
+            .entity(event.target)
+            .insert(PendingKnockback(event.force * KNOCKBACK_SHOVE_SCALE));
+    }
 
     // Trigger hit feedback (VFX, damage numbers, screen shake, etc.) regardless
     commands.trigger(HitLanded {

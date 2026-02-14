@@ -7,13 +7,14 @@ use bevy::{
 };
 
 mod assist;
+mod juice;
 mod third_person;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_systems(Startup, spawn_camera);
 
-    app.add_plugins((third_person::plugin, assist::plugin));
+    app.add_plugins((third_person::plugin, assist::plugin, juice::plugin));
 }
 
 pub fn spawn_camera(mut commands: Commands) {

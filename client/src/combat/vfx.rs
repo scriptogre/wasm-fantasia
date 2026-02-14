@@ -5,6 +5,7 @@ use bevy_open_vat::prelude::OpenVatExtension;
 use super::enemy::VatMeshLink;
 use crate::combat::{AttackIntent, HitLanded, MeshHeight, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::Session;
+use crate::player::control::{Footstep, GroundPoundImpact, JumpLaunched, LandingImpact};
 
 type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
 
@@ -24,6 +25,13 @@ pub fn plugin(app: &mut App) {
     app.add_observer(on_impact_vfx)
         .add_systems(Startup, setup_impact_assets)
         .add_systems(Update, tick_impact_vfx);
+
+    app.add_observer(on_launch_shockwave)
+        .add_observer(on_landing_vfx)
+        .add_observer(on_ground_pound_vfx)
+        .add_observer(on_footstep_dust)
+        .add_systems(Startup, setup_shockwave_assets)
+        .add_systems(Update, tick_shockwave_vfx);
 }
 
 // ── Hit Flash ───────────────────────────────────────────────────────
@@ -456,5 +464,325 @@ fn tick_impact_vfx(
         let scale = 0.1 + ease * 1.5;
         let fade = 1.0 - t;
         transform.scale = Vec3::splat(scale * fade);
+    }
+}
+
+// ── Launch Shockwave VFX ────────────────────────────────────────────
+
+#[derive(Resource)]
+struct ShockwaveAssets {
+    ring_mesh: Handle<Mesh>,
+    ring_material: Handle<StandardMaterial>,
+    dust_mesh: Handle<Mesh>,
+    dust_material: Handle<StandardMaterial>,
+}
+
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct ShockwaveRing {
+    timer: f32,
+    duration: f32,
+    max_scale: f32,
+}
+
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct ShockwaveDust {
+    timer: f32,
+    duration: f32,
+    direction: Vec3,
+    speed: f32,
+    start_pos: Vec3,
+}
+
+fn setup_shockwave_assets(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // Flat ring (washer shape) for the expanding shockwave
+    let ring_mesh = meshes.add(Annulus::new(0.6, 1.0));
+    let ring_material = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.8, 0.9, 1.0, 0.6),
+        emissive: LinearRgba::new(3.0, 4.0, 8.0, 1.0),
+        alpha_mode: AlphaMode::Add,
+        unlit: true,
+        cull_mode: None,
+        ..default()
+    });
+
+    // Chunky dust puffs — large enough to read at game camera distance
+    let dust_mesh = meshes.add(Sphere::new(0.2));
+    let dust_material = materials.add(StandardMaterial {
+        base_color: crate::ui::colors::SAND_YELLOW.with_alpha(0.8),
+        emissive: LinearRgba::new(5.0, 3.5, 1.0, 1.0),
+        alpha_mode: AlphaMode::Add,
+        unlit: true,
+        ..default()
+    });
+
+    commands.insert_resource(ShockwaveAssets {
+        ring_mesh,
+        ring_material,
+        dust_mesh,
+        dust_material,
+    });
+}
+
+fn on_launch_shockwave(
+    on: On<JumpLaunched>,
+    assets: Option<Res<ShockwaveAssets>>,
+    mut commands: Commands,
+) {
+    let Some(assets) = assets else {
+        return;
+    };
+
+    let event = on.event();
+    let t = (event.charge_time / crate::player::control::MAX_CHARGE_TIME).clamp(0.0, 1.0);
+    let max_scale = 0.5 + 2.5 * t;
+    let pos = event.position - Vec3::Y * 0.8; // At feet level
+
+    // Expanding ground ring
+    commands.spawn((
+        ShockwaveRing {
+            timer: 0.0,
+            duration: 0.3,
+            max_scale,
+        },
+        Mesh3d(assets.ring_mesh.clone()),
+        MeshMaterial3d(assets.ring_material.clone()),
+        Transform::from_translation(pos)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
+            .with_scale(Vec3::splat(0.1)),
+    ));
+
+    let mut rng = rand::rng();
+
+    // Dust chunks that arc outward and fall back down (gravity in tick)
+    let num_particles = 10 + (6.0 * t) as usize;
+    for i in 0..num_particles {
+        let angle = (i as f32 / num_particles as f32) * std::f32::consts::TAU
+            + rand::Rng::random_range(&mut rng, -0.2..0.2);
+        let loft = rand::Rng::random_range(&mut rng, 2.0..5.0) * (0.5 + 0.5 * t);
+        let dir = Vec3::new(angle.cos(), loft, angle.sin()).normalize();
+        let speed = rand::Rng::random_range(&mut rng, 3.0..7.0) * (0.5 + 0.5 * t);
+        let duration = rand::Rng::random_range(&mut rng, 0.3..0.5);
+        let scale = rand::Rng::random_range(&mut rng, 0.5..1.2) * (0.6 + 0.4 * t);
+
+        commands.spawn((
+            ShockwaveDust {
+                timer: 0.0,
+                duration,
+                direction: dir,
+                speed,
+                start_pos: pos,
+            },
+            Mesh3d(assets.dust_mesh.clone()),
+            MeshMaterial3d(assets.dust_material.clone()),
+            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
+        ));
+    }
+}
+
+fn tick_shockwave_vfx(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut rings: Query<(Entity, &mut ShockwaveRing, &mut Transform), Without<ShockwaveDust>>,
+    mut dust: Query<(Entity, &mut ShockwaveDust, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, mut ring, mut transform) in rings.iter_mut() {
+        ring.timer += dt;
+        let t = (ring.timer / ring.duration).min(1.0);
+
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        // Cubic ease-out for expansion
+        let ease = 1.0 - (1.0 - t).powi(3);
+        let scale = 0.1 + ease * ring.max_scale;
+        let fade = 1.0 - t;
+        // Annulus is flat — scale XZ uniformly, keep Y thin
+        transform.scale = Vec3::new(scale, 0.1 * fade, scale);
+    }
+
+    for (entity, mut dust, mut transform) in dust.iter_mut() {
+        dust.timer += dt;
+        let t = (dust.timer / dust.duration).min(1.0);
+
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        // Ballistic arc: initial velocity + gravity pulls dust back down
+        let time = dust.timer;
+        let gravity = -12.0;
+        let pos = dust.start_pos + dust.direction * dust.speed * time;
+        transform.translation = Vec3::new(pos.x, pos.y + 0.5 * gravity * time * time, pos.z);
+
+        // Don't let dust sink below spawn point (ground level)
+        if transform.translation.y < dust.start_pos.y {
+            transform.translation.y = dust.start_pos.y;
+        }
+
+        let fade = 1.0 - t;
+        transform.scale = Vec3::splat(0.8 * fade);
+    }
+}
+
+// ── Landing Impact VFX ──────────────────────────────────────────────
+
+const LANDING_MAX_VELOCITY: f32 = 25.0;
+
+fn on_landing_vfx(
+    on: On<LandingImpact>,
+    assets: Option<Res<ShockwaveAssets>>,
+    mut commands: Commands,
+) {
+    let Some(assets) = assets else {
+        return;
+    };
+
+    let event = on.event();
+    let t = ((event.velocity_y - 3.0) / (LANDING_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
+    let pos = event.position - Vec3::Y * 0.8;
+
+    // Landing ground ring
+    let max_scale = 0.5 + 3.0 * t;
+    commands.spawn((
+        ShockwaveRing {
+            timer: 0.0,
+            duration: 0.35,
+            max_scale,
+        },
+        Mesh3d(assets.ring_mesh.clone()),
+        MeshMaterial3d(assets.ring_material.clone()),
+        Transform::from_translation(pos)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
+            .with_scale(Vec3::splat(0.1)),
+    ));
+
+    let mut rng = rand::rng();
+
+    // Debris chunks that arc outward and fall back (gravity in tick)
+    let num_particles = 12 + (10.0 * t) as usize;
+    for i in 0..num_particles {
+        let angle = (i as f32 / num_particles as f32) * std::f32::consts::TAU
+            + rand::Rng::random_range(&mut rng, -0.2..0.2);
+        let loft = rand::Rng::random_range(&mut rng, 2.0..6.0) * (0.4 + 0.6 * t);
+        let dir = Vec3::new(angle.cos(), loft, angle.sin()).normalize();
+        let speed = rand::Rng::random_range(&mut rng, 3.0..8.0) * (0.4 + 0.6 * t);
+        let duration = rand::Rng::random_range(&mut rng, 0.35..0.55);
+        let scale = rand::Rng::random_range(&mut rng, 0.5..1.3) * (0.5 + 0.6 * t);
+
+        commands.spawn((
+            ShockwaveDust {
+                timer: 0.0,
+                duration,
+                direction: dir,
+                speed,
+                start_pos: pos,
+            },
+            Mesh3d(assets.dust_mesh.clone()),
+            MeshMaterial3d(assets.dust_material.clone()),
+            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
+        ));
+    }
+}
+
+// ── Ground Pound VFX ────────────────────────────────────────────────
+
+fn on_ground_pound_vfx(
+    on: On<GroundPoundImpact>,
+    assets: Option<Res<ShockwaveAssets>>,
+    mut commands: Commands,
+) {
+    let Some(assets) = assets else {
+        return;
+    };
+
+    let event = on.event();
+    let pos = event.position - Vec3::Y * 0.8;
+
+    // Large expanding ground ring
+    commands.spawn((
+        ShockwaveRing {
+            timer: 0.0,
+            duration: 0.4,
+            max_scale: 4.0,
+        },
+        Mesh3d(assets.ring_mesh.clone()),
+        MeshMaterial3d(assets.ring_material.clone()),
+        Transform::from_translation(pos)
+            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
+            .with_scale(Vec3::splat(0.1)),
+    ));
+
+    let mut rng = rand::rng();
+
+    // Dense debris cloud — arcing outward with strong loft (gravity in tick)
+    for i in 0..24 {
+        let angle = (i as f32 / 24.0) * std::f32::consts::TAU
+            + rand::Rng::random_range(&mut rng, -0.15..0.15);
+        let loft = rand::Rng::random_range(&mut rng, 3.0..7.0);
+        let dir = Vec3::new(angle.cos(), loft, angle.sin()).normalize();
+        let speed = rand::Rng::random_range(&mut rng, 4.0..10.0);
+        let duration = rand::Rng::random_range(&mut rng, 0.4..0.6);
+        let scale = rand::Rng::random_range(&mut rng, 0.6..1.4);
+
+        commands.spawn((
+            ShockwaveDust {
+                timer: 0.0,
+                duration,
+                direction: dir,
+                speed,
+                start_pos: pos,
+            },
+            Mesh3d(assets.dust_mesh.clone()),
+            MeshMaterial3d(assets.dust_material.clone()),
+            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
+        ));
+    }
+}
+
+// ── Footstep Dust ───────────────────────────────────────────────────
+
+fn on_footstep_dust(
+    on: On<Footstep>,
+    assets: Option<Res<ShockwaveAssets>>,
+    mut commands: Commands,
+) {
+    let Some(assets) = assets else {
+        return;
+    };
+
+    let event = on.event();
+    let pos = event.position - Vec3::Y * 0.8;
+    let mut rng = rand::rng();
+
+    for _ in 0..5 {
+        let angle = rand::Rng::random_range(&mut rng, 0.0..std::f32::consts::TAU);
+        let vert = rand::Rng::random_range(&mut rng, 0.1..0.3);
+        let dir = Vec3::new(angle.cos(), vert, angle.sin()).normalize();
+        let speed = rand::Rng::random_range(&mut rng, 1.5..3.0);
+        let duration = rand::Rng::random_range(&mut rng, 0.2..0.35);
+
+        commands.spawn((
+            ShockwaveDust {
+                timer: 0.0,
+                duration,
+                direction: dir,
+                speed,
+                start_pos: pos,
+            },
+            Mesh3d(assets.dust_mesh.clone()),
+            MeshMaterial3d(assets.dust_material.clone()),
+            Transform::from_translation(pos).with_scale(Vec3::splat(0.5)),
+        ));
     }
 }
