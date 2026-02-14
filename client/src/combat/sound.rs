@@ -13,12 +13,22 @@ fn punch_sound(
     _on: On<HitLanded>,
     state: Res<Session>,
     settings: Res<Settings>,
+    time: Res<Time>,
+    mut last_play: Local<f32>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
 ) {
     if state.muted {
         return;
     }
+
+    // Throttle: skip if a hit sound already played this frame (multiple
+    // HitLanded events fire per attack when hitting many enemies at once).
+    let now = time.elapsed_secs();
+    if (now - *last_play).abs() < f32::EPSILON {
+        return;
+    }
+    *last_play = now;
 
     let mut rng = rand::rng();
     let handle = sources.punches.pick(&mut rng);

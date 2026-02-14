@@ -1,7 +1,7 @@
 use super::*;
 use crate::asset_loading::Models;
-use crate::models::SpawnEnemy;
-use avian3d::prelude::{Collider, RigidBody};
+use crate::models::{ClearEnemies, SpawnEnemy};
+use avian3d::prelude::{Collider, RigidBody, Sensor};
 use bevy::pbr::ExtendedMaterial;
 use bevy::render::storage::ShaderStorageBuffer;
 use bevy_open_vat::data::VatInstanceData;
@@ -14,6 +14,7 @@ type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(spawn_enemy_in_front)
+        .add_observer(clear_all_enemies)
         .add_observer(on_enemy_added)
         .add_systems(
             Update,
@@ -125,6 +126,23 @@ fn spawn_enemy_in_front(
     warn!("No server connection — cannot spawn enemies");
 }
 
+/// Delete all enemies in the current world via server reducer.
+fn clear_all_enemies(
+    _on: On<Start<ClearEnemies>>,
+    conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+) {
+    if let Some(conn) = conn {
+        use spacetimedb_sdk::DbContext;
+        if conn.conn.is_active() {
+            crate::networking::combat::server_clear_enemies(&conn);
+            info!("Requested enemy clear from server");
+            return;
+        }
+    }
+
+    warn!("No server connection — cannot clear enemies");
+}
+
 // =============================================================================
 // On<Add, Enemy> — attach VAT model to any Enemy entity
 // =============================================================================
@@ -143,14 +161,15 @@ fn on_enemy_added(
         .remove::<Mesh3d>()
         .remove::<MeshMaterial3d<StandardMaterial>>();
 
-    // Insert behavior, visibility, and physics (kinematic so the server
-    // controls position via interpolation, but avian3d still pushes the
-    // player's dynamic body out of the way on collision).
+    // Sensor collider: no physical contact forces, so surrounding enemies
+    // can't launch the player. Combat knockback is server-authoritative via
+    // Tnua shoves. The Collider is retained for spatial queries.
     commands.entity(entity).insert((
         EnemyBehavior::default(),
         InheritedVisibility::default(),
         Collider::capsule(0.5, 1.0),
         RigidBody::Kinematic,
+        Sensor,
     ));
 
     let Some(gltf) = gltf_assets.get(&models.enemy_scene) else {

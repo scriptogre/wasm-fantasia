@@ -74,7 +74,8 @@ fn on_hit_flash(
     flash_mat.base.emissive = LinearRgba::new(2.0, 1.8, 1.5, 1.0);
     let flash_handle = vat_materials.add(flash_mat);
 
-    commands.entity(mesh_entity).insert((
+    // try_insert: entity may be despawned between command buffer and apply.
+    commands.entity(mesh_entity).try_insert((
         MeshMaterial3d(flash_handle),
         HitFlash {
             timer: 0.0,
@@ -97,8 +98,8 @@ fn tick_hit_flash(
             vat_materials.remove(&mat_handle.0);
             commands
                 .entity(entity)
-                .insert(MeshMaterial3d(flash.shared_material.clone()))
-                .remove::<HitFlash>();
+                .try_insert(MeshMaterial3d(flash.shared_material.clone()))
+                .try_remove::<HitFlash>();
         }
     }
 }

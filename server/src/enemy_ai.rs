@@ -57,6 +57,29 @@ pub fn spawn_enemies(
     }
 }
 
+/// Delete all enemies in the caller's world.
+#[spacetimedb::reducer]
+pub fn clear_enemies(ctx: &spacetimedb::ReducerContext) {
+    let Some(player) = ctx.db.player().identity().find(ctx.sender) else {
+        return;
+    };
+
+    let world_id = player.world_id;
+    let enemies: Vec<Enemy> = ctx
+        .db
+        .enemy()
+        .iter()
+        .filter(|e| e.world_id == world_id)
+        .collect();
+
+    let count = enemies.len();
+    for enemy in enemies {
+        ctx.db.enemy().delete(enemy);
+    }
+
+    spacetimedb::log::info!("Cleared {} enemies from world {}", count, world_id);
+}
+
 // =============================================================================
 // Server-side enemy AI tick
 // =============================================================================

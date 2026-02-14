@@ -9,6 +9,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub mod active_effect_table;
 pub mod active_effect_type;
 pub mod attack_hit_reducer;
+pub mod clear_enemies_reducer;
 pub mod combat_event_table;
 pub mod combat_event_type;
 pub mod enemy_table;
@@ -33,31 +34,34 @@ pub mod world_pause_type;
 
 pub use active_effect_table::*;
 pub use active_effect_type::ActiveEffect;
-pub use attack_hit_reducer::{AttackHitCallbackId, attack_hit, set_flags_for_attack_hit};
+pub use attack_hit_reducer::{attack_hit, set_flags_for_attack_hit, AttackHitCallbackId};
+pub use clear_enemies_reducer::{
+    clear_enemies, set_flags_for_clear_enemies, ClearEnemiesCallbackId,
+};
 pub use combat_event_table::*;
 pub use combat_event_type::CombatEvent;
 pub use enemy_table::*;
 pub use enemy_type::Enemy;
-pub use game_tick_reducer::{GameTickCallbackId, game_tick, set_flags_for_game_tick};
-pub use join_game_reducer::{JoinGameCallbackId, join_game, set_flags_for_join_game};
+pub use game_tick_reducer::{game_tick, set_flags_for_game_tick, GameTickCallbackId};
+pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
 pub use knockback_impulse_table::*;
 pub use knockback_impulse_type::KnockbackImpulse;
-pub use leave_game_reducer::{LeaveGameCallbackId, leave_game, set_flags_for_leave_game};
+pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
 pub use on_disconnect_reducer::{
-    OnDisconnectCallbackId, on_disconnect, set_flags_for_on_disconnect,
+    on_disconnect, set_flags_for_on_disconnect, OnDisconnectCallbackId,
 };
-pub use pause_world_reducer::{PauseWorldCallbackId, pause_world, set_flags_for_pause_world};
+pub use pause_world_reducer::{pause_world, set_flags_for_pause_world, PauseWorldCallbackId};
 pub use player_table::*;
 pub use player_type::Player;
-pub use respawn_reducer::{RespawnCallbackId, respawn, set_flags_for_respawn};
-pub use resume_world_reducer::{ResumeWorldCallbackId, resume_world, set_flags_for_resume_world};
+pub use respawn_reducer::{respawn, set_flags_for_respawn, RespawnCallbackId};
+pub use resume_world_reducer::{resume_world, set_flags_for_resume_world, ResumeWorldCallbackId};
 pub use spawn_enemies_reducer::{
-    SpawnEnemiesCallbackId, set_flags_for_spawn_enemies, spawn_enemies,
+    set_flags_for_spawn_enemies, spawn_enemies, SpawnEnemiesCallbackId,
 };
 pub use tick_schedule_table::*;
 pub use tick_schedule_type::TickSchedule;
 pub use update_position_reducer::{
-    UpdatePositionCallbackId, set_flags_for_update_position, update_position,
+    set_flags_for_update_position, update_position, UpdatePositionCallbackId,
 };
 pub use world_pause_table::*;
 pub use world_pause_type::WorldPause;
@@ -71,6 +75,7 @@ pub use world_pause_type::WorldPause;
 
 pub enum Reducer {
     AttackHit,
+    ClearEnemies,
     GameTick {
         args: TickSchedule,
     },
@@ -109,6 +114,7 @@ impl __sdk::Reducer for Reducer {
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::AttackHit => "attack_hit",
+            Reducer::ClearEnemies => "clear_enemies",
             Reducer::GameTick { .. } => "game_tick",
             Reducer::JoinGame { .. } => "join_game",
             Reducer::LeaveGame => "leave_game",
@@ -133,6 +139,10 @@ impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
                 )?
                 .into(),
             ),
+            "clear_enemies" => Ok(__sdk::parse_reducer_args::<
+                clear_enemies_reducer::ClearEnemiesArgs,
+            >("clear_enemies", &value.args)?
+            .into()),
             "game_tick" => Ok(
                 __sdk::parse_reducer_args::<game_tick_reducer::GameTickArgs>(
                     "game_tick",
@@ -599,21 +609,21 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
 /// either a [`DbConnection`] or an [`EventContext`] and operate on either.
 pub trait RemoteDbContext:
     __sdk::DbContext<
-        DbView = RemoteTables,
-        Reducers = RemoteReducers,
-        SetReducerFlags = SetReducerFlags,
-        SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
-    >
+    DbView = RemoteTables,
+    Reducers = RemoteReducers,
+    SetReducerFlags = SetReducerFlags,
+    SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
+>
 {
 }
 impl<
-    Ctx: __sdk::DbContext<
+        Ctx: __sdk::DbContext<
             DbView = RemoteTables,
             Reducers = RemoteReducers,
             SetReducerFlags = SetReducerFlags,
             SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
         >,
-> RemoteDbContext for Ctx
+    > RemoteDbContext for Ctx
 {
 }
 

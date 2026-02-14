@@ -3,6 +3,7 @@
 use super::SpacetimeDbConnection;
 use super::generated::attack_hit_reducer::attack_hit;
 use super::generated::respawn_reducer::respawn;
+use super::generated::clear_enemies_reducer::clear_enemies;
 use super::generated::spawn_enemies_reducer::spawn_enemies;
 use crate::combat::{AttackIntent, Health, PlayerCombatant};
 use crate::models::Player as LocalPlayer;
@@ -35,6 +36,13 @@ pub fn request_respawn_on_death(
         if let Err(e) = conn.conn.reducers.respawn() {
             warn!("Failed to send respawn: {:?}", e);
         }
+    }
+}
+
+/// Send clear_enemies request to server.
+pub fn server_clear_enemies(conn: &SpacetimeDbConnection) {
+    if let Err(e) = conn.conn.reducers.clear_enemies() {
+        warn!("Failed to send clear_enemies: {:?}", e);
     }
 }
 

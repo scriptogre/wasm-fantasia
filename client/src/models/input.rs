@@ -139,6 +139,10 @@ pub struct Escape;
 pub struct SpawnEnemy;
 
 #[derive(InputAction)]
+#[action_output(bool)]
+pub struct ClearEnemies;
+
+#[derive(InputAction)]
 #[action_output(Vec2)]
 struct NavigateModal;
 
@@ -213,6 +217,10 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         (
             Action::<SpawnEnemy>::new(),
             bindings![KeyCode::KeyE, GamepadButton::RightThumb],
+        ),
+        (
+            Action::<ClearEnemies>::new(),
+            bindings![KeyCode::KeyQ],
         ),
     ]));
 }
