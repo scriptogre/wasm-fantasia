@@ -180,21 +180,24 @@ fn on_attack_hit(
         on_tick: on_tick.map(|r| r.0.clone()).unwrap_or_default(),
     };
 
-    // Build target list with entity mapping
+    let attacker_pos = transform.translation;
+
+    // Build target list with entity mapping, filtering out targets too far
+    // above or below the attacker (the cone check is 2D on the XZ plane).
+    let vertical_reach = defaults::ATTACK_VERTICAL_REACH;
     let target_list: Vec<(Entity, Vec3)> = targets
         .iter()
+        .filter(|(_, tf, _)| (tf.translation.y - attacker_pos.y).abs() <= vertical_reach)
         .map(|(e, tf, _)| (e, tf.translation))
         .collect();
-    let hit_targets: Vec<HitTarget> = targets
+    let hit_targets: Vec<HitTarget> = target_list
         .iter()
-        .map(|(e, tf, h)| HitTarget {
+        .map(|&(e, pos)| HitTarget {
             id: e.to_bits(),
-            pos: Vec2::new(tf.translation.x, tf.translation.z),
-            health: h.current,
+            pos: Vec2::new(pos.x, pos.z),
+            health: targets.get(e).map(|(_, _, h)| h.current).unwrap_or(0.0),
         })
         .collect();
-
-    let attacker_pos = transform.translation;
     let forward = transform.forward().as_vec3();
     let forward_xz = Vec2::new(forward.x, forward.z).normalize_or_zero();
     let origin_xz = Vec2::new(attacker_pos.x, attacker_pos.z);

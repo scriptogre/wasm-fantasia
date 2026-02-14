@@ -8,6 +8,8 @@ pub mod defaults {
     pub const CRIT_MULTIPLIER: f32 = 2.5;
     pub const ATTACK_RANGE: f32 = 3.6;
     pub const ATTACK_ARC: f32 = 150.0;
+    /// Max vertical distance between attacker and target for a hit to land.
+    pub const ATTACK_VERTICAL_REACH: f32 = 2.0;
     /// Knockback velocity in m/s applied as an impulse. Crits multiply this by CritMultiplier.
     pub const KNOCKBACK: f32 = 6.0;
     pub const ATTACK_SPEED: f32 = 1.0;
