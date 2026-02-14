@@ -30,12 +30,8 @@ fn main() {
 
     let window = WindowPlugin {
         primary_window: Some(Window {
-            title: "Bevy Game".to_string(),
-            // Bind to canvas included in `index.html` for custom wasm js logic
-            // canvas: Some("#bevy".to_owned()),
+            title: "WASM Fantasia".to_string(),
             fit_canvas_to_parent: true,
-            // Tells wasm not to override default event handling, like F5 and Ctrl+R
-            prevent_default_event_handling: false,
             ..default()
         }),
         ..default()
