@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-
 use spacetimedb_sdk::{DbContext, Table};
 use wasm_fantasia_shared::combat::EnemyBehaviorKind;
 

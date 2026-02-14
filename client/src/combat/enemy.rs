@@ -1,15 +1,16 @@
 use super::*;
-use avian3d::prelude::{Collider, RigidBody};
-use bevy::mesh::MeshTag;
-use bevy::pbr::ExtendedMaterial;
-use bevy::render::storage::ShaderStorageBuffer;
-use bevy::scene::SceneInstanceReady;
-use bevy_enhanced_input::prelude::Start;
-use bevy_open_vat::data::VatInstanceData;
-use bevy_open_vat::prelude::*;
-
 use crate::asset_loading::Models;
 use crate::models::SpawnEnemy;
+use avian3d::prelude::{Collider, RigidBody};
+use bevy::pbr::ExtendedMaterial;
+use bevy::render::storage::ShaderStorageBuffer;
+use bevy_open_vat::data::VatInstanceData;
+use bevy::scene::SceneInstanceReady;
+use bevy_enhanced_input::prelude::Start;
+use bevy_open_vat::prelude::*;
+
+/// bevy_open_vat's material type with StandardMaterial base.
+type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(spawn_enemy_in_front)
@@ -23,68 +24,7 @@ pub fn plugin(app: &mut App) {
                     .in_set(PostPhysicsAppSystems::PlayAnimations)
                     .run_if(in_state(Screen::Gameplay)),
             ),
-        )
-        .add_systems(
-            PostUpdate,
-            (
-                bevy_open_vat::system::update_anim_controller,
-                debug_vat_ssbo,
-            ),
         );
-}
-
-fn debug_vat_ssbo(
-    mat_query: Query<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
-    materials: Res<Assets<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
-    buffers: Res<Assets<ShaderStorageBuffer>>,
-    controllers: Query<&VatAnimationController>,
-    time: Res<Time>,
-    mut timer: Local<f32>,
-    mut logged: Local<bool>,
-) {
-    if *logged {
-        return;
-    }
-    // Wait 5 seconds for everything to stabilize
-    *timer += time.delta_secs();
-    if *timer < 5.0 {
-        return;
-    }
-    *logged = true;
-
-    let controller_count = controllers.iter().len();
-    warn!("VAT SSBO DEBUG: {} controllers", controller_count);
-
-    for mat_handle in mat_query.iter().take(1) {
-        if let Some(mat) = materials.get(&mat_handle.0) {
-            warn!(
-                "  Material found. min_pos={:?} max_pos={:?} frame_count={} y_res={}",
-                mat.extension.min_pos,
-                mat.extension.max_pos,
-                mat.extension.frame_count,
-                mat.extension.y_resolution,
-            );
-            if let Some(buffer) = buffers.get(&mat.extension.instance) {
-                match &buffer.data {
-                    Some(raw) => {
-                        warn!("  SSBO: {} bytes (expect 16 per entry, {} entries)", raw.len(), raw.len() / 16);
-                        if raw.len() >= 16 {
-                            let sf = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
-                            let fc = u32::from_le_bytes([raw[4], raw[5], raw[6], raw[7]]);
-                            let rate = f32::from_le_bytes([raw[8], raw[9], raw[10], raw[11]]);
-                            let ofs = f32::from_le_bytes([raw[12], raw[13], raw[14], raw[15]]);
-                            warn!("  Entry[0]: start_frame={sf} frame_count={fc} rate={rate:.4} offset={ofs:.4}");
-                        }
-                    }
-                    None => warn!("  SSBO: data is None (empty buffer)"),
-                }
-            } else {
-                warn!("  SSBO: buffer handle invalid (get returned None)");
-            }
-        } else {
-            warn!("  Material handle invalid");
-        }
-    }
 }
 
 // =============================================================================
@@ -95,20 +35,19 @@ fn debug_vat_ssbo(
 /// first gameplay frame when all assets are loaded.
 #[derive(Resource)]
 struct VatEnemyState {
-    material: Handle<ExtendedMaterial<StandardMaterial, OpenVatExtension>>,
-    next_mesh_tag: u32,
+    material: Handle<VatMaterial>,
 }
 
 /// Links an enemy entity to the child mesh entity that holds the
 /// `VatAnimationController`, so `animate_enemies` can update the clip.
 #[derive(Component)]
-struct VatMeshLink(Entity);
+pub(super) struct VatMeshLink(pub Entity);
 
 fn initialize_vat_enemy_resources(
     models: Res<Models>,
     images: Res<Assets<Image>>,
     remap_infos: Res<Assets<RemapInfo>>,
-    mut vat_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
+    mut vat_materials: ResMut<Assets<VatMaterial>>,
     mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
     mut commands: Commands,
 ) {
@@ -120,11 +59,27 @@ fn initialize_vat_enemy_resources(
     };
 
     let y_resolution = image.texture_descriptor.size.height as f32;
-    let buffer = buffers.add(ShaderStorageBuffer::from(&Vec::<VatInstanceData>::new()));
+
+    // Seed with one zeroed entry so the GPU buffer has non-zero arrayLength.
+    // bevy_open_vat's update_instance_data system overwrites this every frame.
+    let mut buffer = ShaderStorageBuffer::default();
+    buffer.set_data(vec![VatInstanceData::default()]);
+    let buffer = buffers.add(buffer);
 
     let material = vat_materials.add(ExtendedMaterial {
         base: StandardMaterial {
-            base_color: crate::ui::colors::HEALTH_RED,
+            base_color: Color::srgb(0.816, 0.125, 0.125),
+            double_sided: true,
+            cull_mode: None,
+            // Force forward rendering. The project uses deferred rendering by
+            // default, but bevy_open_vat overrides vertex_shader() (forward) and
+            // prepass_vertex_shader() (prepass). In deferred mode, opaque meshes
+            // render through the G-buffer prepass — which DOES use the prepass
+            // vertex shader. However, bevy_open_vat's prepass shader has its own
+            // Vertex struct that can conflict with deferred-specific shader_defs
+            // (NORMAL_PREPASS_OR_DEFERRED_PREPASS). Forward rendering avoids this
+            // issue entirely.
+            opaque_render_method: bevy::pbr::OpaqueRendererMethod::Forward,
             ..default()
         },
         extension: OpenVatExtension {
@@ -134,14 +89,10 @@ fn initialize_vat_enemy_resources(
             max_pos: remap_info.os_remap.max.into(),
             y_resolution,
             instance: buffer,
-            ..Default::default()
         },
     });
 
-    commands.insert_resource(VatEnemyState {
-        material,
-        next_mesh_tag: 0,
-    });
+    commands.insert_resource(VatEnemyState { material });
 }
 
 // =============================================================================
@@ -210,7 +161,8 @@ fn on_enemy_added(
     let scene = SceneRoot(gltf.scenes[0].clone());
     commands.entity(entity).with_children(|parent| {
         let mut child = parent.spawn((
-            Transform::from_xyz(0.0, -0.15, 0.0)
+            Transform::from_xyz(0.0, -0.85, 0.0)
+                .with_scale(Vec3::splat(1.25))
                 .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
             scene,
         ));
@@ -224,14 +176,14 @@ fn on_enemy_added(
 
 fn prepare_enemy_vat_scene(
     on: On<SceneInstanceReady>,
-    mut vat_state: Option<ResMut<VatEnemyState>>,
+    vat_state: Option<Res<VatEnemyState>>,
     models: Res<Models>,
     children_q: Query<&Children>,
     mesh_entities: Query<Entity, With<Mesh3d>>,
     parents: Query<&ChildOf>,
     mut commands: Commands,
 ) {
-    let Some(vat_state) = vat_state.as_mut() else {
+    let Some(vat_state) = vat_state.as_ref() else {
         warn!("VatEnemyState not ready when enemy scene loaded");
         return;
     };
@@ -262,14 +214,11 @@ fn apply_vat_to_descendants(
     children_q: &Query<&Children>,
     mesh_entities: &Query<Entity, With<Mesh3d>>,
     commands: &mut Commands,
-    vat_state: &mut VatEnemyState,
+    vat_state: &VatEnemyState,
     models: &Models,
     enemy_entity: Entity,
 ) {
     if mesh_entities.get(entity).is_ok() {
-        let tag = vat_state.next_mesh_tag;
-        vat_state.next_mesh_tag += 1;
-
         commands
             .entity(entity)
             .remove::<MeshMaterial3d<StandardMaterial>>()
@@ -280,9 +229,9 @@ fn apply_vat_to_descendants(
                     current_clip: "Zombie_Idle_Loop".to_string(),
                     speed: 1.0,
                     is_playing: true,
-                    ..Default::default()
+                    start_time: 0.0,
+                    offset: 0.0,
                 },
-                MeshTag(tag),
             ));
 
         commands.entity(enemy_entity).insert(VatMeshLink(entity));
@@ -310,6 +259,7 @@ fn apply_vat_to_descendants(
 fn animate_enemies(
     enemies: Query<(&EnemyBehavior, &VatMeshLink), Changed<EnemyBehavior>>,
     mut controllers: Query<&mut VatAnimationController>,
+    time: Res<Time>,
 ) {
     for (behavior, vat_link) in &enemies {
         let Ok(mut controller) = controllers.get_mut(vat_link.0) else {
@@ -324,6 +274,7 @@ fn animate_enemies(
 
         if controller.current_clip != clip_name {
             controller.current_clip = clip_name.to_string();
+            controller.start_time = time.elapsed_secs();
         }
     }
 }

@@ -180,4 +180,3 @@ pub enum EnemyBehavior {
 #[derive(Component, Debug)]
 #[component(storage = "SparseSet")]
 pub struct PendingKnockback(pub Vec3);
-

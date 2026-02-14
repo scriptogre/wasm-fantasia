@@ -126,8 +126,7 @@ fn soft_target_assist(
     // Face the mean direction of the enemies within the best window, not the
     // geometric center of the window itself. All angles in the window span at
     // most arc_rad (~2.6 rad), so the arithmetic mean is safe.
-    let mean_angle: f32 =
-        extended[best_left..best_right].iter().sum::<f32>() / best_count as f32;
+    let mean_angle: f32 = extended[best_left..best_right].iter().sum::<f32>() / best_count as f32;
     let direction = Vec3::new(mean_angle.cos(), 0.0, mean_angle.sin()).normalize();
     let target_rotation = Quat::from_rotation_arc(Vec3::NEG_Z, direction);
 

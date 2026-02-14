@@ -1,7 +1,7 @@
 use super::*;
+use crate::player::ControlScheme;
 use bevy_tnua::builtins::TnuaBuiltinKnockback;
 use bevy_tnua::prelude::{TnuaController, TnuaUserControlsSystems};
-use crate::player::ControlScheme;
 
 /// Scale applied to the knockback vector before passing it to Tnua as a shove.
 /// The knockback value from `defaults::KNOCKBACK` is already in m/s (6.0), so
@@ -79,7 +79,11 @@ fn on_damage(
 /// Runs after `TnuaUserControlsSystems` so that `initiate_action_feeding()`
 /// in the movement system has already been called this frame.
 fn apply_pending_knockback(
-    mut query: Query<(Entity, &PendingKnockback, &mut TnuaController<ControlScheme>)>,
+    mut query: Query<(
+        Entity,
+        &PendingKnockback,
+        &mut TnuaController<ControlScheme>,
+    )>,
     mut commands: Commands,
 ) {
     for (entity, knockback, mut controller) in &mut query {

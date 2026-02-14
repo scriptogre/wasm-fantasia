@@ -64,8 +64,7 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 animating.in_set(TnuaUserControlsSystems),
-                animate_remote_players
-                    .in_set(PostPhysicsAppSystems::PlayAnimations),
+                animate_remote_players.in_set(PostPhysicsAppSystems::PlayAnimations),
                 sync_debug_colliders,
             )
                 .run_if(in_state(Screen::Gameplay)),

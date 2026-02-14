@@ -1,7 +1,12 @@
+use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
+use bevy_open_vat::prelude::OpenVatExtension;
 
+use super::enemy::VatMeshLink;
 use crate::combat::{AttackIntent, HitLanded, MeshHeight, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::Session;
+
+type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
 
 pub fn plugin(app: &mut App) {
     app.add_observer(on_hit_flash)
@@ -23,22 +28,23 @@ pub fn plugin(app: &mut App) {
 
 // ── Hit Flash ───────────────────────────────────────────────────────
 
+const FLASH_COLOR: Color = crate::ui::colors::NEUTRAL200;
+
+/// Temporarily swaps an enemy's shared VAT material for a cloned copy with
+/// white base_color + emissive glow. Stores the shared handle for restoration.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
-pub struct HitFlash {
-    pub timer: f32,
-    pub duration: f32,
-    pub original_color: Color,
-}
-
-impl HitFlash {
-    pub const FLASH_COLOR: Color = crate::ui::colors::NEUTRAL200;
+struct HitFlash {
+    timer: f32,
+    duration: f32,
+    shared_material: Handle<VatMaterial>,
 }
 
 fn on_hit_flash(
     on: On<HitLanded>,
-    mut targets: Query<(&MeshMaterial3d<StandardMaterial>, Option<&HitFlash>)>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    vat_links: Query<&VatMeshLink>,
+    vat_meshes: Query<(&MeshMaterial3d<VatMaterial>, Option<&HitFlash>)>,
+    mut vat_materials: ResMut<Assets<VatMaterial>>,
     mut commands: Commands,
 ) {
     let event = on.event();
@@ -47,44 +53,52 @@ fn on_hit_flash(
         return;
     }
 
-    let Ok((mat_handle, existing_flash)) = targets.get_mut(event.target) else {
+    let Ok(vat_link) = vat_links.get(event.target) else {
         return;
     };
-
+    let mesh_entity = vat_link.0;
+    let Ok((mat_handle, existing_flash)) = vat_meshes.get(mesh_entity) else {
+        return;
+    };
     if existing_flash.is_some() {
         return;
     }
 
-    let Some(material) = materials.get_mut(mat_handle) else {
+    let shared_handle = mat_handle.0.clone();
+    let Some(shared_mat) = vat_materials.get(&shared_handle) else {
         return;
     };
 
-    let original_color = material.base_color;
-    material.base_color = HitFlash::FLASH_COLOR;
-    material.emissive = LinearRgba::new(2.0, 1.8, 1.5, 1.0);
+    let mut flash_mat = shared_mat.clone();
+    flash_mat.base.base_color = FLASH_COLOR;
+    flash_mat.base.emissive = LinearRgba::new(2.0, 1.8, 1.5, 1.0);
+    let flash_handle = vat_materials.add(flash_mat);
 
-    commands.entity(event.target).insert(HitFlash {
-        timer: 0.0,
-        duration: event.feedback.flash_duration,
-        original_color,
-    });
+    commands.entity(mesh_entity).insert((
+        MeshMaterial3d(flash_handle),
+        HitFlash {
+            timer: 0.0,
+            duration: event.feedback.flash_duration,
+            shared_material: shared_handle,
+        },
+    ));
 }
 
 fn tick_hit_flash(
     time: Res<Time>,
-    mut flashing: Query<(Entity, &mut HitFlash, &MeshMaterial3d<StandardMaterial>)>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut flashing: Query<(Entity, &mut HitFlash, &MeshMaterial3d<VatMaterial>)>,
+    mut vat_materials: ResMut<Assets<VatMaterial>>,
     mut commands: Commands,
 ) {
     for (entity, mut flash, mat_handle) in flashing.iter_mut() {
         flash.timer += time.delta_secs();
 
         if flash.timer >= flash.duration {
-            if let Some(material) = materials.get_mut(mat_handle) {
-                material.base_color = flash.original_color;
-                material.emissive = LinearRgba::NONE;
-            }
-            commands.entity(entity).remove::<HitFlash>();
+            vat_materials.remove(&mat_handle.0);
+            commands
+                .entity(entity)
+                .insert(MeshMaterial3d(flash.shared_material.clone()))
+                .remove::<HitFlash>();
         }
     }
 }

@@ -91,9 +91,8 @@ pub(super) fn interpolate_synced_entities(
         } else {
             0.0
         };
-        let target = snapshot.position
-            + snapshot.velocity * elapsed
-            + Vec3::new(0.0, gravity_term, 0.0);
+        let target =
+            snapshot.position + snapshot.velocity * elapsed + Vec3::new(0.0, gravity_term, 0.0);
 
         transform.translation = transform.translation.lerp(target, alpha);
         transform.rotation = Quat::slerp(
