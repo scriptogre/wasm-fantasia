@@ -1,11 +1,15 @@
 //! Connection lifecycle: connect, reconnect, handshake, disconnect, cleanup.
 
 use bevy::prelude::*;
-use spacetimedb_sdk::DbContext;
+use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
 use web_time::Instant;
 
+use super::generated::combat_event_table::CombatEventTableAccess;
+use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::join_game_reducer::join_game;
 use super::generated::leave_game_reducer::leave_game;
+use super::generated::player_table::PlayerTableAccess;
+use super::reconcile::{DbEvent, DbEventQueue};
 use super::{DbConnection, SpacetimeDbConfig, SpacetimeDbConnection, SpacetimeDbToken};
 use crate::models::{GameMode, Screen, ServerTarget};
 
@@ -41,10 +45,11 @@ pub(super) struct HandshakeStart(Instant);
 // =============================================================================
 
 macro_rules! connection_builder {
-    ($uri:expr, $module_name:expr, $token:expr, $is_solo:expr) => {{
+    ($uri:expr, $module_name:expr, $token:expr, $is_solo:expr, $queue:expr) => {{
         let token_store = $token.clone();
         let stored = $token.lock().unwrap().clone();
         let is_solo = $is_solo;
+        let queue = $queue;
         DbConnection::builder()
             .with_uri($uri)
             .with_module_name($module_name)
@@ -52,6 +57,68 @@ macro_rules! connection_builder {
             .on_connect(move |conn, identity, token| {
                 info!("Connected to SpacetimeDB with identity: {:?}", identity);
                 *token_store.lock().unwrap() = Some(token.to_string());
+
+                // Register table callbacks before subscribing
+                {
+                    let q = queue.clone();
+                    conn.db.enemy().on_insert(move |_ctx, row| {
+                        q.lock().unwrap().push(DbEvent::EnemyInsert {
+                            enemy: row.into(),
+                        });
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.enemy().on_update(move |_ctx, _old, new| {
+                        q.lock().unwrap().push(DbEvent::EnemyUpdate {
+                            id: new.id,
+                            new: new.into(),
+                        });
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.enemy().on_delete(move |_ctx, row| {
+                        q.lock().unwrap().push(DbEvent::EnemyDelete { id: row.id });
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.player().on_insert(move |_ctx, row| {
+                        q.lock().unwrap().push(DbEvent::PlayerInsert {
+                            player: row.into(),
+                        });
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.player().on_update(move |_ctx, _old, new| {
+                        q.lock().unwrap().push(DbEvent::PlayerUpdate {
+                            identity: new.identity,
+                            new: new.into(),
+                        });
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.player().on_delete(move |_ctx, row| {
+                        q.lock().unwrap().push(DbEvent::PlayerDelete {
+                            identity: row.identity,
+                        });
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.combat_event().on_insert(move |_ctx, row| {
+                        q.lock().unwrap().push(DbEvent::CombatEventInsert {
+                            damage: row.damage,
+                            is_crit: row.is_crit,
+                            x: row.x,
+                            y: row.y,
+                            z: row.z,
+                        });
+                    });
+                }
 
                 let world_id = if is_solo {
                     identity.to_hex().to_string()
@@ -87,9 +154,10 @@ pub fn try_connect(
     module_name: &str,
     token: &SpacetimeDbToken,
     is_solo: bool,
+    queue: &DbEventQueue,
 ) -> Option<SpacetimeDbConnection> {
     info!("Attempting SpacetimeDB connection to {uri}...");
-    match connection_builder!(uri, module_name, token.0, is_solo).build() {
+    match connection_builder!(uri, module_name, token.0, is_solo, queue.0.clone()).build() {
         Ok(conn) => {
             info!("Connection initiated — waiting for handshake");
             Some(SpacetimeDbConnection { conn })
@@ -160,6 +228,7 @@ pub(super) fn disconnect_from_spacetimedb(
         }
         commands.remove_resource::<SpacetimeDbConnection>();
     }
+    commands.insert_resource(super::reconcile::ServerEntityMap::default());
     *ping = super::PingTracker::default();
     *mode = GameMode::default();
 }
@@ -171,6 +240,7 @@ pub(super) fn remove_server_target(mut commands: Commands) {
 pub(super) fn auto_connect(
     config: Res<SpacetimeDbConfig>,
     token: Res<SpacetimeDbToken>,
+    queue: Res<DbEventQueue>,
     mode: Res<GameMode>,
     mut timer: ResMut<ReconnectTimer>,
     time: Res<Time>,
@@ -206,7 +276,7 @@ pub(super) fn auto_connect(
         ServerTarget::Remote { uri } => uri.clone(),
     };
     let is_solo = *mode != GameMode::Multiplayer;
-    if let Some(conn) = try_connect(&uri, &config.module_name, &token, is_solo) {
+    if let Some(conn) = try_connect(&uri, &config.module_name, &token, is_solo, &queue) {
         commands.insert_resource(conn);
         commands.insert_resource(HandshakeStart(Instant::now()));
         info!("auto_connect: connection initiated");

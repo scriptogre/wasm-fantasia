@@ -164,8 +164,33 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             enemy_handles.push((handle, enemy));
         }
 
-        // Apply AI-driven velocities and knockback impulses
-        for (handle, enemy) in &enemy_handles {
+        // Compute enemy-enemy separation velocities (XZ only).
+        // O(N²) but each iteration is just a distance check + push.
+        let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
+        let sep_radius_sq = sep_radius * sep_radius;
+        let sep_strength = defaults::ENEMY_SEPARATION_STRENGTH;
+        let mut separation: Vec<(f32, f32)> = vec![(0.0, 0.0); enemies.len()];
+        for i in 0..enemies.len() {
+            for j in (i + 1)..enemies.len() {
+                let dx = enemies[i].x - enemies[j].x;
+                let dz = enemies[i].z - enemies[j].z;
+                let dist_sq = dx * dx + dz * dz;
+                if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
+                    let dist = dist_sq.sqrt();
+                    let overlap = 1.0 - dist / sep_radius;
+                    let push = overlap * sep_strength / dist;
+                    let px = dx * push;
+                    let pz = dz * push;
+                    separation[i].0 += px;
+                    separation[i].1 += pz;
+                    separation[j].0 -= px;
+                    separation[j].1 -= pz;
+                }
+            }
+        }
+
+        // Apply AI-driven velocities, separation, and knockback impulses
+        for (idx, (handle, enemy)) in enemy_handles.iter().enumerate() {
             // Find nearest player (XZ distance)
             let mut nearest_dist = f32::MAX;
             let mut nearest_pos = (0.0_f32, 0.0_f32);
@@ -202,6 +227,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
 
             // Move toward player when chasing — but skip when being knocked
             // back so the impulse isn't immediately overridden by chase velocity.
+            let (mut vx, mut vz) = (0.0_f32, 0.0_f32);
             if !has_knockback
                 && decision == combat::EnemyBehaviorKind::Chase
                 && nearest_dist > 0.01
@@ -209,11 +235,18 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 let dx = nearest_pos.0 - enemy.x;
                 let dz = nearest_pos.1 - enemy.z;
                 let inv_dist = 1.0 / nearest_dist;
-                let move_x = dx * inv_dist * defaults::ENEMY_WALK_SPEED;
-                let move_z = dz * inv_dist * defaults::ENEMY_WALK_SPEED;
+                vx = dx * inv_dist * defaults::ENEMY_WALK_SPEED;
+                vz = dz * inv_dist * defaults::ENEMY_WALK_SPEED;
+            }
+
+            // Add separation push
+            vx += separation[idx].0;
+            vz += separation[idx].1;
+
+            if vx != 0.0 || vz != 0.0 || has_knockback {
                 physics.set_linear_velocity(
                     *handle,
-                    Vector::new(move_x, physics.body(*handle).linear_velocity().y, move_z),
+                    Vector::new(vx, physics.body(*handle).linear_velocity().y, vz),
                 );
             }
         }
@@ -277,6 +310,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 last_attack_time: new_last_attack_time,
             });
         }
+
     }
 
     // Delete consumed knockback impulses
