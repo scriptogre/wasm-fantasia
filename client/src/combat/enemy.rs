@@ -1,7 +1,8 @@
 use super::*;
 use crate::asset_loading::Models;
 use crate::models::{ClearEnemies, SpawnEnemy};
-use avian3d::prelude::{Collider, RigidBody, Sensor};
+use avian3d::prelude::{Collider, CollisionLayers, RigidBody, Sensor};
+use crate::scene::GameLayer;
 use bevy::pbr::ExtendedMaterial;
 use bevy::render::storage::ShaderStorageBuffer;
 use bevy_open_vat::data::VatInstanceData;
@@ -35,8 +36,11 @@ pub fn plugin(app: &mut App) {
 /// Shared VAT rendering resources for all enemy instances, created once on
 /// first gameplay frame when all assets are loaded.
 #[derive(Resource)]
-struct VatEnemyState {
+pub(super) struct VatEnemyState {
     material: Handle<VatMaterial>,
+    /// Pre-allocated flash material — same VAT setup but white + emissive.
+    /// Shared across all enemies to avoid per-hit material clones.
+    pub flash_material: Handle<VatMaterial>,
 }
 
 /// Links an enemy entity to the child mesh entity that holds the
@@ -70,8 +74,6 @@ fn initialize_vat_enemy_resources(
     let material = vat_materials.add(ExtendedMaterial {
         base: StandardMaterial {
             base_color: Color::srgb(0.816, 0.125, 0.125),
-            double_sided: true,
-            cull_mode: None,
             // Force forward rendering. The project uses deferred rendering by
             // default, but bevy_open_vat overrides vertex_shader() (forward) and
             // prepass_vertex_shader() (prepass). In deferred mode, opaque meshes
@@ -89,11 +91,28 @@ fn initialize_vat_enemy_resources(
             frame_count: remap_info.os_remap.frames,
             max_pos: remap_info.os_remap.max.into(),
             y_resolution,
-            instance: buffer,
+            instance: buffer.clone(),
         },
     });
 
-    commands.insert_resource(VatEnemyState { material });
+    let flash_material = vat_materials.add(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: crate::ui::colors::NEUTRAL200,
+            emissive: LinearRgba::new(2.0, 1.8, 1.5, 1.0),
+            opaque_render_method: bevy::pbr::OpaqueRendererMethod::Forward,
+            ..default()
+        },
+        extension: OpenVatExtension {
+            vat_texture: models.enemy_vat_texture.clone(),
+            min_pos: remap_info.os_remap.min.into(),
+            frame_count: remap_info.os_remap.frames,
+            max_pos: remap_info.os_remap.max.into(),
+            y_resolution,
+            instance: buffer.clone(),
+        },
+    });
+
+    commands.insert_resource(VatEnemyState { material, flash_material });
 }
 
 // =============================================================================
@@ -170,6 +189,7 @@ fn on_enemy_added(
         Collider::capsule(0.5, 1.0),
         RigidBody::Kinematic,
         Sensor,
+        CollisionLayers::new(GameLayer::Enemy, [GameLayer::Player, GameLayer::Environment]),
     ));
 
     let Some(gltf) = gltf_assets.get(&models.enemy_scene) else {

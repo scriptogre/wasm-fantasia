@@ -19,6 +19,7 @@ pub mod rules;
 pub mod scene;
 pub mod screens;
 pub mod ui;
+pub mod profiling;
 pub mod venom_voice;
 
 use asset_loading::{AudioSources, Models, ResourceHandles};
@@ -47,6 +48,7 @@ fn main() {
     let log_level = log::LogPlugin {
         level: log::Level::TRACE,
         filter,
+        custom_layer: profiling::system_profile_layer,
         ..Default::default()
     };
 

@@ -60,9 +60,9 @@ build:
     cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
     echo "WASM bundle ready at dist/web/"
 
-# Profile with Tracy — run `tracy` GUI first, then `just profile`
+# Per-system profiling — press F9 in-game for timing breakdown
 profile: spacetimedb
-    cargo run -p wasm_fantasia --features trace
+    cargo run -p wasm_fantasia --features profile
 
 # Pre-commit checks: lint + web compilation
 check:

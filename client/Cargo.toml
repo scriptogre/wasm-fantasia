@@ -22,7 +22,8 @@ dev = [
     "bevy/bevy_ui_debug",
     "bevy/track_location",          # Improve error messages coming from Bevy
 ]
-trace = ["bevy/trace", "bevy/trace_tracy"]  # Per-system profiling via Tracy (just profile)
+profile = ["bevy/trace"]                    # Per-system text profiling (F9 benchmark)
+trace = ["profile", "bevy/trace_tracy"]     # Tracy GUI profiling (just profile)
 
 [dependencies.bevy]
 version = "^0.18"

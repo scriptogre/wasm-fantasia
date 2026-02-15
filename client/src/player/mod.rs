@@ -1,6 +1,7 @@
 use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
 use crate::rule_presets;
 use crate::rules::{Stat, Stats};
+use crate::scene::GameLayer;
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
@@ -160,6 +161,7 @@ pub fn spawn_player(
                 collider,
                 RigidBody::Dynamic,
                 Friction::ZERO.with_combine_rule(CoefficientCombine::Multiply),
+                CollisionLayers::new(GameLayer::Player, [GameLayer::Enemy, GameLayer::Environment]),
             ),
             // other player related components
             (

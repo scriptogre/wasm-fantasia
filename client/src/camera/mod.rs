@@ -1,6 +1,6 @@
 use crate::*;
 use bevy::{
-    anti_alias::{fxaa::Fxaa, taa::TemporalAntiAliasing},
+    anti_alias::taa::TemporalAntiAliasing,
     core_pipeline::prepass::DeferredPrepass,
     pbr::{DefaultOpaqueRendererMethod, DistanceFog, FogFalloff},
     render::view::Hdr,
@@ -39,7 +39,6 @@ pub fn spawn_camera(mut commands: Commands) {
         Hdr,
         DeferredPrepass,
         TemporalAntiAliasing::default(),
-        Fxaa::default(),
         // Fog to fade grid into void at distance - creates infinite feel
         DistanceFog {
             color: colors::VOID,

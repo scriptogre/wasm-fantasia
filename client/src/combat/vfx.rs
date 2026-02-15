@@ -36,10 +36,8 @@ pub fn plugin(app: &mut App) {
 
 // ── Hit Flash ───────────────────────────────────────────────────────
 
-const FLASH_COLOR: Color = crate::ui::colors::NEUTRAL200;
-
-/// Temporarily swaps an enemy's shared VAT material for a cloned copy with
-/// white base_color + emissive glow. Stores the shared handle for restoration.
+/// Temporarily swaps an enemy's shared VAT material for a pre-allocated flash
+/// copy with white base_color + emissive glow. Stores the shared handle for restoration.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
 struct HitFlash {
@@ -52,7 +50,7 @@ fn on_hit_flash(
     on: On<HitLanded>,
     vat_links: Query<&VatMeshLink>,
     vat_meshes: Query<(&MeshMaterial3d<VatMaterial>, Option<&HitFlash>)>,
-    mut vat_materials: ResMut<Assets<VatMaterial>>,
+    vat_state: Option<Res<super::enemy::VatEnemyState>>,
     mut commands: Commands,
 ) {
     let event = on.event();
@@ -60,6 +58,10 @@ fn on_hit_flash(
     if event.feedback.flash_duration <= 0.0 {
         return;
     }
+
+    let Some(vat_state) = vat_state else {
+        return;
+    };
 
     let Ok(vat_link) = vat_links.get(event.target) else {
         return;
@@ -73,18 +75,10 @@ fn on_hit_flash(
     }
 
     let shared_handle = mat_handle.0.clone();
-    let Some(shared_mat) = vat_materials.get(&shared_handle) else {
-        return;
-    };
 
-    let mut flash_mat = shared_mat.clone();
-    flash_mat.base.base_color = FLASH_COLOR;
-    flash_mat.base.emissive = LinearRgba::new(2.0, 1.8, 1.5, 1.0);
-    let flash_handle = vat_materials.add(flash_mat);
-
-    // try_insert: entity may be despawned between command buffer and apply.
+    // Use pre-allocated flash material — no per-hit material clone.
     commands.entity(mesh_entity).try_insert((
-        MeshMaterial3d(flash_handle),
+        MeshMaterial3d(vat_state.flash_material.clone()),
         HitFlash {
             timer: 0.0,
             duration: event.feedback.flash_duration,
@@ -386,7 +380,7 @@ fn on_impact_vfx(
     let center_mass = mesh_height.map_or(0.9, |h| h.0 * 0.5);
     let impact_pos = target_transform.translation + Vec3::Y * center_mass;
 
-    let num_particles = 12;
+    let num_particles = 4;
     let mut rng = rand::rng();
 
     for i in 0..num_particles {

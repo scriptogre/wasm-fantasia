@@ -1,7 +1,19 @@
 //! Dark animus-style scene - minimal grid floor fading into void
 use crate::*;
 use avian3d::prelude::*;
+use bevy::light::CascadeShadowConfigBuilder;
 use bevy_skein::SkeinPlugin;
+
+/// Physics collision layers. Enemies only interact with the player/environment,
+/// never with each other — eliminating O(N²) enemy-enemy narrow phase checks.
+#[derive(PhysicsLayer, Clone, Copy, Debug, Default)]
+pub enum GameLayer {
+    #[default]
+    Default,
+    Player,
+    Enemy,
+    Environment,
+}
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((PhysicsPlugins::default(), SkeinPlugin::default()))
@@ -34,6 +46,7 @@ fn setup_animus_scene(
         Transform::from_translation(Vec3::ZERO),
         Collider::half_space(Vec3::Y),
         RigidBody::Static,
+        CollisionLayers::new(GameLayer::Environment, LayerMask::ALL),
     ));
 
     // Grid lines - much larger extent for "infinite" feel
@@ -90,6 +103,13 @@ fn setup_animus_scene(
             shadows_enabled: true,
             ..default()
         },
+        CascadeShadowConfigBuilder {
+            num_cascades: 2,
+            maximum_distance: 30.0,
+            first_cascade_far_bound: 8.0,
+            ..default()
+        }
+        .build(),
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.7, 0.3, 0.0)),
     ));
 

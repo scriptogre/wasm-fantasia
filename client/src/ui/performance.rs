@@ -74,12 +74,14 @@ fn toggle_benchmark(
     overlay: Query<Entity, With<BenchmarkOverlay>>,
 ) {
     if existing.is_some() {
+        let _ = crate::profiling::stop();
         commands.remove_resource::<BenchmarkFrames>();
         for entity in &overlay {
             commands.entity(entity).despawn();
         }
         info!("Benchmark cancelled.");
     } else {
+        crate::profiling::start();
         commands.insert_resource(BenchmarkFrames {
             frame_times: Vec::with_capacity(1024),
             elapsed: Duration::ZERO,
@@ -126,13 +128,16 @@ fn tick_benchmark(
     if frames.elapsed >= BENCHMARK_DURATION {
         let entity_count = entities.iter().count();
         let report = build_report(&frames.frame_times, entity_count);
+        let system_timings = crate::profiling::stop();
+        let system_report =
+            crate::profiling::format_report(&system_timings, frames.elapsed);
 
         commands.remove_resource::<BenchmarkFrames>();
         for entity in &overlay_entities {
             commands.entity(entity).despawn();
         }
 
-        info!("\n{report}");
+        info!("\n{report}\n{system_report}");
     }
 }
 
