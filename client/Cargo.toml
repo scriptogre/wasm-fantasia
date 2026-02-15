@@ -15,7 +15,7 @@ default = [
     "bevy/embedded_watcher",        # Enable embedded asset hot reloading for dev builds.
     "bevy/file_watcher",            # Enable asset hot reloading for dev builds.
 ]
-web = ["bevy/webgpu"]
+web = ["bevy/webgpu", "bevy/webgl2"]
 dev = [
     "bevy-inspector-egui",
     "bevy/bevy_dev_tools",

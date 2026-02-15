@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bevy::asset::load_internal_binary_asset;
+use bevy::render::settings::{RenderCreation, WgpuSettings};
 use bevy::{app::App, asset::AssetMetaCheck, log, prelude::*};
 use bevy_fix_cursor_unlock_web::prelude::*;
 
@@ -52,7 +53,20 @@ fn main() {
         ..Default::default()
     };
 
-    app.add_plugins(DefaultPlugins.set(window).set(assets).set(log_level));
+    // On WASM, request both WebGPU and WebGL2 backends so browsers without WebGPU (Firefox) fall back to WebGL2.
+    // Bevy's default only requests BROWSER_WEBGPU when the webgpu feature is enabled, which breaks Firefox.
+    #[cfg(target_arch = "wasm32")]
+    let render = bevy::render::RenderPlugin {
+        render_creation: RenderCreation::Automatic(WgpuSettings {
+            backends: Some(bevy::render::settings::Backends::BROWSER_WEBGPU | bevy::render::settings::Backends::GL),
+            ..default()
+        }),
+        ..default()
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let render = bevy::render::RenderPlugin::default();
+
+    app.add_plugins(DefaultPlugins.set(window).set(assets).set(log_level).set(render));
     app.add_plugins(bevy_open_vat::prelude::OpenVatPlugin);
 
     // custom plugins. the order is important

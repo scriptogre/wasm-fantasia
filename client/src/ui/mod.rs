@@ -18,7 +18,6 @@ mod constants;
 pub mod hud;
 mod interaction;
 mod modal;
-#[cfg(feature = "dev")]
 mod performance;
 mod prefabs;
 mod props;
@@ -41,6 +40,5 @@ pub fn plugin(app: &mut App) {
 
     app.add_plugins(server_status::plugin);
 
-    #[cfg(feature = "dev")]
     app.add_plugins(performance::plugin);
 }

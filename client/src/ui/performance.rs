@@ -1,31 +1,24 @@
 use super::*;
-use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig};
 use bevy::input::common_conditions::input_just_pressed;
+use crate::networking::diagnostics::ServerDiagnostics;
+use crate::networking::PingTracker;
 use std::time::Duration;
 
-const FPS_OVERLAY_ZINDEX: i32 = i32::MAX - 32;
+const REFRESH_INTERVAL: Duration = Duration::from_millis(200);
 const BENCHMARK_DURATION: Duration = Duration::from_secs(10);
 
 // ── Plugin ───────────────────────────────────────────────────────────────
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(FpsOverlayPlugin {
-        config: FpsOverlayConfig {
-            text_config: TextFont {
-                font_size: 14.0,
-                ..default()
-            },
-            text_color: colors::NEUTRAL400,
-            enabled: true,
-            refresh_interval: Duration::from_millis(100),
-            frame_time_graph_config: FrameTimeGraphConfig {
-                enabled: false,
-                ..default()
-            },
-        },
-    });
-
-    app.add_systems(PostStartup, (strip_fps_label, adjust_fps_layout));
+    app.insert_resource(StatsTimer(Timer::new(REFRESH_INTERVAL, TimerMode::Repeating)));
+    app.add_systems(
+        OnEnter(crate::models::Screen::Gameplay),
+        spawn_stats_overlay,
+    );
+    app.add_systems(
+        Update,
+        tick_stats_overlay.run_if(in_state(crate::models::Screen::Gameplay)),
+    );
     app.add_systems(
         Update,
         toggle_benchmark.run_if(input_just_pressed(KeyCode::F9)),
@@ -36,21 +29,59 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-// ── FPS overlay ──────────────────────────────────────────────────────────
+// ── Stats overlay ────────────────────────────────────────────────────────
 
-fn strip_fps_label(mut texts: Query<&mut Text>) {
-    for mut text in &mut texts {
-        if text.0.starts_with("FPS:") {
-            text.0 = String::new();
-        }
-    }
+#[derive(Component)]
+struct StatsOverlayText;
+
+#[derive(Resource)]
+struct StatsTimer(Timer);
+
+fn spawn_stats_overlay(mut commands: Commands) {
+    commands.spawn((
+        StatsOverlayText,
+        Text::new(""),
+        TextFont {
+            font_size: 14.0,
+            ..default()
+        },
+        TextColor(colors::NEUTRAL400),
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(16.0),
+            top: Val::Px(16.0),
+            ..default()
+        },
+        GlobalZIndex(i32::MAX - 32),
+        Pickable::IGNORE,
+    ));
 }
 
-fn adjust_fps_layout(mut nodes: Query<(&GlobalZIndex, &mut Node)>) {
-    for (z, mut node) in &mut nodes {
-        if z.0 == FPS_OVERLAY_ZINDEX {
-            node.left = Val::Px(16.0);
-            node.top = Val::Px(16.0);
+fn tick_stats_overlay(
+    time: Res<Time<Real>>,
+    mut timer: ResMut<StatsTimer>,
+    diag: Option<Res<ServerDiagnostics>>,
+    ping: Option<Res<PingTracker>>,
+    mut texts: Query<&mut Text, With<StatsOverlayText>>,
+) {
+    timer.0.tick(time.delta());
+    if !timer.0.just_finished() {
+        return;
+    }
+
+    let fps = (1.0 / time.delta_secs()).round() as u32;
+    let enemies = diag.as_ref().map(|d| d.enemy_alive).unwrap_or(0);
+    let players = diag.as_ref().map(|d| d.players.len()).unwrap_or(0);
+    let ping_ms = ping.as_ref().map(|p| p.smoothed_rtt_ms).unwrap_or(0.0);
+
+    let new = if ping_ms > 0.0 {
+        format!("{fps} FPS  |  {enemies} enemies  |  {players} players  |  {ping_ms:.0} ms")
+    } else {
+        format!("{fps} FPS  |  {enemies} enemies  |  {players} players")
+    };
+    for mut text in &mut texts {
+        if text.0 != new {
+            text.0 = new.clone();
         }
     }
 }

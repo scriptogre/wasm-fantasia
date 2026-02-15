@@ -6,7 +6,7 @@ use crate::models::{GameplayCleanup, Screen, ServerTarget};
 
 pub mod combat;
 mod connection;
-mod diagnostics;
+pub(crate) mod diagnostics;
 pub mod generated;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod local_server;
