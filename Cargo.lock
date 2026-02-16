@@ -1640,17 +1640,14 @@ dependencies = [
  "bevy_reflect 0.18.0",
  "bevy_render",
  "bevy_shader",
- "bevy_tasks 0.18.0",
  "bevy_transform",
  "bevy_utils 0.18.0",
  "bitflags 2.10.0",
  "bytemuck",
  "derive_more 2.1.0",
  "fixedbitset",
- "lz4_flex",
  "nonmax",
  "offset-allocator",
- "range-alloc",
  "smallvec",
  "static_assertions",
  "thiserror 2.0.17",
@@ -5526,15 +5523,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fae87c125b03c1d2c0150c90365d7d6bcc53fb73a9acaef207d2d065860f062"
 dependencies = [
  "imgref",
-]
-
-[[package]]
-name = "lz4_flex"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab6473172471198271ff72e9379150e9dfd70d8e533e0752a27e515b48dd375e"
-dependencies = [
- "twox-hash",
 ]
 
 [[package]]

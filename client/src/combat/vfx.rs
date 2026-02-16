@@ -5,7 +5,10 @@ use bevy_open_vat::prelude::OpenVatExtension;
 use super::enemy::VatMeshLink;
 use crate::combat::{AttackIntent, HitLanded, MeshHeight, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::Session;
-use crate::player::control::{Footstep, GroundPoundImpact, JumpLaunched, LandingImpact};
+use avian3d::prelude::LinearVelocity;
+
+use crate::models::Player;
+use crate::player::control::{AirborneTracker, Footstep, GroundPoundImpact, JumpLaunched, LandingImpact};
 
 type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
 
@@ -30,8 +33,8 @@ pub fn plugin(app: &mut App) {
         .add_observer(on_landing_vfx)
         .add_observer(on_ground_pound_vfx)
         .add_observer(on_footstep_dust)
-        .add_systems(Startup, setup_shockwave_assets)
-        .add_systems(Update, tick_shockwave_vfx);
+        .add_systems(Startup, (setup_shockwave_assets, setup_speed_line_assets))
+        .add_systems(Update, (tick_shockwave_vfx, spawn_speed_lines, tick_speed_lines));
 }
 
 // ── Hit Flash ───────────────────────────────────────────────────────
@@ -551,6 +554,22 @@ fn on_launch_shockwave(
             .with_scale(Vec3::splat(0.1)),
     ));
 
+    // Second "crack" ring for charges > 30% — earthy dust, slower expansion
+    if t > 0.3 {
+        commands.spawn((
+            ShockwaveRing {
+                timer: 0.0,
+                duration: 0.6,
+                max_scale: max_scale * 0.7,
+            },
+            Mesh3d(assets.ring_mesh.clone()),
+            MeshMaterial3d(assets.dust_material.clone()),
+            Transform::from_translation(pos)
+                .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::splat(0.1)),
+        ));
+    }
+
     let mut rng = rand::rng();
 
     // Dust chunks that arc outward and fall back down (gravity in tick)
@@ -646,8 +665,8 @@ fn on_landing_vfx(
     let t = ((event.velocity_y - 3.0) / (LANDING_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
     let pos = event.position - Vec3::Y * 0.8;
 
-    // Landing ground ring
-    let max_scale = 0.5 + 3.0 * t;
+    // Landing ground ring — beefier
+    let max_scale = 0.8 + 5.0 * t;
     commands.spawn((
         ShockwaveRing {
             timer: 0.0,
@@ -664,7 +683,7 @@ fn on_landing_vfx(
     let mut rng = rand::rng();
 
     // Debris chunks that arc outward and fall back (gravity in tick)
-    let num_particles = 12 + (10.0 * t) as usize;
+    let num_particles = 16 + (16.0 * t) as usize;
     for i in 0..num_particles {
         let angle = (i as f32 / num_particles as f32) * std::f32::consts::TAU
             + rand::Rng::random_range(&mut rng, -0.2..0.2);
@@ -759,11 +778,18 @@ fn on_footstep_dust(
     let pos = event.position - Vec3::Y * 0.8;
     let mut rng = rand::rng();
 
-    for _ in 0..5 {
+    // Sprint: more particles, bigger, faster spread
+    let (num_particles, scale, speed_range, vert_range) = if event.is_sprinting {
+        (10, 0.7, 2.5..5.0, 0.15..0.5)
+    } else {
+        (5, 0.5, 1.5..3.0, 0.1..0.3)
+    };
+
+    for _ in 0..num_particles {
         let angle = rand::Rng::random_range(&mut rng, 0.0..std::f32::consts::TAU);
-        let vert = rand::Rng::random_range(&mut rng, 0.1..0.3);
+        let vert = rand::Rng::random_range(&mut rng, vert_range.clone());
         let dir = Vec3::new(angle.cos(), vert, angle.sin()).normalize();
-        let speed = rand::Rng::random_range(&mut rng, 1.5..3.0);
+        let speed = rand::Rng::random_range(&mut rng, speed_range.clone());
         let duration = rand::Rng::random_range(&mut rng, 0.2..0.35);
 
         commands.spawn((
@@ -776,7 +802,109 @@ fn on_footstep_dust(
             },
             Mesh3d(assets.dust_mesh.clone()),
             MeshMaterial3d(assets.dust_material.clone()),
-            Transform::from_translation(pos).with_scale(Vec3::splat(0.5)),
+            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
         ));
+    }
+}
+
+// ── Speed Lines (Charged Jump Ascent) ───────────────────────────────
+
+#[derive(Resource)]
+struct SpeedLineAssets {
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
+}
+
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct SpeedLine {
+    timer: f32,
+    duration: f32,
+    start_pos: Vec3,
+    velocity: Vec3,
+}
+
+fn setup_speed_line_assets(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let mesh = meshes.add(Cuboid::new(0.05, 0.05, 0.4));
+    let material = materials.add(StandardMaterial {
+        base_color: Color::srgba(1.0, 0.3, 0.1, 0.8),
+        emissive: LinearRgba::new(8.0, 2.0, 0.5, 1.0),
+        alpha_mode: AlphaMode::Add,
+        unlit: true,
+        ..default()
+    });
+    commands.insert_resource(SpeedLineAssets { mesh, material });
+}
+
+fn spawn_speed_lines(
+    player: Query<(&Transform, &LinearVelocity, &AirborneTracker), With<Player>>,
+    assets: Option<Res<SpeedLineAssets>>,
+    mut commands: Commands,
+) {
+    let Some(assets) = assets else {
+        return;
+    };
+    let Ok((transform, velocity, tracker)) = player.single() else {
+        return;
+    };
+
+    // Only spawn during ascent after a charged jump
+    if !tracker.was_airborne || velocity.y < 5.0 {
+        return;
+    }
+
+    let pos = transform.translation;
+    let mut rng = rand::rng();
+
+    // 2 streaks per frame from hand positions
+    for x_offset in [-0.4, 0.4] {
+        let start = pos + Vec3::new(x_offset, 0.3, 0.0);
+        let duration = rand::Rng::random_range(&mut rng, 0.15..0.25);
+        let trail_vel = Vec3::new(
+            rand::Rng::random_range(&mut rng, -0.5..0.5),
+            -3.0,
+            rand::Rng::random_range(&mut rng, -0.5..0.5),
+        );
+
+        commands.spawn((
+            SpeedLine {
+                timer: 0.0,
+                duration,
+                start_pos: start,
+                velocity: trail_vel,
+            },
+            Mesh3d(assets.mesh.clone()),
+            MeshMaterial3d(assets.material.clone()),
+            Transform::from_translation(start),
+        ));
+    }
+}
+
+fn tick_speed_lines(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut lines: Query<(Entity, &mut SpeedLine, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, mut line, mut transform) in lines.iter_mut() {
+        line.timer += dt;
+        let t = (line.timer / line.duration).min(1.0);
+
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        transform.translation = line.start_pos + line.velocity * line.timer;
+
+        // Elongate and fade
+        let fade = 1.0 - t;
+        let stretch = 1.0 + t * 3.0;
+        transform.scale = Vec3::new(fade, fade, stretch * fade);
     }
 }

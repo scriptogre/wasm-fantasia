@@ -4,7 +4,7 @@ use bevy::transform::TransformSystems;
 use bevy_third_person_camera::CameraSyncSet;
 
 use crate::models::{Config, Player, SceneCamera, Screen};
-use crate::player::control::{AirborneTracker, JumpCharge, LandingStun, Sprinting};
+use crate::player::control::{AirborneTracker, Footstep, JumpCharge, LandingImpact, LandingStun, Sprinting};
 
 /// Tracks dynamic FOV state for smooth interpolation.
 #[derive(Resource)]
@@ -22,18 +22,48 @@ impl Default for DynamicFov {
     }
 }
 
+/// Screen shake triggered by landing impacts — high-frequency sine with quadratic decay.
+#[derive(Resource, Default)]
+pub struct ScreenShake {
+    intensity: f32,
+    duration: f32,
+    timer: f32,
+}
+
+/// Footstep camera bob — spring dynamics push camera down on each step.
+#[derive(Resource, Default)]
+pub struct FootstepBob {
+    offset: f32,
+    velocity: f32,
+}
+
+const BOB_STIFFNESS: f32 = 120.0;
+const BOB_DAMPING: f32 = 12.0;
+const BOB_MAX: f32 = 0.15;
+
 pub fn plugin(app: &mut App) {
-    app.init_resource::<DynamicFov>().add_systems(
-        PostUpdate,
-        (dynamic_fov, sprint_micro_shake, fall_camera_dip)
-            .after(CameraSyncSet)
-            .before(TransformSystems::Propagate)
-            .run_if(in_state(Screen::Gameplay)),
-    );
+    app.init_resource::<DynamicFov>()
+        .init_resource::<ScreenShake>()
+        .init_resource::<FootstepBob>()
+        .add_observer(on_landing_shake)
+        .add_observer(on_footstep_bob)
+        .add_systems(
+            PostUpdate,
+            (dynamic_fov, sprint_micro_shake, fall_camera_dip, apply_screen_shake, apply_footstep_bob)
+                .after(CameraSyncSet)
+                .before(TransformSystems::Propagate)
+                .run_if(in_state(Screen::Gameplay)),
+        );
 }
 
 /// Max downward velocity for scaling fall effects.
 const FALL_MAX_VELOCITY: f32 = 25.0;
+
+/// SmoothStep helper for FOV scaling
+fn smoothstep(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
 
 fn dynamic_fov(
     time: Res<Time>,
@@ -72,9 +102,9 @@ fn dynamic_fov(
     let mut target = fov_state.base;
 
     if is_sprinting && speed > idle_threshold {
-        // Sprint FOV: scales with how close to sprint max speed, up to +10 degrees
+        // Sprint FOV: +20° with smoothstep for dramatic tunnel vision (Prototype-style)
         let sprint_ratio = (speed / sprint_speed).clamp(0.0, 1.0);
-        target += 10_f32.to_radians() * sprint_ratio;
+        target += 20_f32.to_radians() * smoothstep(sprint_ratio);
     }
 
     // Airborne at high speed: keep FOV expanded based on velocity
@@ -89,21 +119,21 @@ fn dynamic_fov(
         let fall_speed = (-velocity.y).max(0.0);
         if fall_speed > 3.0 {
             let fall_t = ((fall_speed - 3.0) / (FALL_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
-            target += 12_f32.to_radians() * fall_t;
+            target += 15_f32.to_radians() * fall_t;
         }
     }
 
-    // Jump charge: narrow FOV by 3 degrees (anticipation)
+    // Jump charge: narrow FOV by 6 degrees (anticipation)
     if jump_charge.charging {
         let charge_t =
             (jump_charge.charge_time / crate::player::control::MAX_CHARGE_TIME).clamp(0.0, 1.0);
-        target -= 3_f32.to_radians() * charge_t;
+        target -= 6_f32.to_radians() * charge_t;
     }
 
-    // Landing stun: FOV dip on impact, smoothly recovers as stun wears off
+    // Landing stun: FOV punch on impact (10°), smoothly recovers as stun wears off
     if let Some(stun) = landing_stun {
         let impact_strength = 1.0 - stun.timer.fraction();
-        target -= 5_f32.to_radians() * impact_strength;
+        target -= 10_f32.to_radians() * impact_strength;
     }
 
     // Smooth interpolation — fast expand on launch/fall, slower return to base
@@ -189,4 +219,81 @@ fn sprint_micro_shake(
 
     transform.translation.x += x * amplitude;
     transform.translation.y += y * amplitude;
+}
+
+// ── Screen Shake ────────────────────────────────────────────────────
+
+fn on_landing_shake(on: On<LandingImpact>, mut shake: ResMut<ScreenShake>) {
+    let event = on.event();
+    let t = ((event.velocity_y - 3.0) / 22.0).clamp(0.0, 1.0);
+
+    // Quadratic intensity scaling — heavy falls shake hard
+    shake.intensity = 0.03 + 0.15 * t * t;
+    shake.duration = 0.15 + 0.2 * t;
+    shake.timer = 0.0;
+}
+
+fn apply_screen_shake(
+    time: Res<Time>,
+    mut shake: ResMut<ScreenShake>,
+    mut camera: Query<&mut Transform, With<SceneCamera>>,
+) {
+    if shake.duration <= 0.0 || shake.timer >= shake.duration {
+        return;
+    }
+
+    shake.timer += time.delta_secs();
+    let t = (shake.timer / shake.duration).min(1.0);
+
+    // Quadratic decay
+    let decay = (1.0 - t) * (1.0 - t);
+    let elapsed = shake.timer;
+
+    // High-frequency sine waves for punchy shake
+    let x = (elapsed * 45.0).sin() * 0.6 + (elapsed * 73.0).cos() * 0.4;
+    let y = (elapsed * 53.0).cos() * 0.6 + (elapsed * 67.0).sin() * 0.4;
+
+    let Ok(mut cam_transform) = camera.single_mut() else {
+        return;
+    };
+
+    cam_transform.translation.x += x * shake.intensity * decay;
+    cam_transform.translation.y += y * shake.intensity * decay;
+}
+
+// ── Footstep Camera Bob ─────────────────────────────────────────────
+
+fn on_footstep_bob(on: On<Footstep>, mut bob: ResMut<FootstepBob>) {
+    let event = on.event();
+    // Sprint: stronger downward push
+    let impulse = if event.is_sprinting { -0.06 } else { -0.025 };
+    bob.velocity += impulse * BOB_STIFFNESS;
+}
+
+fn apply_footstep_bob(
+    time: Res<Time>,
+    mut bob: ResMut<FootstepBob>,
+    mut camera: Query<&mut Transform, With<SceneCamera>>,
+) {
+    let dt = time.delta_secs();
+
+    // Spring dynamics: stiffness pulls back to 0, damping prevents oscillation
+    let spring_force = -BOB_STIFFNESS * bob.offset;
+    let damping_force = -BOB_DAMPING * bob.velocity;
+    bob.velocity += (spring_force + damping_force) * dt;
+    bob.offset += bob.velocity * dt;
+    bob.offset = bob.offset.clamp(-BOB_MAX, BOB_MAX);
+
+    // Kill tiny oscillations
+    if bob.offset.abs() < 0.0005 && bob.velocity.abs() < 0.005 {
+        bob.offset = 0.0;
+        bob.velocity = 0.0;
+        return;
+    }
+
+    let Ok(mut cam_transform) = camera.single_mut() else {
+        return;
+    };
+
+    cam_transform.translation.y += bob.offset;
 }

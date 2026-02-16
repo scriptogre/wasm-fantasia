@@ -112,6 +112,25 @@ fn main() {
 
     let mut root: Value = serde_json::from_slice(json_bytes).expect("invalid GLB JSON");
 
+    // Strip empty scenes (Blender can export scenes without nodes, which Bevy rejects)
+    if let Some(scenes) = root.get_mut("scenes").and_then(|s| s.as_array_mut()) {
+        scenes.retain(|scene| {
+            scene
+                .get("nodes")
+                .and_then(|n| n.as_array())
+                .is_some_and(|nodes| !nodes.is_empty())
+        });
+    }
+    // Reset scene index if it now points past the end
+    let scene_count = root.get("scenes").and_then(|s| s.as_array()).map_or(0, |s| s.len());
+    if let Some(scene_idx) = root.get("scene").and_then(|s| s.as_u64()) {
+        if scene_idx as usize >= scene_count {
+            root.as_object_mut()
+                .unwrap()
+                .insert("scene".to_string(), Value::from(0));
+        }
+    }
+
     // Strip animations not in clip_names
     if let Some(animations) = root.get_mut("animations").and_then(|a| a.as_array_mut()) {
         animations.retain(|anim| {
