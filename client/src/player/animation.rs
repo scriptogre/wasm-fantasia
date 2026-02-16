@@ -6,7 +6,7 @@ use crate::rules::{Stat, Stats};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 
 mod anim_knobs {
-    pub const GENERAL_SPEED: f32 = 0.1;
+    pub const GENERAL_SPEED: f32 = 0.065;
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
 }
 
@@ -387,7 +387,7 @@ pub fn animating(
                 if basis_speed > cfg.player.movement.idle_to_run_threshold {
                     let speed = anim_knobs::GENERAL_SPEED * basis_speed;
                     // Use sprint animation when at 90%+ of max speed
-                    if basis_speed >= cfg.player.movement.speed * 0.9 {
+                    if basis_speed >= cfg.player.movement.speed * 1.3 {
                         AnimationState::Sprint(speed)
                     } else {
                         AnimationState::Run(speed)
@@ -410,11 +410,15 @@ pub fn animating(
             // animation (without necessarily replacing it). In this case - control the speed
             // of the animation based on the speed of the movement.
             AnimationState::Run(speed)
-            | AnimationState::Sprint(speed)
             | AnimationState::Crouch(speed)
             | AnimationState::Climb(speed) => {
                 for (_, active_animation) in animation_player.playing_animations_mut() {
                     active_animation.set_speed(*speed);
+                }
+            }
+            AnimationState::Sprint(speed) => {
+                for (_, active_animation) in animation_player.playing_animations_mut() {
+                    active_animation.set_speed(*speed * 0.8);
                 }
             }
             // Jumping can be chained, we want to start a new jump animation
@@ -453,7 +457,7 @@ pub fn animating(
                     if let Some(index) = player.animations.get(&Animation::Sprint) {
                         transitions
                             .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(*speed * 3.0)
+                            .set_speed(*speed * 0.8)
                             .repeat();
                     }
                 }

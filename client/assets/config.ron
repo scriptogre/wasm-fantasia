@@ -13,8 +13,8 @@
         fov: 75,
         zoom: (4.0, 16.0),  // More zoomed out for better combat visibility
         movement: (
-            speed: 8,
-            sprint_factor: 1.5,
+            speed: 6,
+            sprint_factor: 2.8,
             crouch_factor: 0.2,
             actions_in_air: 3,
             idle_to_run_threshold: 0.01,
@@ -26,7 +26,7 @@
     ),
     // seconds
     timers: (
-        step: 0.475, // for this specific animation: twice per cycle
+        step: 0.55, // for this specific animation: twice per cycle
         // sprint anim: 0.354
         // step on sprint timer: 0.317
         jump: 0.45,

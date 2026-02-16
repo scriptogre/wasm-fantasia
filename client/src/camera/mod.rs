@@ -1,6 +1,7 @@
 use crate::*;
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::anti_alias::taa::TemporalAntiAliasing;
 use bevy::{
-    anti_alias::taa::TemporalAntiAliasing,
     core_pipeline::prepass::DeferredPrepass,
     pbr::{DefaultOpaqueRendererMethod, DistanceFog, FogFalloff},
     render::view::Hdr,
@@ -11,9 +12,11 @@ mod juice;
 mod third_person;
 
 pub fn plugin(app: &mut App) {
-    app.insert_resource(DefaultOpaqueRendererMethod::deferred())
-        .add_systems(Startup, spawn_camera);
+    // Deferred rendering requires features not available on WebGL2
+    #[cfg(not(target_arch = "wasm32"))]
+    app.insert_resource(DefaultOpaqueRendererMethod::deferred());
 
+    app.add_systems(Startup, spawn_camera);
     app.add_plugins((third_person::plugin, assist::plugin, juice::plugin));
 }
 
@@ -30,15 +33,13 @@ pub fn spawn_camera(mut commands: Commands) {
         end: 150.0,
     };
 
-    commands.spawn((
+    let mut cam = commands.spawn((
         SceneCamera,
         IsDefaultUiCamera,
         Camera3d::default(),
         Camera::default(),
         Transform::from_xyz(100., 50., 100.).looking_at(Vec3::ZERO, Vec3::Y),
         Hdr,
-        DeferredPrepass,
-        TemporalAntiAliasing::default(),
         // Fog to fade grid into void at distance - creates infinite feel
         DistanceFog {
             color: colors::VOID,
@@ -46,4 +47,8 @@ pub fn spawn_camera(mut commands: Commands) {
             ..default()
         },
     ));
+
+    // TAA and deferred prepass require features unavailable on WebGL2
+    #[cfg(not(target_arch = "wasm32"))]
+    cam.insert((DeferredPrepass, TemporalAntiAliasing::default()));
 }

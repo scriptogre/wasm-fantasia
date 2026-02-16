@@ -1,5 +1,5 @@
 use super::*;
-use crate::player::control::{Footstep, JumpLaunched, LandingImpact};
+use crate::player::control::{Footstep, JumpLaunched, LandingImpact, Sprinting};
 use bevy_seedling::prelude::*;
 
 pub fn plugin(app: &mut App) {
@@ -15,7 +15,7 @@ fn movement_sound(
     time: Res<Time>,
     state: Res<Session>,
     settings: Res<Settings>,
-    tnua: Query<(&TnuaController<ControlScheme>, &Transform), With<Player>>,
+    tnua: Query<(&TnuaController<ControlScheme>, &Transform, Has<Sprinting>), With<Player>>,
     crouch: Single<&Action<Crouch>>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
@@ -25,7 +25,7 @@ fn movement_sound(
         return Ok(());
     }
 
-    let (controller, transform) = tnua.get(on.context)?;
+    let (controller, transform, is_sprinting) = tnua.get(on.context)?;
     let mut step_timer = step_timer.get_mut(on.context)?;
 
     // WALK SOUND
@@ -43,6 +43,7 @@ fn movement_sound(
         cmds.spawn(SamplePlayer::new(handle.clone()).with_volume(settings.sfx()));
         cmds.trigger(Footstep {
             position: transform.translation,
+            is_sprinting,
         });
     }
 

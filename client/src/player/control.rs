@@ -35,6 +35,18 @@ fn apply_response_curve(input: Vec2, exponent: f32) -> Vec2 {
 /// Movement stick uses slight curve (1.3) for precise positioning
 const MOVEMENT_CURVE_EXPONENT: f32 = 1.3;
 
+/// Smoothed input for Prototype-style exponential acceleration and slide-stop.
+/// Asymmetric lerp: fast ramp-up, slow decay creates momentum/inertia feel.
+#[derive(Resource, Default)]
+pub struct SmoothedInput {
+    pub current: Vec2,
+}
+
+/// Ramp-up lerp speed — responsive but not instant (Prototype's "explosive start")
+const INPUT_RAMP_UP_SPEED: f32 = 12.0;
+/// Slow-down lerp speed — ~0.25s slide to stop (Prototype's 5-10m stop slide)
+const INPUT_SLOW_DOWN_SPEED: f32 = 4.0;
+
 fn jump_action() -> ControlScheme {
     ControlScheme::Jump(TnuaBuiltinJump {
         allow_in_air: false,
@@ -100,7 +112,7 @@ impl InputBuffer {
 // ============================================================================
 
 /// Below this hold duration, treat as a tap (quick hop).
-const TAP_THRESHOLD: f32 = 0.3;
+const TAP_THRESHOLD: f32 = 0.15;
 /// Maximum charge time in seconds.
 pub const MAX_CHARGE_TIME: f32 = 0.6;
 /// Jump height for a quick tap.
@@ -151,6 +163,7 @@ pub struct LandingStun {
 #[derive(Event)]
 pub struct Footstep {
     pub position: Vec3,
+    pub is_sprinting: bool,
 }
 
 /// Map charge duration to jump height with a non-linear (sqrt) curve.
@@ -166,6 +179,7 @@ fn charge_jump_height(charge_time: f32) -> f32 {
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<InputBuffer>()
+        .init_resource::<SmoothedInput>()
         .add_systems(
             Update,
             (
@@ -196,20 +210,23 @@ fn tick_input_buffer(time: Res<Time>, mut buffer: ResMut<InputBuffer>) {
 /// Tnua configuration is tricky to grasp from the get go, this is the best demo:
 /// <https://github.com/idanarye/bevy-tnua/blob/main/demos/src/character_control_systems/platformer_control_systems.rs>
 fn movement(
+    time: Res<Time>,
     cfg: Res<Config>,
     navigate: Query<&Action<Navigate>>,
     crouch: Query<&Action<Crouch>>,
     camera: Query<&Transform, With<SceneCamera>>,
+    mut smoothed_input: ResMut<SmoothedInput>,
     mut player_query: Query<(
         &mut Player,
         &mut TnuaController<ControlScheme>,
         &mut StepTimer,
         Option<&RollingState>,
         Has<GroundPoundState>,
+        Has<Sprinting>,
     )>,
 ) -> Result {
     let Ok(navigate) = navigate.single() else {
-        for (_player, mut controller, _step_timer, _, _) in player_query.iter_mut() {
+        for (_player, mut controller, _step_timer, _, _, _) in player_query.iter_mut() {
             controller.basis = TnuaBuiltinWalk {
                 desired_motion: Vec3::ZERO,
                 desired_forward: None,
@@ -219,11 +236,57 @@ fn movement(
     };
     let navigate = *navigate;
     let crouch = crouch.single().copied().unwrap_or_default();
+    let dt = time.delta_secs();
 
-    for (player, mut controller, mut step_timer, rolling, ground_pounding) in player_query.iter_mut() {
+    for (player, mut controller, mut step_timer, rolling, ground_pounding, _is_sprinting) in player_query.iter_mut() {
         let cam_transform = camera.single()?;
         let curved_input = apply_response_curve(*navigate, MOVEMENT_CURVE_EXPONENT);
-        let direction = cam_transform.movement_direction(curved_input);
+
+        // Asymmetric input smoothing: fast ramp-up, slow decay (Prototype-style momentum)
+        let target_input = curved_input;
+        let is_ramping_up = target_input.length_squared() > smoothed_input.current.length_squared();
+        let lerp_speed = if is_ramping_up {
+            INPUT_RAMP_UP_SPEED
+        } else {
+            INPUT_SLOW_DOWN_SPEED
+        };
+        let current = smoothed_input.current;
+        smoothed_input.current += (target_input - current) * (lerp_speed * dt).min(1.0);
+
+        // Kill smoothed input below threshold to ensure full stop
+        if smoothed_input.current.length_squared() < 0.001 {
+            smoothed_input.current = Vec2::ZERO;
+        }
+
+        let direction = cam_transform.movement_direction(smoothed_input.current);
+
+        // Speed-dependent turn rate clamping (Prototype: instant at walk, ~120°/s at sprint)
+        let sprint_speed = cfg.player.movement.speed * cfg.player.movement.sprint_factor;
+        let actual_speed = controller.basis_memory.running_velocity.length();
+        let speed_ratio = (actual_speed / sprint_speed).clamp(0.0, 1.0);
+        // radians/sec: ~full circle at walk, ~120°/s (2.09 rad/s) at sprint
+        let max_turn_rate = std::f32::consts::TAU * (1.0 - speed_ratio) + 2.0 * speed_ratio;
+
+        // Limit direction change based on turn rate
+        let desired_forward = if actual_speed > IDLE_TO_RUN_TRESHOLD && direction.length_squared() > 0.01 {
+            let current_forward = controller.basis_memory.running_velocity.normalize_or_zero();
+            if current_forward.length_squared() > 0.01 {
+                let max_angle = max_turn_rate * dt;
+                let angle = current_forward.xz().angle_to(direction.xz());
+                if angle.abs() > max_angle {
+                    let clamped_angle = angle.clamp(-max_angle, max_angle);
+                    let rot = Quat::from_rotation_y(clamped_angle);
+                    let turned = rot * current_forward;
+                    Dir3::new(turned).ok()
+                } else {
+                    Dir3::new(direction).ok()
+                }
+            } else {
+                Dir3::new(direction).ok()
+            }
+        } else {
+            Dir3::new(direction).ok()
+        };
 
         // During roll or ground pound, suppress Tnua movement so it doesn't fight the impulse
         let desired_motion = if rolling.is_some() || ground_pounding {
@@ -235,7 +298,7 @@ fn movement(
         controller.initiate_action_feeding();
         controller.basis = TnuaBuiltinWalk {
             desired_motion,
-            desired_forward: Dir3::new(direction).ok(),
+            desired_forward,
         };
 
         // Check if crouch is currently active and apply TnuaBuiltinCrouch as an action
@@ -244,10 +307,6 @@ fn movement(
         }
 
         // update step timer dynamically based on actual speed
-        // Note: this is specific to the animation provided
-        // normal step: 0.475
-        // sprint step (x1.5): 0.354
-        // step on sprint timer: 0.317
         let current_actual_speed = controller.basis_memory.running_velocity.length();
         if current_actual_speed > IDLE_TO_RUN_TRESHOLD {
             let ratio = cfg.player.movement.speed / current_actual_speed;
@@ -370,7 +429,7 @@ fn on_jump_release(
 
     // Forward momentum: propel in movement direction proportional to charge
     let charge_t = ((charge_time - TAP_THRESHOLD) / (MAX_CHARGE_TIME - TAP_THRESHOLD)).clamp(0.0, 1.0);
-    let momentum_speed = 8.0 + 12.0 * charge_t; // 8 m/s at min charge, 20 m/s at full
+    let momentum_speed = 10.0 + 18.0 * charge_t; // 8 m/s at min charge, 20 m/s at full
     let direction = if let (Ok(nav_action), Ok(cam_transform)) =
         (navigate.single(), camera.single())
     {
@@ -442,7 +501,7 @@ fn process_buffered_jump(
 
         // Forward momentum
         let charge_t = ((buffered.charge_time - TAP_THRESHOLD) / (MAX_CHARGE_TIME - TAP_THRESHOLD)).clamp(0.0, 1.0);
-        let momentum_speed = 8.0 + 12.0 * charge_t;
+        let momentum_speed = 10.0 + 18.0 * charge_t;
         let direction = if let (Ok(nav_action), Ok(cam_transform)) =
             (navigate.single(), camera.single())
         {
