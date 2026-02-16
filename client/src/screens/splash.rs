@@ -1,12 +1,8 @@
 //! A splash screen that plays briefly at startup.
 use super::*;
-use bevy::{
-    image::{ImageLoaderSettings, ImageSampler},
-    input::common_conditions::input_just_pressed,
-};
+use bevy::input::common_conditions::input_just_pressed;
 
 const SPLASH_DURATION_SECS: f32 = 3.0;
-const SPLASH_FADE_DURATION_SECS: f32 = 1.0;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::Splash), spawn_splash_screen);
@@ -41,34 +37,10 @@ pub(super) fn plugin(app: &mut App) {
     );
 }
 
-fn spawn_splash_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn spawn_splash_screen(mut commands: Commands) {
     commands.spawn((
         ui_root("Splash screen"),
-        children![
-            (
-                Node {
-                    align_self: AlignSelf::Center,
-                    width: Percent(30.0),
-                    ..default()
-                },
-                ImageNode::new(asset_server.load_with_settings(
-                    // This should be an embedded asset for instant loading, but that is
-                    // currently [broken on Windows Wasm builds](https://github.com/bevyengine/bevy/issues/14246).
-                    "textures/bevy.png",
-                    |settings: &mut ImageLoaderSettings| {
-                        // Make an exception for the splash image in case
-                        // `ImagePlugin::default_nearest()` is used for pixel art.
-                        settings.sampler = ImageSampler::linear();
-                    },
-                )),
-                ImageNodeFadeInOut {
-                    total_duration: SPLASH_DURATION_SECS,
-                    fade_duration: SPLASH_FADE_DURATION_SECS,
-                    t: 0.0,
-                }
-            ),
-            label("Made with BEVY and love")
-        ],
+        children![label("Made with BEVY and love")],
         DespawnOnExit(Screen::Splash),
     ));
 }

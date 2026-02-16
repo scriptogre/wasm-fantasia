@@ -60,6 +60,7 @@ bevy_skein = "^0.5"                                                             
 # iyes_perf_ui = "0.5"                                                                      # diagnostics overlay
 
 avian3d = { package = "bevy_avian3d", path = "../crates/avian/crates/bevy_avian3d", features = ["debug-plugin", "3d", "parallel", "collider-from-mesh"] }   # physics (forked)
+bevy_hanabi = { version = "0.18", default-features = false, features = ["3d"] }              # GPU particle effects
 bevy_open_vat = "^0.18"                                                                     # vertex animation textures for GPU-driven enemy animation
 bevy_seedling = { version = "^0.7", features = ["hrtf", "ogg", "web_audio"] }                # audio plugin using firewheel
 bevy_shuffle_bag = "^0.4"                                                                   # random container for audio

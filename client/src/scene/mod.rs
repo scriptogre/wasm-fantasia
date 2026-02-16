@@ -113,5 +113,4 @@ fn setup_animus_scene(
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.7, 0.3, 0.0)),
     ));
 
-    commands.insert_resource(ClearColor(colors::VOID));
 }

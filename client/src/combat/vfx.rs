@@ -1,14 +1,19 @@
 use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
+use bevy_hanabi::prelude::{
+    self as hanabi, AccelModifier, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier,
+    EffectAsset, EffectMaterial, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
+    OrientModifier, ParticleEffect, ParticleTextureModifier, SetAttributeModifier,
+    SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension,
+    SizeOverLifetimeModifier, SpawnerSettings,
+};
 use bevy_open_vat::prelude::OpenVatExtension;
 
 use super::enemy::VatMeshLink;
 use crate::combat::{AttackIntent, HitLanded, MeshHeight, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::Session;
-use avian3d::prelude::LinearVelocity;
 
-use crate::models::Player;
-use crate::player::control::{AirborneTracker, Footstep, GroundPoundImpact, JumpLaunched, LandingImpact};
+use crate::player::control::{Footstep, GroundPoundImpact, JumpLaunched, LandingImpact};
 
 type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
 
@@ -26,15 +31,12 @@ pub fn plugin(app: &mut App) {
         );
 
     app.add_observer(on_impact_vfx)
-        .add_systems(Startup, setup_impact_assets)
-        .add_systems(Update, tick_impact_vfx);
-
-    app.add_observer(on_launch_shockwave)
+        .add_observer(on_jump_vfx)
         .add_observer(on_landing_vfx)
         .add_observer(on_ground_pound_vfx)
         .add_observer(on_footstep_dust)
-        .add_systems(Startup, (setup_shockwave_assets, setup_speed_line_assets))
-        .add_systems(Update, (tick_shockwave_vfx, spawn_speed_lines, tick_speed_lines));
+        .add_systems(Startup, setup_particle_effects)
+        .add_systems(Update, tick_debris_chunks);
 }
 
 // ── Hit Flash ───────────────────────────────────────────────────────
@@ -323,54 +325,489 @@ fn tick_debug_hitbox(
     }
 }
 
-// ── Impact VFX ─────────────────────────────────────────────────────
+// ── GPU Particle Effects (bevy_hanabi) ──────────────────────────────
 
 #[derive(Resource)]
-pub struct ImpactAssets {
-    pub mesh: Handle<Mesh>,
-    pub material: Handle<StandardMaterial>,
+struct ParticleEffects {
+    dust_burst: Handle<EffectAsset>,
+    jump_dust_cloud: Handle<EffectAsset>,
+    landing_impact: Handle<EffectAsset>,
+    ground_pound: Handle<EffectAsset>,
+    hit_spark: Handle<EffectAsset>,
+    smoke_texture: Handle<Image>,
 }
 
-fn setup_impact_assets(
+#[derive(Resource)]
+struct DebrisAssets {
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
+}
+
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct DebrisChunk {
+    timer: f32,
+    duration: f32,
+    velocity: Vec3,
+    angular_velocity: Vec3,
+    start_pos: Vec3,
+}
+
+fn setup_particle_effects(
     mut commands: Commands,
+    mut effects: ResMut<Assets<EffectAsset>>,
+    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let mesh = meshes.add(Cuboid::new(0.15, 0.15, 0.5));
-    let material = materials.add(StandardMaterial {
-        base_color: crate::ui::colors::SAND_YELLOW,
-        emissive: LinearRgba::new(15.0, 10.0, 2.0, 1.0),
-        alpha_mode: AlphaMode::Add,
-        unlit: true,
+    let smoke_texture: Handle<Image> = asset_server.load("textures/smoke.png");
+
+    let dust_burst = effects.add(make_dust_burst());
+    let jump_dust_cloud = effects.add(make_jump_dust_cloud());
+    let landing_impact = effects.add(make_landing_impact());
+    let ground_pound = effects.add(make_ground_pound());
+    let hit_spark = effects.add(make_hit_spark());
+
+    commands.insert_resource(ParticleEffects {
+        dust_burst,
+        jump_dust_cloud,
+        landing_impact,
+        ground_pound,
+        hit_spark,
+        smoke_texture,
+    });
+
+    // Debris chunk assets for jump launch
+    let debris_mesh = meshes.add(Cuboid::new(0.15, 0.1, 0.12));
+    let debris_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.15, 0.13, 0.1),
+        perceptual_roughness: 0.9,
         ..default()
     });
-    commands.insert_resource(ImpactAssets { mesh, material });
+    commands.insert_resource(DebrisAssets {
+        mesh: debris_mesh,
+        material: debris_material,
+    });
 }
 
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-pub struct ImpactVfx {
-    pub timer: f32,
-    pub duration: f32,
-    pub direction: Vec3,
-    pub speed: f32,
-    pub start_pos: Vec3,
+fn make_dust_burst() -> EffectAsset {
+    let writer = ExprWriter::new();
+
+    let init_pos = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(0.3).expr(),
+        dimension: ShapeDimension::Volume,
+    };
+    let init_vel = SetVelocitySphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        speed: writer.lit(1.5).uniform(writer.lit(3.0)).expr(),
+    };
+    let init_lifetime = SetAttributeModifier::new(
+        hanabi::Attribute::LIFETIME,
+        writer.lit(0.2).uniform(writer.lit(0.4)).expr(),
+    );
+    let init_age = SetAttributeModifier::new(hanabi::Attribute::AGE, writer.lit(0.0).expr());
+
+    let drag = LinearDragModifier::new(writer.lit(6.0).expr());
+    let gravity = AccelModifier::new(writer.lit(Vec3::new(0., -5.0, 0.)).expr());
+
+    let mut color_grad = hanabi::Gradient::new();
+    color_grad.add_key(0.0, Vec4::new(0.25, 0.2, 0.15, 0.5));
+    color_grad.add_key(0.5, Vec4::new(0.18, 0.15, 0.12, 0.25));
+    color_grad.add_key(1.0, Vec4::new(0.1, 0.08, 0.06, 0.0));
+
+    let mut size_grad = hanabi::Gradient::new();
+    size_grad.add_key(0.0, Vec3::splat(0.08));
+    size_grad.add_key(0.3, Vec3::splat(0.12));
+    size_grad.add_key(1.0, Vec3::splat(0.02));
+
+    EffectAsset::new(256, SpawnerSettings::once(20.0.into()), writer.finish())
+        .with_name("dust_burst")
+        .init(init_pos)
+        .init(init_vel)
+        .init(init_lifetime)
+        .init(init_age)
+        .update(drag)
+        .update(gravity)
+        .render(ColorOverLifetimeModifier {
+            gradient: color_grad,
+            blend: ColorBlendMode::Overwrite,
+            mask: ColorBlendMask::RGBA,
+        })
+        .render(SizeOverLifetimeModifier {
+            gradient: size_grad,
+            screen_space_size: false,
+        })
 }
 
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-pub struct ImpactBurst {
-    pub timer: f32,
-    pub duration: f32,
+/// Heavy dark dust/smoke cloud — "extreme ghost layer" approach.
+/// Ultra-low alpha so individual particles are nearly invisible;
+/// only visible where many overlap, creating a cohesive cloud that hides edges.
+/// Massive expansion (2.0 → 6.5) + long lifetime forces textures to wash out.
+pub fn make_jump_dust_cloud() -> EffectAsset {
+    let writer = ExprWriter::new();
+
+    let init_age = SetAttributeModifier::new(hanabi::Attribute::AGE, writer.lit(0.).expr());
+
+    let lifetime = writer.lit(1.8).uniform(writer.lit(3.0)).expr();
+    let init_lifetime = SetAttributeModifier::new(hanabi::Attribute::LIFETIME, lifetime);
+
+    let init_pos = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(1.5).expr(),
+        dimension: ShapeDimension::Volume,
+    };
+
+    let init_vel = SetVelocitySphereModifier {
+        center: writer.lit(Vec3::new(0.0, 0.2, 0.0)).expr(),
+        speed: writer.lit(12.0).uniform(writer.lit(22.0)).expr(),
+    };
+
+    let texture_slot = writer.lit(0u32).expr();
+    let random_rotation = writer.lit(0.0).uniform(writer.lit(std::f32::consts::TAU)).expr();
+
+    let random_size = writer.lit(0.5).uniform(writer.lit(2.0)).expr();
+    let init_size = SetAttributeModifier::new(hanabi::Attribute::SIZE, random_size);
+
+    let drag = LinearDragModifier::new(writer.lit(6.0).expr());
+    let gravity = AccelModifier::new(writer.lit(Vec3::new(0.0, -0.5, 0.0)).expr());
+
+    let mut color_grad = hanabi::Gradient::new();
+    color_grad.add_key(0.0, Vec4::new(0.1, 0.09, 0.08, 0.15));
+    color_grad.add_key(0.2, Vec4::new(0.08, 0.07, 0.06, 0.12));
+    color_grad.add_key(1.0, Vec4::new(0.0, 0.0, 0.0, 0.0));
+
+    let mut size_grad = hanabi::Gradient::new();
+    size_grad.add_key(0.0, Vec3::splat(2.0));
+    size_grad.add_key(1.0, Vec3::splat(6.5));
+
+    let mut module = writer.finish();
+    module.add_texture_slot("smoke");
+
+    EffectAsset::new(256, SpawnerSettings::once(60.0.into()), module)
+        .with_name("jump_dust_cloud")
+        .with_alpha_mode(hanabi::AlphaMode::Blend)
+        .init(init_pos)
+        .init(init_vel)
+        .init(init_age)
+        .init(init_lifetime)
+        .init(init_size)
+        .update(drag)
+        .update(gravity)
+        .render(ParticleTextureModifier {
+            texture_slot,
+            sample_mapping: ImageSampleMapping::Modulate,
+        })
+        .render(OrientModifier {
+            mode: OrientMode::FaceCameraPosition,
+            rotation: Some(random_rotation),
+        })
+        .render(ColorOverLifetimeModifier {
+            gradient: color_grad,
+            blend: ColorBlendMode::Overwrite,
+            mask: ColorBlendMask::RGBA,
+        })
+        .render(SizeOverLifetimeModifier {
+            gradient: size_grad,
+            screen_space_size: false,
+        })
+}
+
+fn make_landing_impact() -> EffectAsset {
+    let writer = ExprWriter::new();
+
+    let init_pos = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(0.5).expr(),
+        dimension: ShapeDimension::Surface,
+    };
+    let init_vel = SetVelocitySphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        speed: writer.lit(5.0).uniform(writer.lit(10.0)).expr(),
+    };
+    let init_lifetime = SetAttributeModifier::new(
+        hanabi::Attribute::LIFETIME,
+        writer.lit(0.35).uniform(writer.lit(0.6)).expr(),
+    );
+    let init_age = SetAttributeModifier::new(hanabi::Attribute::AGE, writer.lit(0.0).expr());
+
+    let drag = LinearDragModifier::new(writer.lit(3.5).expr());
+    let gravity = AccelModifier::new(writer.lit(Vec3::new(0., -14.0, 0.)).expr());
+
+    let mut color_grad = hanabi::Gradient::new();
+    color_grad.add_key(0.0, Vec4::new(0.3, 0.25, 0.18, 0.6));
+    color_grad.add_key(0.3, Vec4::new(0.2, 0.16, 0.12, 0.35));
+    color_grad.add_key(1.0, Vec4::new(0.1, 0.08, 0.06, 0.0));
+
+    let mut size_grad = hanabi::Gradient::new();
+    size_grad.add_key(0.0, Vec3::splat(0.12));
+    size_grad.add_key(0.4, Vec3::splat(0.18));
+    size_grad.add_key(1.0, Vec3::splat(0.0));
+
+    EffectAsset::new(1024, SpawnerSettings::once(80.0.into()), writer.finish())
+        .with_name("landing_impact")
+        .init(init_pos)
+        .init(init_vel)
+        .init(init_lifetime)
+        .init(init_age)
+        .update(drag)
+        .update(gravity)
+        .render(ColorOverLifetimeModifier {
+            gradient: color_grad,
+            blend: ColorBlendMode::Overwrite,
+            mask: ColorBlendMask::RGBA,
+        })
+        .render(SizeOverLifetimeModifier {
+            gradient: size_grad,
+            screen_space_size: false,
+        })
+}
+
+fn make_ground_pound() -> EffectAsset {
+    let writer = ExprWriter::new();
+
+    let init_pos = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(0.6).expr(),
+        dimension: ShapeDimension::Surface,
+    };
+    let init_vel = SetVelocitySphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        speed: writer.lit(6.0).uniform(writer.lit(14.0)).expr(),
+    };
+    let init_lifetime = SetAttributeModifier::new(
+        hanabi::Attribute::LIFETIME,
+        writer.lit(0.4).uniform(writer.lit(0.7)).expr(),
+    );
+    let init_age = SetAttributeModifier::new(hanabi::Attribute::AGE, writer.lit(0.0).expr());
+
+    let drag = LinearDragModifier::new(writer.lit(3.0).expr());
+    let gravity = AccelModifier::new(writer.lit(Vec3::new(0., -10.0, 0.)).expr());
+
+    let mut color_grad = hanabi::Gradient::new();
+    color_grad.add_key(0.0, Vec4::new(3.0, 2.0, 0.8, 1.0));
+    color_grad.add_key(0.3, Vec4::new(1.5, 0.8, 0.2, 0.9));
+    color_grad.add_key(0.7, Vec4::new(0.5, 0.3, 0.1, 0.5));
+    color_grad.add_key(1.0, Vec4::new(0.15, 0.1, 0.05, 0.0));
+
+    let mut size_grad = hanabi::Gradient::new();
+    size_grad.add_key(0.0, Vec3::splat(0.15));
+    size_grad.add_key(0.3, Vec3::splat(0.25));
+    size_grad.add_key(1.0, Vec3::splat(0.0));
+
+    EffectAsset::new(2048, SpawnerSettings::once(200.0.into()), writer.finish())
+        .with_name("ground_pound")
+        .init(init_pos)
+        .init(init_vel)
+        .init(init_lifetime)
+        .init(init_age)
+        .update(drag)
+        .update(gravity)
+        .render(ColorOverLifetimeModifier {
+            gradient: color_grad,
+            blend: ColorBlendMode::Overwrite,
+            mask: ColorBlendMask::RGBA,
+        })
+        .render(SizeOverLifetimeModifier {
+            gradient: size_grad,
+            screen_space_size: false,
+        })
+}
+
+fn make_hit_spark() -> EffectAsset {
+    let writer = ExprWriter::new();
+
+    let init_pos = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(0.15).expr(),
+        dimension: ShapeDimension::Volume,
+    };
+    let init_vel = SetVelocitySphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        speed: writer.lit(5.0).uniform(writer.lit(12.0)).expr(),
+    };
+    let init_lifetime = SetAttributeModifier::new(
+        hanabi::Attribute::LIFETIME,
+        writer.lit(0.1).uniform(writer.lit(0.25)).expr(),
+    );
+    let init_age = SetAttributeModifier::new(hanabi::Attribute::AGE, writer.lit(0.0).expr());
+
+    let drag = LinearDragModifier::new(writer.lit(8.0).expr());
+
+    let mut color_grad = hanabi::Gradient::new();
+    color_grad.add_key(0.0, Vec4::new(6.0, 5.0, 2.0, 1.0));
+    color_grad.add_key(0.3, Vec4::new(4.0, 2.0, 0.5, 0.9));
+    color_grad.add_key(1.0, Vec4::new(1.0, 0.2, 0.0, 0.0));
+
+    let mut size_grad = hanabi::Gradient::new();
+    size_grad.add_key(0.0, Vec3::splat(0.06));
+    size_grad.add_key(0.5, Vec3::splat(0.03));
+    size_grad.add_key(1.0, Vec3::splat(0.0));
+
+    EffectAsset::new(512, SpawnerSettings::once(30.0.into()), writer.finish())
+        .with_name("hit_spark")
+        .init(init_pos)
+        .init(init_vel)
+        .init(init_lifetime)
+        .init(init_age)
+        .update(drag)
+        .render(ColorOverLifetimeModifier {
+            gradient: color_grad,
+            blend: ColorBlendMode::Overwrite,
+            mask: ColorBlendMask::RGBA,
+        })
+        .render(SizeOverLifetimeModifier {
+            gradient: size_grad,
+            screen_space_size: false,
+        })
+}
+
+// ── Debris Chunks ───────────────────────────────────────────────────
+
+fn tick_debris_chunks(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut chunks: Query<(Entity, &mut DebrisChunk, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+    let gravity = Vec3::new(0.0, -35.0, 0.0);
+
+    for (entity, mut chunk, mut transform) in chunks.iter_mut() {
+        chunk.timer += dt;
+
+        if chunk.timer >= chunk.duration || transform.translation.y < chunk.start_pos.y - 0.5 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        chunk.velocity += gravity * dt;
+        transform.translation += chunk.velocity * dt;
+
+        let delta_rotation = Quat::from_scaled_axis(chunk.angular_velocity * dt);
+        transform.rotation = delta_rotation * transform.rotation;
+    }
+}
+
+// ── Observer Handlers ───────────────────────────────────────────────
+
+fn on_jump_vfx(
+    on: On<JumpLaunched>,
+    effects: Option<Res<ParticleEffects>>,
+    debris_assets: Option<Res<DebrisAssets>>,
+    mut commands: Commands,
+) {
+    let event = on.event();
+    let pos = event.position - Vec3::Y * 0.8;
+    let ground_transform = Transform::from_translation(pos);
+
+    if let Some(effects) = effects {
+        commands.spawn((
+            ParticleEffect::new(effects.jump_dust_cloud.clone()),
+            EffectMaterial {
+                images: vec![effects.smoke_texture.clone()],
+            },
+            ground_transform,
+        ));
+    }
+
+    // Debris chunks (mesh entities with ballistic arcs + spin)
+    if let Some(debris_assets) = debris_assets {
+        let mut rng = rand::rng();
+        for _ in 0..8 {
+            let angle = rand::Rng::random_range(&mut rng, 0.0..std::f32::consts::TAU);
+            let horizontal_speed = rand::Rng::random_range(&mut rng, 4.0..10.0);
+            let upward_speed = rand::Rng::random_range(&mut rng, 8.0..16.0);
+            let velocity = Vec3::new(
+                angle.cos() * horizontal_speed,
+                upward_speed,
+                angle.sin() * horizontal_speed,
+            );
+            let angular_velocity = Vec3::new(
+                rand::Rng::random_range(&mut rng, -10.0..10.0),
+                rand::Rng::random_range(&mut rng, -10.0..10.0),
+                rand::Rng::random_range(&mut rng, -10.0..10.0),
+            );
+            let scale = rand::Rng::random_range(&mut rng, 0.5..1.2);
+
+            commands.spawn((
+                DebrisChunk {
+                    timer: 0.0,
+                    duration: 2.0,
+                    velocity,
+                    angular_velocity,
+                    start_pos: pos,
+                },
+                Mesh3d(debris_assets.mesh.clone()),
+                MeshMaterial3d(debris_assets.material.clone()),
+                ground_transform.with_scale(Vec3::splat(scale)),
+            ));
+        }
+    }
+}
+
+const LANDING_MAX_VELOCITY: f32 = 25.0;
+
+fn on_landing_vfx(
+    on: On<LandingImpact>,
+    effects: Option<Res<ParticleEffects>>,
+    mut commands: Commands,
+) {
+    let event = on.event();
+    let t = ((event.velocity_y - 3.0) / (LANDING_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
+    let pos = event.position - Vec3::Y * 0.8;
+
+    if let Some(effects) = effects {
+        let scale = 0.6 + 0.8 * t;
+        commands.spawn((
+            ParticleEffect::new(effects.landing_impact.clone()),
+            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
+        ));
+    }
+}
+
+fn on_ground_pound_vfx(
+    on: On<GroundPoundImpact>,
+    effects: Option<Res<ParticleEffects>>,
+    mut commands: Commands,
+) {
+    let event = on.event();
+    let pos = event.position - Vec3::Y * 0.8;
+
+    if let Some(effects) = effects {
+        commands.spawn((
+            ParticleEffect::new(effects.ground_pound.clone()),
+            Transform::from_translation(pos),
+        ));
+    }
+}
+
+fn on_footstep_dust(
+    on: On<Footstep>,
+    effects: Option<Res<ParticleEffects>>,
+    mut commands: Commands,
+) {
+    let Some(effects) = effects else {
+        return;
+    };
+
+    let event = on.event();
+    let pos = event.position - Vec3::Y * 0.8;
+
+    let scale = if event.is_sprinting { 1.2 } else { 0.6 };
+
+    commands.spawn((
+        ParticleEffect::new(effects.dust_burst.clone()),
+        Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
+    ));
 }
 
 fn on_impact_vfx(
     on: On<HitLanded>,
     targets: Query<(&Transform, Option<&MeshHeight>)>,
-    impact_assets: Option<Res<ImpactAssets>>,
+    effects: Option<Res<ParticleEffects>>,
     mut commands: Commands,
 ) {
-    let Some(assets) = impact_assets else {
+    let Some(effects) = effects else {
         return;
     };
 
@@ -383,528 +820,8 @@ fn on_impact_vfx(
     let center_mass = mesh_height.map_or(0.9, |h| h.0 * 0.5);
     let impact_pos = target_transform.translation + Vec3::Y * center_mass;
 
-    let num_particles = 4;
-    let mut rng = rand::rng();
-
-    for i in 0..num_particles {
-        let angle = (i as f32 / num_particles as f32) * std::f32::consts::TAU;
-        let vertical = rand::Rng::random_range(&mut rng, -0.3..0.5);
-
-        let dir = Vec3::new(angle.cos(), vertical, angle.sin()).normalize();
-        let speed = rand::Rng::random_range(&mut rng, 3.0..6.0);
-        let duration = rand::Rng::random_range(&mut rng, 0.15..0.25);
-
-        let rotation = Quat::from_rotation_arc(Vec3::Z, dir);
-
-        commands.spawn((
-            Mesh3d(assets.mesh.clone()),
-            MeshMaterial3d(assets.material.clone()),
-            Transform::from_translation(impact_pos)
-                .with_rotation(rotation)
-                .with_scale(Vec3::new(0.4, 0.4, 0.8)),
-            ImpactVfx {
-                timer: 0.0,
-                duration,
-                direction: dir,
-                speed,
-                start_pos: impact_pos,
-            },
-        ));
-    }
-
     commands.spawn((
-        Mesh3d(assets.mesh.clone()),
-        MeshMaterial3d(assets.material.clone()),
-        Transform::from_translation(impact_pos).with_scale(Vec3::splat(0.1)),
-        ImpactBurst {
-            timer: 0.0,
-            duration: 0.12,
-        },
+        ParticleEffect::new(effects.hit_spark.clone()),
+        Transform::from_translation(impact_pos),
     ));
-}
-
-fn tick_impact_vfx(
-    time: Res<Time>,
-    mut commands: Commands,
-    mut particles: Query<(Entity, &mut ImpactVfx, &mut Transform), Without<ImpactBurst>>,
-    mut bursts: Query<(Entity, &mut ImpactBurst, &mut Transform)>,
-) {
-    let dt = time.delta_secs();
-
-    for (entity, mut vfx, mut transform) in particles.iter_mut() {
-        vfx.timer += dt;
-        let t = (vfx.timer / vfx.duration).min(1.0);
-
-        if t >= 1.0 {
-            commands.entity(entity).despawn();
-            continue;
-        }
-
-        let distance = vfx.speed * vfx.timer;
-        transform.translation = vfx.start_pos + vfx.direction * distance;
-
-        let fade = 1.0 - t;
-        let stretch = 1.0 + t * 2.0;
-        transform.scale = Vec3::new(0.3 * fade, 0.3 * fade, 0.8 * stretch * fade);
-    }
-
-    for (entity, mut burst, mut transform) in bursts.iter_mut() {
-        burst.timer += dt;
-        let t = (burst.timer / burst.duration).min(1.0);
-
-        if t >= 1.0 {
-            commands.entity(entity).despawn();
-            continue;
-        }
-
-        let ease = 1.0 - (1.0 - t).powi(3);
-        let scale = 0.1 + ease * 1.5;
-        let fade = 1.0 - t;
-        transform.scale = Vec3::splat(scale * fade);
-    }
-}
-
-// ── Launch Shockwave VFX ────────────────────────────────────────────
-
-#[derive(Resource)]
-struct ShockwaveAssets {
-    ring_mesh: Handle<Mesh>,
-    ring_material: Handle<StandardMaterial>,
-    dust_mesh: Handle<Mesh>,
-    dust_material: Handle<StandardMaterial>,
-}
-
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-struct ShockwaveRing {
-    timer: f32,
-    duration: f32,
-    max_scale: f32,
-}
-
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-struct ShockwaveDust {
-    timer: f32,
-    duration: f32,
-    direction: Vec3,
-    speed: f32,
-    start_pos: Vec3,
-}
-
-fn setup_shockwave_assets(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    // Flat ring (washer shape) for the expanding shockwave
-    let ring_mesh = meshes.add(Annulus::new(0.6, 1.0));
-    let ring_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.8, 0.9, 1.0, 0.6),
-        emissive: LinearRgba::new(3.0, 4.0, 8.0, 1.0),
-        alpha_mode: AlphaMode::Add,
-        unlit: true,
-        cull_mode: None,
-        ..default()
-    });
-
-    // Chunky dust puffs — large enough to read at game camera distance
-    let dust_mesh = meshes.add(Sphere::new(0.2));
-    let dust_material = materials.add(StandardMaterial {
-        base_color: crate::ui::colors::SAND_YELLOW.with_alpha(0.8),
-        emissive: LinearRgba::new(5.0, 3.5, 1.0, 1.0),
-        alpha_mode: AlphaMode::Add,
-        unlit: true,
-        ..default()
-    });
-
-    commands.insert_resource(ShockwaveAssets {
-        ring_mesh,
-        ring_material,
-        dust_mesh,
-        dust_material,
-    });
-}
-
-fn on_launch_shockwave(
-    on: On<JumpLaunched>,
-    assets: Option<Res<ShockwaveAssets>>,
-    mut commands: Commands,
-) {
-    let Some(assets) = assets else {
-        return;
-    };
-
-    let event = on.event();
-    let t = 0.0_f32; // charge removed — always minimum
-    let max_scale = 0.5 + 2.5 * t;
-    let pos = event.position - Vec3::Y * 0.8; // At feet level
-
-    // Expanding ground ring
-    commands.spawn((
-        ShockwaveRing {
-            timer: 0.0,
-            duration: 0.3,
-            max_scale,
-        },
-        Mesh3d(assets.ring_mesh.clone()),
-        MeshMaterial3d(assets.ring_material.clone()),
-        Transform::from_translation(pos)
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
-            .with_scale(Vec3::splat(0.1)),
-    ));
-
-    // Second "crack" ring — disabled since charge jump was removed
-    if false {
-        commands.spawn((
-            ShockwaveRing {
-                timer: 0.0,
-                duration: 0.6,
-                max_scale: max_scale * 0.7,
-            },
-            Mesh3d(assets.ring_mesh.clone()),
-            MeshMaterial3d(assets.dust_material.clone()),
-            Transform::from_translation(pos)
-                .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
-                .with_scale(Vec3::splat(0.1)),
-        ));
-    }
-
-    let mut rng = rand::rng();
-
-    // Dust chunks that arc outward and fall back down (gravity in tick)
-    let num_particles = 10 + (6.0 * t) as usize;
-    for i in 0..num_particles {
-        let angle = (i as f32 / num_particles as f32) * std::f32::consts::TAU
-            + rand::Rng::random_range(&mut rng, -0.2..0.2);
-        let loft = rand::Rng::random_range(&mut rng, 2.0..5.0) * (0.5 + 0.5 * t);
-        let dir = Vec3::new(angle.cos(), loft, angle.sin()).normalize();
-        let speed = rand::Rng::random_range(&mut rng, 3.0..7.0) * (0.5 + 0.5 * t);
-        let duration = rand::Rng::random_range(&mut rng, 0.3..0.5);
-        let scale = rand::Rng::random_range(&mut rng, 0.5..1.2) * (0.6 + 0.4 * t);
-
-        commands.spawn((
-            ShockwaveDust {
-                timer: 0.0,
-                duration,
-                direction: dir,
-                speed,
-                start_pos: pos,
-            },
-            Mesh3d(assets.dust_mesh.clone()),
-            MeshMaterial3d(assets.dust_material.clone()),
-            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
-        ));
-    }
-}
-
-fn tick_shockwave_vfx(
-    time: Res<Time>,
-    mut commands: Commands,
-    mut rings: Query<(Entity, &mut ShockwaveRing, &mut Transform), Without<ShockwaveDust>>,
-    mut dust: Query<(Entity, &mut ShockwaveDust, &mut Transform)>,
-) {
-    let dt = time.delta_secs();
-
-    for (entity, mut ring, mut transform) in rings.iter_mut() {
-        ring.timer += dt;
-        let t = (ring.timer / ring.duration).min(1.0);
-
-        if t >= 1.0 {
-            commands.entity(entity).despawn();
-            continue;
-        }
-
-        // Cubic ease-out for expansion
-        let ease = 1.0 - (1.0 - t).powi(3);
-        let scale = 0.1 + ease * ring.max_scale;
-        let fade = 1.0 - t;
-        // Annulus is flat — scale XZ uniformly, keep Y thin
-        transform.scale = Vec3::new(scale, 0.1 * fade, scale);
-    }
-
-    for (entity, mut dust, mut transform) in dust.iter_mut() {
-        dust.timer += dt;
-        let t = (dust.timer / dust.duration).min(1.0);
-
-        if t >= 1.0 {
-            commands.entity(entity).despawn();
-            continue;
-        }
-
-        // Ballistic arc: initial velocity + gravity pulls dust back down
-        let time = dust.timer;
-        let gravity = -12.0;
-        let pos = dust.start_pos + dust.direction * dust.speed * time;
-        transform.translation = Vec3::new(pos.x, pos.y + 0.5 * gravity * time * time, pos.z);
-
-        // Don't let dust sink below spawn point (ground level)
-        if transform.translation.y < dust.start_pos.y {
-            transform.translation.y = dust.start_pos.y;
-        }
-
-        let fade = 1.0 - t;
-        transform.scale = Vec3::splat(0.8 * fade);
-    }
-}
-
-// ── Landing Impact VFX ──────────────────────────────────────────────
-
-const LANDING_MAX_VELOCITY: f32 = 25.0;
-
-fn on_landing_vfx(
-    on: On<LandingImpact>,
-    assets: Option<Res<ShockwaveAssets>>,
-    mut commands: Commands,
-) {
-    let Some(assets) = assets else {
-        return;
-    };
-
-    let event = on.event();
-    let t = ((event.velocity_y - 3.0) / (LANDING_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
-    let pos = event.position - Vec3::Y * 0.8;
-
-    // Landing ground ring — beefier
-    let max_scale = 0.8 + 5.0 * t;
-    commands.spawn((
-        ShockwaveRing {
-            timer: 0.0,
-            duration: 0.35,
-            max_scale,
-        },
-        Mesh3d(assets.ring_mesh.clone()),
-        MeshMaterial3d(assets.ring_material.clone()),
-        Transform::from_translation(pos)
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
-            .with_scale(Vec3::splat(0.1)),
-    ));
-
-    let mut rng = rand::rng();
-
-    // Debris chunks that arc outward and fall back (gravity in tick)
-    let num_particles = 16 + (16.0 * t) as usize;
-    for i in 0..num_particles {
-        let angle = (i as f32 / num_particles as f32) * std::f32::consts::TAU
-            + rand::Rng::random_range(&mut rng, -0.2..0.2);
-        let loft = rand::Rng::random_range(&mut rng, 2.0..6.0) * (0.4 + 0.6 * t);
-        let dir = Vec3::new(angle.cos(), loft, angle.sin()).normalize();
-        let speed = rand::Rng::random_range(&mut rng, 3.0..8.0) * (0.4 + 0.6 * t);
-        let duration = rand::Rng::random_range(&mut rng, 0.35..0.55);
-        let scale = rand::Rng::random_range(&mut rng, 0.5..1.3) * (0.5 + 0.6 * t);
-
-        commands.spawn((
-            ShockwaveDust {
-                timer: 0.0,
-                duration,
-                direction: dir,
-                speed,
-                start_pos: pos,
-            },
-            Mesh3d(assets.dust_mesh.clone()),
-            MeshMaterial3d(assets.dust_material.clone()),
-            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
-        ));
-    }
-}
-
-// ── Ground Pound VFX ────────────────────────────────────────────────
-
-fn on_ground_pound_vfx(
-    on: On<GroundPoundImpact>,
-    assets: Option<Res<ShockwaveAssets>>,
-    mut commands: Commands,
-) {
-    let Some(assets) = assets else {
-        return;
-    };
-
-    let event = on.event();
-    let pos = event.position - Vec3::Y * 0.8;
-
-    // Large expanding ground ring
-    commands.spawn((
-        ShockwaveRing {
-            timer: 0.0,
-            duration: 0.4,
-            max_scale: 4.0,
-        },
-        Mesh3d(assets.ring_mesh.clone()),
-        MeshMaterial3d(assets.ring_material.clone()),
-        Transform::from_translation(pos)
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
-            .with_scale(Vec3::splat(0.1)),
-    ));
-
-    let mut rng = rand::rng();
-
-    // Dense debris cloud — arcing outward with strong loft (gravity in tick)
-    for i in 0..24 {
-        let angle = (i as f32 / 24.0) * std::f32::consts::TAU
-            + rand::Rng::random_range(&mut rng, -0.15..0.15);
-        let loft = rand::Rng::random_range(&mut rng, 3.0..7.0);
-        let dir = Vec3::new(angle.cos(), loft, angle.sin()).normalize();
-        let speed = rand::Rng::random_range(&mut rng, 4.0..10.0);
-        let duration = rand::Rng::random_range(&mut rng, 0.4..0.6);
-        let scale = rand::Rng::random_range(&mut rng, 0.6..1.4);
-
-        commands.spawn((
-            ShockwaveDust {
-                timer: 0.0,
-                duration,
-                direction: dir,
-                speed,
-                start_pos: pos,
-            },
-            Mesh3d(assets.dust_mesh.clone()),
-            MeshMaterial3d(assets.dust_material.clone()),
-            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
-        ));
-    }
-}
-
-// ── Footstep Dust ───────────────────────────────────────────────────
-
-fn on_footstep_dust(
-    on: On<Footstep>,
-    assets: Option<Res<ShockwaveAssets>>,
-    mut commands: Commands,
-) {
-    let Some(assets) = assets else {
-        return;
-    };
-
-    let event = on.event();
-    let pos = event.position - Vec3::Y * 0.8;
-    let mut rng = rand::rng();
-
-    // Sprint: more particles, bigger, faster spread
-    let (num_particles, scale, speed_range, vert_range) = if event.is_sprinting {
-        (10, 0.7, 2.5..5.0, 0.15..0.5)
-    } else {
-        (5, 0.5, 1.5..3.0, 0.1..0.3)
-    };
-
-    for _ in 0..num_particles {
-        let angle = rand::Rng::random_range(&mut rng, 0.0..std::f32::consts::TAU);
-        let vert = rand::Rng::random_range(&mut rng, vert_range.clone());
-        let dir = Vec3::new(angle.cos(), vert, angle.sin()).normalize();
-        let speed = rand::Rng::random_range(&mut rng, speed_range.clone());
-        let duration = rand::Rng::random_range(&mut rng, 0.2..0.35);
-
-        commands.spawn((
-            ShockwaveDust {
-                timer: 0.0,
-                duration,
-                direction: dir,
-                speed,
-                start_pos: pos,
-            },
-            Mesh3d(assets.dust_mesh.clone()),
-            MeshMaterial3d(assets.dust_material.clone()),
-            Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
-        ));
-    }
-}
-
-// ── Speed Lines (Charged Jump Ascent) ───────────────────────────────
-
-#[derive(Resource)]
-struct SpeedLineAssets {
-    mesh: Handle<Mesh>,
-    material: Handle<StandardMaterial>,
-}
-
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-struct SpeedLine {
-    timer: f32,
-    duration: f32,
-    start_pos: Vec3,
-    velocity: Vec3,
-}
-
-fn setup_speed_line_assets(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let mesh = meshes.add(Cuboid::new(0.05, 0.05, 0.4));
-    let material = materials.add(StandardMaterial {
-        base_color: Color::srgba(1.0, 0.3, 0.1, 0.8),
-        emissive: LinearRgba::new(8.0, 2.0, 0.5, 1.0),
-        alpha_mode: AlphaMode::Add,
-        unlit: true,
-        ..default()
-    });
-    commands.insert_resource(SpeedLineAssets { mesh, material });
-}
-
-fn spawn_speed_lines(
-    player: Query<(&Transform, &LinearVelocity, &AirborneTracker), With<Player>>,
-    assets: Option<Res<SpeedLineAssets>>,
-    mut commands: Commands,
-) {
-    let Some(assets) = assets else {
-        return;
-    };
-    let Ok((transform, velocity, tracker)) = player.single() else {
-        return;
-    };
-
-    // Only spawn during ascent after a charged jump
-    if !tracker.was_airborne || velocity.y < 5.0 {
-        return;
-    }
-
-    let pos = transform.translation;
-    let mut rng = rand::rng();
-
-    // 2 streaks per frame from hand positions
-    for x_offset in [-0.4, 0.4] {
-        let start = pos + Vec3::new(x_offset, 0.3, 0.0);
-        let duration = rand::Rng::random_range(&mut rng, 0.15..0.25);
-        let trail_vel = Vec3::new(
-            rand::Rng::random_range(&mut rng, -0.5..0.5),
-            -3.0,
-            rand::Rng::random_range(&mut rng, -0.5..0.5),
-        );
-
-        commands.spawn((
-            SpeedLine {
-                timer: 0.0,
-                duration,
-                start_pos: start,
-                velocity: trail_vel,
-            },
-            Mesh3d(assets.mesh.clone()),
-            MeshMaterial3d(assets.material.clone()),
-            Transform::from_translation(start),
-        ));
-    }
-}
-
-fn tick_speed_lines(
-    time: Res<Time>,
-    mut commands: Commands,
-    mut lines: Query<(Entity, &mut SpeedLine, &mut Transform)>,
-) {
-    let dt = time.delta_secs();
-
-    for (entity, mut line, mut transform) in lines.iter_mut() {
-        line.timer += dt;
-        let t = (line.timer / line.duration).min(1.0);
-
-        if t >= 1.0 {
-            commands.entity(entity).despawn();
-            continue;
-        }
-
-        transform.translation = line.start_pos + line.velocity * line.timer;
-
-        // Elongate and fade
-        let fade = 1.0 - t;
-        let stretch = 1.0 + t * 3.0;
-        transform.scale = Vec3::new(fade, fade, stretch * fade);
-    }
 }

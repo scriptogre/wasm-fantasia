@@ -67,7 +67,9 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     let render = bevy::render::RenderPlugin::default();
 
+    app.insert_resource(ClearColor(ui::colors::VOID));
     app.add_plugins(DefaultPlugins.set(window).set(assets).set(log_level).set(render));
+    app.add_plugins(bevy_hanabi::HanabiPlugin);
     app.add_plugins(bevy_open_vat::prelude::OpenVatPlugin);
 
     // custom plugins. the order is important
