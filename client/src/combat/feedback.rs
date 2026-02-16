@@ -175,22 +175,17 @@ fn on_rumble(
 
 // ── Jump Launch Feedback ────────────────────────────────────────────
 
-fn on_jump_shake(on: On<JumpLaunched>, mut shake: ResMut<ScreenShake>) {
-    let event = on.event();
-    // Trauma proportional to charge: 0.15 for tap, 0.5 for full charge
-    let t = (event.charge_time / crate::player::control::MAX_CHARGE_TIME).clamp(0.0, 1.0);
-    let trauma = 0.15 + 0.35 * t;
+fn on_jump_shake(_on: On<JumpLaunched>, mut shake: ResMut<ScreenShake>) {
+    let trauma = 0.15;
     shake.trauma = (shake.trauma + trauma).min(0.7);
 }
 
 fn on_jump_rumble(
-    on: On<JumpLaunched>,
+    _on: On<JumpLaunched>,
     gamepads: Query<Entity, With<Gamepad>>,
     mut rumble: MessageWriter<GamepadRumbleRequest>,
 ) {
-    let event = on.event();
-    let t = (event.charge_time / crate::player::control::MAX_CHARGE_TIME).clamp(0.0, 1.0);
-
+    let t = 0.0_f32; // charge removed — always minimum
     let strong = 0.2 + 0.6 * t;
     let weak = 0.1 + 0.4 * t;
     let duration_ms = 80 + (70.0 * t) as u64; // 80ms tap, 150ms full

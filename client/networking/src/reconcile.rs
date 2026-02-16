@@ -72,9 +72,13 @@ pub struct CombatStats {
     pub last_attack_time: i64,
 }
 
-/// Marker for data carried by combat event entities.
-#[derive(Component)]
-pub struct CombatEventData {
+/// **Server-confirmed** combat hit data, spawned from SpacetimeDB `CombatEvent` rows.
+///
+/// Used for effects that must reflect actual game state (e.g. damage numbers).
+/// Client-predicted effects (sound, flash, hit stop) use
+/// [`HitLanded`](game_client_models::combat::HitLanded) instead for responsiveness.
+#[derive(Event)]
+pub struct CombatEvent {
     pub damage: f32,
     pub is_crit: bool,
     pub x: f32,
@@ -307,7 +311,17 @@ pub(super) fn drain_db_events(
                         stats.set(Stat::Health, player.health);
                         stats.set(Stat::MaxHealth, player.max_health);
                     }
-                } else if player.online {
+                    continue;
+                }
+                if !player.online {
+                    continue;
+                }
+                // Skip if identity not yet available — we can't distinguish
+                // local from remote, so don't spawn anything yet.
+                if my_id.is_none() {
+                    continue;
+                }
+                {
                     let entity = commands
                         .spawn((
                             Name::new(format!("RemotePlayer_{:?}", player.identity)),
@@ -410,16 +424,13 @@ pub(super) fn drain_db_events(
                 y,
                 z,
             } => {
-                commands.spawn((
-                    CombatEventData {
-                        damage,
-                        is_crit,
-                        x,
-                        y,
-                        z,
-                    },
-                    Transform::from_xyz(x, y, z),
-                ));
+                commands.trigger(CombatEvent {
+                    damage,
+                    is_crit,
+                    x,
+                    y,
+                    z,
+                });
             }
         }
     }

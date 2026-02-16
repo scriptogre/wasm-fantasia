@@ -141,7 +141,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
 
         // Create a physics world for this tick
         let mut physics = PhysicsWorld::new(PhysicsConfig {
-            gravity: Vector::new(0.0, -9.81, 0.0),
+            gravity: Vector::new(0.0, -30.0, 0.0),
             substeps: 4,
             ..Default::default()
         });

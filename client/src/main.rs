@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bevy::asset::load_internal_binary_asset;
+#[cfg(target_arch = "wasm32")]
 use bevy::render::settings::{RenderCreation, WgpuSettings};
 use bevy::{app::App, asset::AssetMetaCheck, log, prelude::*};
 use bevy_fix_cursor_unlock_web::prelude::*;

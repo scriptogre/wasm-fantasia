@@ -219,8 +219,11 @@ pub struct Died {
 
 // ── Feedback ────────────────────────────────────────────────────────
 
-/// Feedback: a hit visually landed — play VFX, sound, screen shake.
-/// Triggered by the [`DamageDealt`] observer.
+/// **Client-predicted** hit feedback — triggers sound, flash, hit stop, screen shake.
+///
+/// Fired immediately on client-side combat resolution for responsive feel.
+/// **Does not** trigger damage numbers — those use server-confirmed
+/// [`CombatEvent`](game_client_networking::CombatEvent) instead.
 #[derive(Event, Debug, Clone)]
 pub struct HitLanded {
     pub source: Entity,

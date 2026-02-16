@@ -73,7 +73,7 @@ fn jump_sound(
 }
 
 fn launch_boom(
-    on: On<JumpLaunched>,
+    _on: On<JumpLaunched>,
     state: Res<Session>,
     settings: Res<Settings>,
     mut cmds: Commands,
@@ -83,14 +83,11 @@ fn launch_boom(
         return;
     }
 
-    let event = on.event();
-    let t = (event.charge_time / crate::player::control::MAX_CHARGE_TIME).clamp(0.0, 1.0);
-
-    // Volume scales with charge: 60% for tap, 100% for full
+    let t = 0.0_f32; // charge removed — always minimum
     let Volume::Linear(base_vol) = settings.sfx() else {
         return;
     };
-    let vol_scale = 0.6 + 0.4 * t;
+    let vol_scale = 0.6;
     let volume = Volume::Linear(base_vol * vol_scale * 1.5); // Boost 1.5x for impact feel
 
     let mut rng = rand::rng();

@@ -396,9 +396,11 @@ pub mod ground_pound {
     pub const RADIUS: f32 = 6.0;
     pub const KNOCKBACK: f32 = 20.0;
     pub const LAUNCH: f32 = 8.0;
-    pub const DAMAGE_MULTIPLIER: f32 = 1.0;
+    /// Damage multiplier: ground pound deals 4x normal attack damage.
+    pub const DAMAGE_MULTIPLIER: f32 = 4.0;
     /// Minimum downward velocity to allow ground pound activation.
-    pub const MIN_VELOCITY: f32 = 2.0;
+    /// Low threshold so it triggers almost immediately after jump apex.
+    pub const MIN_VELOCITY: f32 = 0.5;
 }
 
 /// Landing AOE constants — high-velocity landings damage nearby enemies.

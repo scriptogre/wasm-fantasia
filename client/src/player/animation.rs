@@ -1,12 +1,12 @@
 use super::*;
 use crate::combat::AttackState;
 use crate::models::Animation;
-use crate::player::control::{GroundPoundState, JumpCharge, LandingStun, RollingState};
+use crate::player::control::{GroundPoundState, LandingStun, RollingState};
 use crate::rules::{Stat, Stats};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 
 mod anim_knobs {
-    pub const GENERAL_SPEED: f32 = 0.065;
+    pub const GENERAL_SPEED: f32 = 0.15;
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
 }
 
@@ -147,7 +147,6 @@ pub fn animating(
         Option<&AttackState>,
         Option<&Stats>,
         &mut AttackAnimationState,
-        &JumpCharge,
         Option<&RollingState>,
         Option<&LandingStun>,
         Option<&GroundPoundState>,
@@ -161,7 +160,6 @@ pub fn animating(
         attack_state,
         stats,
         mut attack_anim,
-        jump_charge,
         rolling_state,
         landing_stun,
         ground_pound,
@@ -288,34 +286,6 @@ pub fn animating(
                 // Ramp from 0.6x (dramatic impact) to 1.8x (fast recovery)
                 let frac = stun.timer.fraction();
                 let speed = 0.6 + 1.2 * frac;
-                for (_, active_animation) in animation_player.playing_animations_mut() {
-                    active_animation.set_speed(speed);
-                }
-            }
-        }
-        return;
-    }
-
-    // Charge jump: wind-up pose while storing energy — only show when grounded.
-    // Uses JumpStart animation slowed down to convey coiling power.
-    if jump_charge.charging && controller.basis_memory.standing_on_entity().is_some() {
-        player.animation_state = AnimationState::JumpStart;
-        let directive = animating_state.update_by_discriminant(AnimationState::JumpStart);
-        match directive {
-            TnuaAnimatingStateDirective::Alter { .. } => {
-                if let Some(index) = player.animations.get(&Animation::NinjaJumpStart) {
-                    transitions
-                        .play(&mut animation_player, *index, Duration::from_millis(100))
-                        .set_speed(0.3);
-                }
-            }
-            TnuaAnimatingStateDirective::Maintain { .. } => {
-                // Hold near the coiled-down pose — slow down further as charge builds
-                let charge_t = (jump_charge.charge_time
-                    / crate::player::control::MAX_CHARGE_TIME)
-                    .clamp(0.0, 1.0);
-                // Start at 0.3x, slow to near-freeze at 0.05x as energy builds
-                let speed = 0.3 - 0.25 * charge_t;
                 for (_, active_animation) in animation_player.playing_animations_mut() {
                     active_animation.set_speed(speed);
                 }

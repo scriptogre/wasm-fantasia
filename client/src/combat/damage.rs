@@ -29,6 +29,7 @@ fn on_damage(
     on: On<DamageDealt>,
     mut targets: Query<&mut Health>,
     server_entities: Query<(), With<crate::networking::ServerId>>,
+    tnua_entities: Query<(), With<TnuaController<ControlScheme>>>,
     mut commands: Commands,
 ) {
     let event = on.event();
@@ -46,8 +47,8 @@ fn on_damage(
         health.take_damage(event.damage)
     };
 
-    // Always apply knockback client-side for immediate visual response
-    if event.force.length_squared() > 0.0001 {
+    // Only apply knockback to entities with a Tnua controller (player)
+    if event.force.length_squared() > 0.0001 && tnua_entities.get(event.target).is_ok() {
         commands
             .entity(event.target)
             .insert(PendingKnockback(event.force * KNOCKBACK_SHOVE_SCALE));

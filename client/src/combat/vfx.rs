@@ -92,15 +92,15 @@ fn on_hit_flash(
 
 fn tick_hit_flash(
     time: Res<Time>,
-    mut flashing: Query<(Entity, &mut HitFlash, &MeshMaterial3d<VatMaterial>)>,
-    mut vat_materials: ResMut<Assets<VatMaterial>>,
+    mut flashing: Query<(Entity, &mut HitFlash)>,
     mut commands: Commands,
 ) {
-    for (entity, mut flash, mat_handle) in flashing.iter_mut() {
+    for (entity, mut flash) in flashing.iter_mut() {
         flash.timer += time.delta_secs();
 
         if flash.timer >= flash.duration {
-            vat_materials.remove(&mat_handle.0);
+            // Restore original material — don't remove the flash material asset,
+            // it's shared across all enemies (pre-allocated in VatEnemyState).
             commands
                 .entity(entity)
                 .try_insert(MeshMaterial3d(flash.shared_material.clone()))
@@ -536,7 +536,7 @@ fn on_launch_shockwave(
     };
 
     let event = on.event();
-    let t = (event.charge_time / crate::player::control::MAX_CHARGE_TIME).clamp(0.0, 1.0);
+    let t = 0.0_f32; // charge removed — always minimum
     let max_scale = 0.5 + 2.5 * t;
     let pos = event.position - Vec3::Y * 0.8; // At feet level
 
@@ -554,8 +554,8 @@ fn on_launch_shockwave(
             .with_scale(Vec3::splat(0.1)),
     ));
 
-    // Second "crack" ring for charges > 30% — earthy dust, slower expansion
-    if t > 0.3 {
+    // Second "crack" ring — disabled since charge jump was removed
+    if false {
         commands.spawn((
             ShockwaveRing {
                 timer: 0.0,

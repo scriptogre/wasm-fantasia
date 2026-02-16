@@ -17,7 +17,7 @@ pub use connection::{ReconnectTimer, try_connect};
 pub use diagnostics::ServerDiagnostics;
 pub use generated::{DbConnection, Player, Reducer};
 pub use reconcile::{
-    CombatEventData, CombatStats, DbEventQueue, RemotePlayerState, ServerEntityMap, ServerId,
+    CombatEvent, CombatStats, DbEventQueue, RemotePlayerState, ServerEntityMap, ServerId,
     ServerSnapshot, WorldEntity,
 };
 pub use sync::PingTracker;
@@ -133,7 +133,6 @@ impl Plugin for NetworkingPlugin {
 
         app.add_observer(combat::send_attack_to_server)
             .add_observer(combat::send_ground_pound_to_server)
-            .add_observer(combat::send_landing_aoe_to_server)
             .add_systems(
             Update,
             (

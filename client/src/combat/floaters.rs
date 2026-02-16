@@ -3,8 +3,9 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
 use crate::combat::{Enemy, Health};
-use crate::combat::{DamageDealt, Died, HitLanded};
+use crate::combat::{DamageDealt, Died};
 use crate::models::SceneCamera;
+use crate::networking::CombatEvent;
 use crate::ui::colors::{GRASS_GREEN, NEUTRAL450, NEUTRAL850, RED, SAND_YELLOW};
 
 /// Cached mesh height above the entity origin, computed once from descendant AABBs.
@@ -12,7 +13,7 @@ use crate::ui::colors::{GRASS_GREEN, NEUTRAL450, NEUTRAL850, RED, SAND_YELLOW};
 pub struct MeshHeight(pub f32);
 
 pub fn plugin(app: &mut App) {
-    app.add_observer(on_damage_number)
+    app.add_observer(on_server_damage_number)
         .add_observer(on_enemy_damaged)
         .add_observer(on_enemy_death)
         .add_systems(Startup, setup_glyph_cache)
@@ -93,19 +94,17 @@ fn setup_glyph_cache(mut commands: Commands) {
     }
 }
 
-fn on_damage_number(
-    on: On<HitLanded>,
-    targets: Query<(&Transform, Option<&MeshHeight>)>,
+/// Spawns floating damage numbers from **server-confirmed** [`CombatEvent`].
+///
+/// Client-predicted effects (sound, flash, hit stop) remain on
+/// [`HitLanded`](crate::combat::HitLanded) for responsiveness.
+fn on_server_damage_number(
+    on: On<CombatEvent>,
     fonts: Option<Res<crate::asset_loading::Fonts>>,
     mut commands: Commands,
 ) {
     let event = on.event();
-
-    let Ok((target_transform, mesh_height)) = targets.get(event.target) else {
-        return;
-    };
-
-    let world_pos = target_transform.translation + Vec3::Y * mesh_height.map_or(2.0, |h| h.0);
+    let world_pos = Vec3::new(event.x, event.y, event.z);
     let damage = event.damage as i32;
     let is_crit = event.is_crit;
 

@@ -42,9 +42,9 @@ pub struct SmoothedInput {
     pub current: Vec2,
 }
 
-/// Ramp-up lerp speed — responsive but not instant (Prototype's "explosive start")
-const INPUT_RAMP_UP_SPEED: f32 = 12.0;
-/// Slow-down lerp speed — ~0.25s slide to stop (Prototype's 5-10m stop slide)
+/// Ramp-up lerp speed — near-instant so input feels responsive
+const INPUT_RAMP_UP_SPEED: f32 = 50.0;
+/// Slow-down lerp speed — ~0.25s slide to stop for momentum feel
 const INPUT_SLOW_DOWN_SPEED: f32 = 4.0;
 
 fn jump_action() -> ControlScheme {
@@ -106,27 +106,24 @@ impl InputBuffer {
 }
 
 // ============================================================================
-// CHARGE JUMP — PROTOTYPE-style
-// Hold jump on ground to charge, release to launch.
-// Tap for quick 4m hop, full hold (0.6s) for ~20m superhuman leap.
+// JUMP
 // ============================================================================
 
-/// Below this hold duration, treat as a tap (quick hop).
-const TAP_THRESHOLD: f32 = 0.15;
-/// Maximum charge time in seconds.
-pub const MAX_CHARGE_TIME: f32 = 0.6;
-/// Jump height for a quick tap.
-pub const MIN_JUMP_HEIGHT: f32 = 4.0;
-/// Jump height at full charge.
-pub const MAX_JUMP_HEIGHT: f32 = 35.0;
-/// Curve exponent: sqrt (0.5) means 50% charge ≈ 71% height — forgiving early release.
-const CHARGE_CURVE_POWER: f32 = 0.5;
+/// Jump height in meters.
+pub const JUMP_HEIGHT: f32 = 6.0;
 
-/// Tracks charge jump state on the player entity.
+/// Kept for compatibility with animation/camera systems that query it.
 #[derive(Component, Default)]
 pub struct JumpCharge {
     pub charging: bool,
     pub charge_time: f32,
+}
+
+/// Tracks jump state so the movement system can feed the jump action every frame.
+/// Uses a resource (not a component) to avoid deferred-command timing gaps.
+#[derive(Resource, Default)]
+pub struct JumpState {
+    pub active: bool,
 }
 
 /// Marker: player is currently holding sprint.
@@ -134,7 +131,9 @@ pub struct JumpCharge {
 #[component(storage = "SparseSet")]
 pub struct Sprinting;
 
-/// Player is performing a dodge roll (tap-jump). Maintains velocity via direct physics impulse.
+const ROLL_IMPULSE_SPEED: f32 = 16.0;
+
+/// Player is performing a dodge roll. Maintains velocity via direct physics impulse.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
 pub struct RollingState {
@@ -142,8 +141,6 @@ pub struct RollingState {
     pub direction: Vec3,
 }
 
-const ROLL_DURATION: f32 = 0.55;
-const ROLL_IMPULSE_SPEED: f32 = 16.0;
 
 /// Player is diving downward for a ground pound attack.
 #[derive(Component)]
@@ -166,20 +163,13 @@ pub struct Footstep {
     pub is_sprinting: bool,
 }
 
-/// Map charge duration to jump height with a non-linear (sqrt) curve.
-fn charge_jump_height(charge_time: f32) -> f32 {
-    if charge_time < TAP_THRESHOLD {
-        return MIN_JUMP_HEIGHT;
-    }
-    let t = ((charge_time - TAP_THRESHOLD) / (MAX_CHARGE_TIME - TAP_THRESHOLD)).clamp(0.0, 1.0);
-    MIN_JUMP_HEIGHT + (MAX_JUMP_HEIGHT - MIN_JUMP_HEIGHT) * t.powf(CHARGE_CURVE_POWER)
-}
 
 // ============================================================================
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<InputBuffer>()
         .init_resource::<SmoothedInput>()
+        .init_resource::<JumpState>()
         .add_systems(
             Update,
             (
@@ -193,9 +183,7 @@ pub fn plugin(app: &mut App) {
             )
                 .run_if(in_state(Screen::Gameplay)),
         )
-        .add_observer(on_jump_start)
-        .add_observer(on_jump_tick)
-        .add_observer(on_jump_release)
+        .add_observer(on_jump)
         .add_observer(on_landing_stun)
         .add_observer(sprint_start)
         .add_observer(sprint_end)
@@ -216,6 +204,7 @@ fn movement(
     crouch: Query<&Action<Crouch>>,
     camera: Query<&Transform, With<SceneCamera>>,
     mut smoothed_input: ResMut<SmoothedInput>,
+    jump_state: Res<JumpState>,
     mut player_query: Query<(
         &mut Player,
         &mut TnuaController<ControlScheme>,
@@ -242,13 +231,15 @@ fn movement(
         let cam_transform = camera.single()?;
         let curved_input = apply_response_curve(*navigate, MOVEMENT_CURVE_EXPONENT);
 
-        // Asymmetric input smoothing: fast ramp-up, slow decay (Prototype-style momentum)
+        // Input smoothing: slow decay only while sprinting for momentum slide-to-stop
         let target_input = curved_input;
         let is_ramping_up = target_input.length_squared() > smoothed_input.current.length_squared();
         let lerp_speed = if is_ramping_up {
             INPUT_RAMP_UP_SPEED
-        } else {
+        } else if _is_sprinting {
             INPUT_SLOW_DOWN_SPEED
+        } else {
+            INPUT_RAMP_UP_SPEED // instant stop when not sprinting
         };
         let current = smoothed_input.current;
         smoothed_input.current += (target_input - current) * (lerp_speed * dt).min(1.0);
@@ -301,8 +292,13 @@ fn movement(
             desired_forward,
         };
 
+        // Keep feeding jump action every frame while jump is in progress
+        if jump_state.active {
+            controller.action(jump_action());
+        }
+
         // Check if crouch is currently active and apply TnuaBuiltinCrouch as an action
-        if *crouch {
+        if *crouch && !jump_state.active {
             controller.action(ControlScheme::Crouch(TnuaBuiltinCrouch));
         }
 
@@ -326,226 +322,72 @@ fn is_grounded(controller: &TnuaController<ControlScheme>) -> bool {
 
 // ── Charge Jump Observers ──────────────────────────────────────────
 
-/// Jump pressed — always begin charging (works on ground or in the air).
-fn on_jump_start(
+/// Jump pressed — immediately jump if grounded, otherwise buffer for landing.
+fn on_jump(
     on: On<Start<Jump>>,
-    mut query: Query<&mut JumpCharge, With<Player>>,
-) {
-    let Ok(mut charge) = query.get_mut(on.context) else {
-        return;
-    };
-
-    charge.charging = true;
-    charge.charge_time = 0.0;
-}
-
-/// Jump held — accumulate charge time regardless of grounded state.
-fn on_jump_tick(
-    on: On<Fire<Jump>>,
-    time: Res<Time>,
-    mut query: Query<&mut JumpCharge, With<Player>>,
-) {
-    let Ok(mut charge) = query.get_mut(on.context) else {
-        return;
-    };
-
-    if !charge.charging {
-        return;
-    }
-
-    charge.charge_time = (charge.charge_time + time.delta_secs()).min(MAX_CHARGE_TIME);
-}
-
-/// Jump released — tap triggers a dodge roll, hold triggers a charge jump.
-/// If airborne, buffers the jump with accumulated charge for execution on landing.
-fn on_jump_release(
-    on: On<Complete<Jump>>,
     mut commands: Commands,
     mut buffer: ResMut<InputBuffer>,
-    mut scheme_configs: ResMut<Assets<ControlSchemeConfig>>,
-    navigate: Query<&Action<Navigate>>,
-    camera: Query<&Transform, With<SceneCamera>>,
-    mut query: Query<
+    mut jump_state: ResMut<JumpState>,
+    query: Query<
         (
-            &mut JumpCharge,
-            &TnuaConfig<ControlScheme>,
-            &mut TnuaController<ControlScheme>,
+            &TnuaController<ControlScheme>,
             &Transform,
-            &mut LinearVelocity,
         ),
-        (With<Player>, Without<SceneCamera>),
+        With<Player>,
     >,
 ) {
-    let Ok((mut charge, config, mut controller, transform, mut linear_velocity)) =
-        query.get_mut(on.context)
-    else {
+    let Ok((controller, transform)) = query.get(on.context) else {
         return;
     };
 
-    if !charge.charging {
+    if !is_grounded(controller) {
+        buffer.buffer_jump(0.0);
         return;
     }
 
-    let charge_time = charge.charge_time;
-    let position = transform.translation;
-    charge.charging = false;
-    charge.charge_time = 0.0;
-
-    // Airborne release → buffer the jump (with charge) for execution on landing
-    if !is_grounded(&controller) {
-        buffer.buffer_jump(charge_time);
-        return;
-    }
-
-    // Tap → dodge roll via direct physics impulse
-    if charge_time < TAP_THRESHOLD {
-        let direction = if let (Ok(nav_action), Ok(cam_transform)) =
-            (navigate.single(), camera.single())
-        {
-            let nav = **nav_action;
-            if nav.length_squared() > 0.01 {
-                cam_transform.movement_direction(nav)
-            } else {
-                transform.forward().as_vec3()
-            }
-        } else {
-            transform.forward().as_vec3()
-        };
-
-        linear_velocity.0 = direction * ROLL_IMPULSE_SPEED;
-        commands.entity(on.context).try_insert(RollingState {
-            timer: Timer::from_seconds(ROLL_DURATION, TimerMode::Once),
-            direction,
-        });
-        return;
-    }
-
-    // Hold → charge jump with forward momentum
-    let height = charge_jump_height(charge_time);
-
-    if let Some(scheme_cfg) = scheme_configs.get_mut(&config.0) {
-        scheme_cfg.jump.height = height;
-    }
-
-    // Forward momentum: propel in movement direction proportional to charge
-    let charge_t = ((charge_time - TAP_THRESHOLD) / (MAX_CHARGE_TIME - TAP_THRESHOLD)).clamp(0.0, 1.0);
-    let momentum_speed = 10.0 + 18.0 * charge_t; // 8 m/s at min charge, 20 m/s at full
-    let direction = if let (Ok(nav_action), Ok(cam_transform)) =
-        (navigate.single(), camera.single())
-    {
-        let nav = **nav_action;
-        if nav.length_squared() > 0.01 {
-            cam_transform.movement_direction(nav)
-        } else {
-            Vec3::ZERO // Standing still → pure vertical jump
-        }
-    } else {
-        Vec3::ZERO
-    };
-    linear_velocity.x = direction.x * momentum_speed;
-    linear_velocity.z = direction.z * momentum_speed;
-
-    controller.initiate_action_feeding();
-    controller.action(jump_action());
-
+    // Just flag it — the movement system will feed the action to Tnua every frame
+    jump_state.active = true;
     commands.trigger(JumpLaunched {
-        charge_time,
-        height,
-        position,
+        charge_time: 0.0,
+        height: JUMP_HEIGHT,
+        position: transform.translation,
     });
 }
 
-/// Execute buffered jump when landing — tap → dodge roll, charged → charge jump.
+/// Execute buffered jump when landing.
 fn process_buffered_jump(
     mut buffer: ResMut<InputBuffer>,
-    mut scheme_configs: ResMut<Assets<ControlSchemeConfig>>,
-    navigate: Query<&Action<Navigate>>,
-    camera: Query<&Transform, With<SceneCamera>>,
+    mut jump_state: ResMut<JumpState>,
     mut commands: Commands,
-    mut player_query: Query<
+    player_query: Query<
         (
-            Entity,
             &Transform,
-            &TnuaConfig<ControlScheme>,
-            &mut TnuaController<ControlScheme>,
-            &mut LinearVelocity,
+            &TnuaController<ControlScheme>,
         ),
-        (With<Player>, Without<SceneCamera>),
+        With<Player>,
     >,
 ) {
     if buffer.jump.is_none() {
         return;
     }
 
-    let Ok((entity, transform, config, mut controller, mut linear_velocity)) =
-        player_query.single_mut()
-    else {
+    let Ok((transform, controller)) = player_query.single() else {
         return;
     };
 
-    if !is_grounded(&controller) {
+    if !is_grounded(controller) {
         return;
     }
 
-    let Some(buffered) = buffer.consume_jump() else {
+    let Some(_buffered) = buffer.consume_jump() else {
         return;
     };
 
-    // Charged buffered jump → execute charge jump on landing with forward momentum
-    if buffered.charge_time >= TAP_THRESHOLD {
-        let height = charge_jump_height(buffered.charge_time);
-
-        if let Some(scheme_cfg) = scheme_configs.get_mut(&config.0) {
-            scheme_cfg.jump.height = height;
-        }
-
-        // Forward momentum
-        let charge_t = ((buffered.charge_time - TAP_THRESHOLD) / (MAX_CHARGE_TIME - TAP_THRESHOLD)).clamp(0.0, 1.0);
-        let momentum_speed = 10.0 + 18.0 * charge_t;
-        let direction = if let (Ok(nav_action), Ok(cam_transform)) =
-            (navigate.single(), camera.single())
-        {
-            let nav = **nav_action;
-            if nav.length_squared() > 0.01 {
-                cam_transform.movement_direction(nav)
-            } else {
-                Vec3::ZERO
-            }
-        } else {
-            Vec3::ZERO
-        };
-        linear_velocity.x = direction.x * momentum_speed;
-        linear_velocity.z = direction.z * momentum_speed;
-
-        controller.initiate_action_feeding();
-        controller.action(jump_action());
-
-        commands.trigger(JumpLaunched {
-            charge_time: buffered.charge_time,
-            height,
-            position: transform.translation,
-        });
-        return;
-    }
-
-    // Tap buffered jump → dodge roll
-    let direction = if let (Ok(nav_action), Ok(cam_transform)) =
-        (navigate.single(), camera.single())
-    {
-        let nav = **nav_action;
-        if nav.length_squared() > 0.01 {
-            cam_transform.movement_direction(nav)
-        } else {
-            transform.forward().as_vec3()
-        }
-    } else {
-        transform.forward().as_vec3()
-    };
-
-    linear_velocity.0 = direction * ROLL_IMPULSE_SPEED;
-    commands.entity(entity).try_insert(RollingState {
-        timer: Timer::from_seconds(ROLL_DURATION, TimerMode::Once),
-        direction,
+    jump_state.active = true;
+    commands.trigger(JumpLaunched {
+        charge_time: 0.0,
+        height: JUMP_HEIGHT,
+        position: transform.translation,
     });
 }
 
@@ -554,6 +396,7 @@ fn process_buffered_jump(
 /// Uses raw avian3d LinearVelocity (not Tnua's filtered velocity) for accuracy.
 fn detect_landing(
     mut commands: Commands,
+    mut jump_state: ResMut<JumpState>,
     mut query: Query<
         (
             Entity,
@@ -600,6 +443,7 @@ fn detect_landing(
         }
         tracker.was_airborne = false;
         tracker.peak_downward_velocity = 0.0;
+        jump_state.active = false;
     }
 }
 
@@ -635,22 +479,17 @@ fn tick_rolling_state(
 }
 
 /// Insert LandingStun on landing impact, scaled by fall velocity.
-/// Skip stun if the player is actively charging (holding jump through the landing).
 fn on_landing_stun(
     on: On<LandingImpact>,
     mut commands: Commands,
-    query: Query<(Entity, &JumpCharge), With<Player>>,
+    query: Query<Entity, With<Player>>,
 ) {
     let event = on.event();
     // Scale stun duration: light fall (3 m/s) → 0.25s, heavy fall (25+ m/s) → 0.8s
     let t = ((event.velocity_y - 3.0) / 22.0).clamp(0.0, 1.0);
     let duration = 0.25 + 0.55 * t;
 
-    for (entity, jump_charge) in query.iter() {
-        // Player is holding jump through the landing — skip stun for chain jumps
-        if jump_charge.charging {
-            continue;
-        }
+    for entity in query.iter() {
         commands.entity(entity).try_insert(LandingStun {
             timer: Timer::from_seconds(duration, TimerMode::Once),
         });

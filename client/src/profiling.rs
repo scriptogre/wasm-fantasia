@@ -25,6 +25,7 @@ static STATE: LazyLock<Mutex<ProfileState>> =
 
 #[derive(Default)]
 struct ProfileState {
+    #[cfg(feature = "profile")]
     span_names: HashMap<tracing::span::Id, String>,
     enter_times: HashMap<tracing::span::Id, Instant>,
     timings: HashMap<String, (Duration, u64)>,

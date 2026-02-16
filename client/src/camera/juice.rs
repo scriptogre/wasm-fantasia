@@ -4,7 +4,7 @@ use bevy::transform::TransformSystems;
 use bevy_third_person_camera::CameraSyncSet;
 
 use crate::models::{Config, Player, SceneCamera, Screen};
-use crate::player::control::{AirborneTracker, Footstep, JumpCharge, LandingImpact, LandingStun, Sprinting};
+use crate::player::control::{AirborneTracker, Footstep, LandingImpact, LandingStun, Sprinting};
 
 /// Tracks dynamic FOV state for smooth interpolation.
 #[derive(Resource)]
@@ -73,7 +73,6 @@ fn dynamic_fov(
         (
             &bevy_tnua::prelude::TnuaController<crate::player::ControlScheme>,
             &LinearVelocity,
-            &JumpCharge,
             Has<Sprinting>,
             Option<&LandingStun>,
         ),
@@ -81,7 +80,7 @@ fn dynamic_fov(
     >,
     mut camera: Query<&mut Projection, With<SceneCamera>>,
 ) {
-    let Ok((controller, velocity, jump_charge, is_sprinting, landing_stun)) = player.single()
+    let Ok((controller, velocity, is_sprinting, landing_stun)) = player.single()
     else {
         return;
     };
@@ -123,12 +122,6 @@ fn dynamic_fov(
         }
     }
 
-    // Jump charge: narrow FOV by 6 degrees (anticipation)
-    if jump_charge.charging {
-        let charge_t =
-            (jump_charge.charge_time / crate::player::control::MAX_CHARGE_TIME).clamp(0.0, 1.0);
-        target -= 6_f32.to_radians() * charge_t;
-    }
 
     // Landing stun: FOV punch on impact (10°), smoothly recovers as stun wears off
     if let Some(stun) = landing_stun {
