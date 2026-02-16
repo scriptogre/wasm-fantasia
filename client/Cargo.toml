@@ -43,7 +43,7 @@ features = [
     "experimental_bevy_ui_widgets",
     "serialize",
     "bevy_gilrs",
-    "meshlet",
+    # "meshlet",  # virtual geometry (GPU-driven culling) — enable when ready to convert meshes to MeshletMesh
     "exr",
 ]
 
