@@ -8,10 +8,10 @@ use crate::rules::{
 use avian3d::prelude::LinearVelocity;
 use bevy_enhanced_input::prelude::Fire;
 use bevy_tnua::prelude::TnuaController;
-use wasm_fantasia_shared::combat::{
+use game_core::combat::{
     CombatInput, HitTarget, defaults, ground_pound, landing_aoe, resolve_combat,
 };
-use wasm_fantasia_shared::presets::EntityRules;
+use game_core::presets::EntityRules;
 
 /// Visual constants for attack effects
 pub const VFX_RANGE: f32 = 2.0;
@@ -255,7 +255,7 @@ fn on_attack_hit(
         let radial_2d = Vec2::new(to_target.x, to_target.z);
         let fwd_2d = Vec2::new(forward_flat.x, forward_flat.z);
         let radial_dir = radial_2d.normalize_or(fwd_2d);
-        let force = wasm_fantasia_shared::combat::knockback_displacement(
+        let force = game_core::combat::knockback_displacement(
             radial_dir,
             fwd_2d,
             hit.knockback,
@@ -384,7 +384,7 @@ fn on_ground_pound_hit(
         let to_target = target_pos - impact_pos;
         let radial_2d = Vec2::new(to_target.x, to_target.z);
         let radial_dir = radial_2d.normalize_or(forward_xz);
-        let force = wasm_fantasia_shared::combat::knockback_displacement(
+        let force = game_core::combat::knockback_displacement(
             radial_dir,
             radial_dir, // push direction = radial (outward from center)
             ground_pound::KNOCKBACK,
@@ -523,7 +523,7 @@ fn on_landing_aoe_hit(
         let to_target = target_pos - impact_pos;
         let radial_2d = Vec2::new(to_target.x, to_target.z);
         let radial_dir = radial_2d.normalize_or(forward_xz);
-        let force = wasm_fantasia_shared::combat::knockback_displacement(
+        let force = game_core::combat::knockback_displacement(
             radial_dir,
             radial_dir,
             kb,

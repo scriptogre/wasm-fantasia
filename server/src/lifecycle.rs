@@ -1,5 +1,5 @@
 use spacetimedb::Table;
-use wasm_fantasia_shared::combat::defaults;
+use game_core::combat::defaults;
 
 use crate::schema::*;
 

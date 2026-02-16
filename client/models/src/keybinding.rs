@@ -1,4 +1,5 @@
-use super::*;
+use bevy::prelude::*;
+use bevy_enhanced_input::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Number of input columns.

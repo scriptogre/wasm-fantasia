@@ -1,9 +1,9 @@
 use spacetimedb::Table;
-use wasm_fantasia_shared::combat::{
+use game_core::combat::{
     self, defaults, knockback_displacement, resolve_combat, CombatInput, HitTarget,
 };
-use wasm_fantasia_shared::presets;
-use wasm_fantasia_shared::rules::{Stat, Stats};
+use game_core::presets;
+use game_core::rules::{Stat, Stats};
 
 use crate::schema::*;
 

@@ -11,7 +11,7 @@ use super::generated::leave_game_reducer::leave_game;
 use super::generated::player_table::PlayerTableAccess;
 use super::reconcile::{DbEvent, DbEventQueue};
 use super::{DbConnection, SpacetimeDbConfig, SpacetimeDbConnection, SpacetimeDbToken};
-use crate::models::{GameMode, Screen, ServerTarget};
+use game_client_models::{GameMode, Screen, ServerTarget};
 
 #[cfg(not(target_arch = "wasm32"))]
 use super::local_server;

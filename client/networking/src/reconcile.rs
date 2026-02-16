@@ -5,17 +5,16 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Identity, Table};
-use wasm_fantasia_shared::combat::EnemyBehaviorKind;
+use game_core::combat::EnemyBehaviorKind;
 
 use super::SpacetimeDbConnection;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::enemy_type::Enemy as ServerEnemy;
 use super::generated::player_table::PlayerTableAccess;
 use super::generated::player_type::Player as ServerPlayer;
-use crate::combat::{Combatant, Enemy, EnemyBehavior, Health};
-use crate::models::Player as LocalPlayer;
-use crate::player::RemotePlayer;
-use crate::rules::{Stat, Stats};
+use game_client_models::combat::{Combatant, Enemy, EnemyBehavior, Health, Stat, Stats};
+use game_client_models::player::RemotePlayer;
+use game_client_models::Player as LocalPlayer;
 
 // =============================================================================
 // Components

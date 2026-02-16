@@ -2,11 +2,11 @@
 
 use bevy::prelude::*;
 
-use crate::models::{GameplayCleanup, Screen, ServerTarget};
+use game_client_models::{GameplayCleanup, Screen, ServerTarget};
 
 pub mod combat;
 mod connection;
-pub(crate) mod diagnostics;
+pub mod diagnostics;
 pub mod generated;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod local_server;
@@ -43,7 +43,7 @@ impl Default for SpacetimeDbConfig {
     fn default() -> Self {
         Self {
             uri: default_uri(),
-            module_name: "wasm-fantasia".to_string(),
+            module_name: "game-server".to_string(),
         }
     }
 }

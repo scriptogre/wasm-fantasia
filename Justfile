@@ -1,6 +1,6 @@
 # Run native dev build
 default: spacetimedb
-    cargo run -p wasm_fantasia
+    cargo run -p game-client
 
 
 # Run WASM dev server
@@ -35,7 +35,7 @@ spacetimedb:
             exit 1
         fi
     fi
-    "{{spacetime}}" publish wasm-fantasia \
+    "{{spacetime}}" publish game-server \
         --project-path server \
         --yes \
         --delete-data
@@ -45,12 +45,12 @@ build:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "Building server WASM module..."
-    cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release
+    cargo build -p game-server --target wasm32-unknown-unknown --release
     echo "Building native client..."
-    cargo build -p wasm_fantasia --release --no-default-features
+    cargo build -p game-client --release --no-default-features
     rm -rf dist/native && mkdir -p dist/native
-    cp target/release/wasm_fantasia dist/native/
-    cp target/wasm32-unknown-unknown/release/wasm_fantasia_module.wasm dist/native/
+    cp target/release/game-client dist/native/
+    cp target/wasm32-unknown-unknown/release/game-server.wasm dist/native/
     cp "{{spacetime}}" dist/native/
     cp -r client/assets dist/native/
     echo "Native bundle ready at dist/native/"
@@ -62,14 +62,14 @@ build:
 
 # Per-system profiling — press F9 in-game for timing breakdown
 profile: spacetimedb
-    cargo run -p wasm_fantasia --features profile
+    cargo run -p game-client --features profile
 
 # Pre-commit checks: lint + web compilation
 check:
     cargo clippy --workspace -- -D warnings
     cargo fmt --all -- --check
     cargo machete
-    cargo check -p wasm_fantasia --profile ci --no-default-features --features web --target wasm32-unknown-unknown
+    cargo check -p game-client --profile ci --no-default-features --features web --target wasm32-unknown-unknown
 
 # Analyze web build sizes
 web-size *args:
@@ -79,25 +79,25 @@ web-size *args:
 generate:
     #!/usr/bin/env bash
     set -euo pipefail
-    "{{spacetime}}" generate --lang rust --project-path server --out-dir client/src/networking/generated --yes
+    "{{spacetime}}" generate --lang rust --project-path server --out-dir client/networking/src/generated --yes
     # The codegen emits advance_one_message_blocking() and run_threaded() which
     # don't exist in our WASM-patched SDK fork. Gate them to native-only.
-    sed -i '' 's/    pub fn advance_one_message_blocking/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn advance_one_message_blocking/' client/src/networking/generated/mod.rs
-    sed -i '' 's/    pub fn run_threaded/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn run_threaded/' client/src/networking/generated/mod.rs
+    sed -i '' 's/    pub fn advance_one_message_blocking/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn advance_one_message_blocking/' client/networking/src/generated/mod.rs
+    sed -i '' 's/    pub fn run_threaded/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn run_threaded/' client/networking/src/generated/mod.rs
     echo "Bindings regenerated and WASM-patched."
 
 
 # Deploy to production
 deploy: build-web
-    rsync -az --delete target/bevy_web/web-release/wasm_fantasia/ pi:~/game/web/
-    scp -q target/wasm32-unknown-unknown/release/wasm_fantasia_module.wasm thinkcentre:/tmp/
-    ssh thinkcentre "docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/wasm_fantasia_module.wasm --yes wasm-fantasia"
+    rsync -az --delete target/bevy_web/web-release/game-client/ pi:~/game/web/
+    scp -q target/wasm32-unknown-unknown/release/game-server.wasm thinkcentre:/tmp/
+    ssh thinkcentre "docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/game-server.wasm --yes game-server"
 
 # Build WASM client + server module
 build-web:
-    cargo build -p wasm_fantasia_module --target wasm32-unknown-unknown --release
+    cargo build -p game-server --target wasm32-unknown-unknown --release
     cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
 
 # Wipe SpacetimeDB data and redeploy module
 db-reset:
-    "{{spacetime}}" publish wasm-fantasia --project-path server --yes --delete-data
+    "{{spacetime}}" publish game-server --project-path server --yes --delete-data

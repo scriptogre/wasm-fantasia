@@ -1,6 +1,6 @@
-use super::*;
 use avian3d::prelude::*;
 use bevy::gltf::GltfMesh;
+use bevy::prelude::*;
 use easy_ext::ext;
 
 /// Helper trait to spawn mesh with minimum effort

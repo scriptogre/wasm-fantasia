@@ -1,7 +1,9 @@
-use super::*;
+use bevy::prelude::*;
 use bevy_seedling::prelude::Volume;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{error::Error, fs};
+
+use crate::{InputSettings, Screen, SoundPreset};
 
 pub const SETTINGS_PATH: &str = "client/assets/settings.ron";
 

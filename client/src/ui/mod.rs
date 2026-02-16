@@ -14,7 +14,6 @@ use bevy::{
 };
 use serde::{Deserialize, Serialize};
 
-mod constants;
 pub mod hud;
 mod interaction;
 mod modal;
@@ -24,7 +23,8 @@ mod props;
 mod server_status;
 mod widget;
 
-pub use constants::*;
+// constants moved to models crate as `theme` — re-export submodules for backward compat
+pub use crate::models::theme::{colors, fonts, size};
 pub use modal::*;
 pub use prefabs::*;
 pub use props::*;

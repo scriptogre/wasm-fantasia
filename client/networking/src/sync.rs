@@ -8,9 +8,9 @@ use super::SpacetimeDbConnection;
 use super::generated::player_table::PlayerTableAccess;
 use super::generated::update_position_reducer::update_position;
 use super::reconcile::{ServerId, ServerSnapshot, WorldEntity};
-use crate::combat::AttackState;
-use crate::models::Player as LocalPlayer;
-use crate::player::Animation;
+use game_client_models::combat::AttackState;
+use game_client_models::Animation;
+use game_client_models::Player as LocalPlayer;
 
 const INTERPOLATION_SPEED: f32 = 12.0;
 const GRAVITY: f32 = -9.81;

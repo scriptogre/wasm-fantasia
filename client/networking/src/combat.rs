@@ -7,9 +7,8 @@ use super::generated::landing_aoe_hit_reducer::landing_aoe_hit;
 use super::generated::respawn_reducer::respawn;
 use super::generated::clear_enemies_reducer::clear_enemies;
 use super::generated::spawn_enemies_reducer::spawn_enemies;
-use crate::combat::{AttackIntent, Health, PlayerCombatant};
-use crate::models::Player as LocalPlayer;
-use crate::player::control::{GroundPoundImpact, LandingImpact};
+use game_client_models::combat::{AttackIntent, GroundPoundImpact, Health, LandingImpact, PlayerCombatant};
+use game_client_models::Player as LocalPlayer;
 use bevy::prelude::*;
 
 /// Observer: when local player's attack connects, notify the server.
@@ -72,7 +71,7 @@ pub fn send_landing_aoe_to_server(
 ) {
     let Some(conn) = conn else { return };
     let event = on.event();
-    if event.velocity_y < wasm_fantasia_shared::combat::landing_aoe::MIN_VELOCITY {
+    if event.velocity_y < game_core::combat::landing_aoe::MIN_VELOCITY {
         return;
     }
     if let Err(e) = conn.conn.reducers.landing_aoe_hit(

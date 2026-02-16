@@ -1,16 +1,17 @@
-use crate::*;
-use bevy_enhanced_input::prelude::*;
-use serde::Serialize;
+use bevy::prelude::*;
 
 mod event_dispatch;
 mod ext_traits;
 mod input;
 mod keybinding;
-mod player;
+pub mod player;
 mod pre_load;
 mod primitives;
 mod settings;
 mod states;
+pub mod animation;
+pub mod combat;
+pub mod theme;
 
 pub use event_dispatch::*;
 pub use ext_traits::*;
@@ -21,6 +22,9 @@ pub use pre_load::*;
 pub use primitives::*;
 pub use settings::*;
 pub use states::*;
+pub use animation::Animation;
+pub use combat::*;
+pub use theme::*;
 
 pub fn plugin(app: &mut App) {
     app.configure_sets(
@@ -41,6 +45,7 @@ pub fn plugin(app: &mut App) {
         states::plugin,
         input::plugin,
         event_dispatch::plugin,
+        combat::plugin,
     ));
 }
 

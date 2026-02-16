@@ -1,0 +1,20 @@
+[package]
+name = "game-client-models"
+edition = "2024"
+version = "0.1.0"
+
+[features]
+dev = []
+
+[dependencies]
+bevy = { version = "^0.18", default-features = false, features = ["3d_api", "3d_bevy_render", "ui", "gltf_animation"] }
+bevy_enhanced_input = { version = "^0.23", features = ["serialize"] }
+bevy_seedling = { version = "^0.7", features = ["ogg"] }
+game-core = { path = "../../core" }
+avian3d = { package = "bevy_avian3d", path = "../../crates/avian/crates/bevy_avian3d", features = ["3d", "collider-from-mesh"] }
+serde = { workspace = true }
+ron = "^0.10"
+easy-ext = "1.0.2"
+
+[lints]
+workspace = true

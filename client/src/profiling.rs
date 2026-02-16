@@ -67,7 +67,7 @@ pub fn format_report(timings: &[(String, Duration, u64)], benchmark_duration: Du
         let pct = (total.as_secs_f64() / total_wall) * 100.0;
         // Trim the crate path prefix for readability
         let short_name = name
-            .strip_prefix("wasm_fantasia::")
+            .strip_prefix("game_client::")
             .unwrap_or(name);
         lines.push(format!(
             "{short_name:<60} avg={avg_ms:>7.2}ms  total={total_ms:>8.1}ms  calls={count:<6} ({pct:.1}%)",

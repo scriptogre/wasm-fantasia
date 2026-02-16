@@ -1,5 +1,5 @@
 [package]
-name = "wasm_fantasia_module"
+name = "game-server"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 spacetimedb = "=1.12.0"
-wasm-fantasia-shared = { path = "../shared" }
+game-core = { path = "../core" }
 glam = { workspace = true }
 avian3d = { path = "../crates/avian/crates/avian3d", default-features = false, features = ["3d", "f32", "parry-f32", "enhanced-determinism"] }
 

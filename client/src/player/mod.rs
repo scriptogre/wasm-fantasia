@@ -14,7 +14,7 @@ use bevy_tnua::prelude::*;
 use bevy_tnua_avian3d::*;
 use std::collections::HashMap;
 use std::time::Duration;
-use wasm_fantasia_shared::combat::defaults;
+use game_core::combat::defaults;
 
 // ── Tnua Control Scheme ─────────────────────────────────────────────
 
@@ -188,7 +188,7 @@ pub fn spawn_player(
                 .with(Stat::AttackArc, defaults::ATTACK_ARC)
                 .with(Stat::CritChance, defaults::CRIT_CHANCE)
                 .with(Stat::CritMultiplier, defaults::CRIT_MULTIPLIER),
-            rule_presets::rules_bundle(wasm_fantasia_shared::presets::default_player_rules()),
+            rule_presets::rules_bundle(game_core::presets::default_player_rules()),
         ))
         // spawn character mesh as child to adjust mesh position relative to the player origin
         .with_children(|parent| {
@@ -243,9 +243,7 @@ fn player_post_spawn(on: On<Add, Player>, mut players: Query<&mut Player>) {
 // Remote players — GLTF model, animations, debug collider
 // =============================================================================
 
-/// Marker for remote (non-local) player entities.
-#[derive(Component)]
-pub struct RemotePlayer;
+pub use crate::models::player::RemotePlayer;
 
 /// Animation state for a remote player, driven by server-synced data.
 #[derive(Component, Default)]

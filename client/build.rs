@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 
-const ANIMATION_RS: &str = "src/player/animation.rs";
+const ANIMATION_RS: &str = "models/src/animation.rs";
 const SOURCE_GLB: &str = "assets/models/player.source.glb";
 const OUTPUT_GLB: &str = "assets/models/player.glb";
 

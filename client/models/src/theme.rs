@@ -1,5 +1,5 @@
 //! Various non-themable constants
-use super::*;
+use bevy::prelude::*;
 
 /// Font asset paths (Chakra Petch family)
 pub mod fonts {
@@ -11,28 +11,28 @@ pub mod fonts {
 
 /// Size constants
 pub mod size {
-    use super::*;
+    use bevy::ui::Val;
 
     /// Default font size
     pub const FONT_SIZE: f32 = 20.0;
 
     /// Default border radius for buttons, panels, sliders, spinners, etc.
-    pub const BORDER_RADIUS: Val = Vw(0.6);
+    pub const BORDER_RADIUS: Val = Val::Vw(0.6);
 
     /// Common row size for buttons, sliders, spinners, etc.
-    pub const ROW_HEIGHT: Val = Px(24.0);
+    pub const ROW_HEIGHT: Val = Val::Px(24.0);
 
     /// Width and height of a checkbox
-    pub const CHECKBOX_SIZE: Val = Px(18.0);
+    pub const CHECKBOX_SIZE: Val = Val::Px(18.0);
 
     /// Width and height of a radio button
-    pub const RADIO_SIZE: Val = Px(18.0);
+    pub const RADIO_SIZE: Val = Val::Px(18.0);
 
     /// Width of a toggle switch
-    pub const TOGGLE_WIDTH: Val = Px(32.0);
+    pub const TOGGLE_WIDTH: Val = Val::Px(32.0);
 
     /// Height of a toggle switch
-    pub const TOGGLE_HEIGHT: Val = Px(18.0);
+    pub const TOGGLE_HEIGHT: Val = Val::Px(18.0);
 
     /// Health bar width
     pub const HEALTH_BAR_WIDTH: f32 = 288.0;

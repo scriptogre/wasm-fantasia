@@ -9,7 +9,7 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
-use crate::models::Screen;
+use game_client_models::Screen;
 
 // =============================================================================
 // Resources
@@ -223,13 +223,13 @@ fn spawn_deploy(server: &LocalServer) -> Result<DeployProcess, String> {
     // fall back to --project-path for dev workflow.
     let bin_path = std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(|d| d.join("wasm_fantasia_module.wasm")))
+        .and_then(|exe| exe.parent().map(|d| d.join("game_server.wasm")))
         .filter(|p| p.exists());
 
     let mut cmd = Command::new(&server.spacetime_binary);
     cmd.args([
         "publish",
-        "wasm-fantasia",
+        "game-server",
         "--yes",
         "--delete-data",
         "-s",

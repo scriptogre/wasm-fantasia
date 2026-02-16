@@ -1,4 +1,7 @@
-use super::*;
+use bevy::prelude::*;
+use bevy_enhanced_input::prelude::*;
+
+use crate::{Escape, Mood, Mute, Pause, Screen, Session, UiTab};
 
 pub fn plugin(app: &mut App) {
     app.add_observer(pause)

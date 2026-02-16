@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-pub use wasm_fantasia_shared::combat::{attack_timing, hit_timing};
+pub use game_core::combat::{attack_timing, hit_timing};
 
 pub fn plugin(app: &mut App) {
     app.register_type::<Health>()
@@ -180,3 +180,103 @@ pub enum EnemyBehavior {
 #[derive(Component, Debug)]
 #[component(storage = "SparseSet")]
 pub struct PendingKnockback(pub Vec3);
+
+// ── Events ──────────────────────────────────────────────────────────
+
+use game_core::combat::HitFeedback;
+
+// ── Intent ──────────────────────────────────────────────────────────
+
+/// Intent: the attack's hit frame was reached.
+/// Resolved into [`DamageDealt`] + [`HitLanded`] per target.
+#[derive(Event, Clone, Debug)]
+pub struct AttackIntent {
+    pub attacker: Entity,
+}
+
+// ── Mutations ───────────────────────────────────────────────────────
+
+/// Mutation: damage was dealt to a target.
+/// Caused by [`AttackIntent`] resolution. Triggers [`HitLanded`] and
+/// potentially [`Died`].
+#[derive(Event, Debug, Clone)]
+pub struct DamageDealt {
+    pub source: Entity,
+    pub target: Entity,
+    pub damage: f32,
+    pub force: Vec3,
+    pub is_crit: bool,
+    pub feedback: HitFeedback,
+}
+
+/// Cross-domain mutation: an entity died.
+/// Triggered by [`DamageDealt`] when health reaches zero.
+#[derive(Event, Debug, Clone)]
+pub struct Died {
+    pub killer: Entity,
+    pub entity: Entity,
+}
+
+// ── Feedback ────────────────────────────────────────────────────────
+
+/// Feedback: a hit visually landed — play VFX, sound, screen shake.
+/// Triggered by the [`DamageDealt`] observer.
+#[derive(Event, Debug, Clone)]
+pub struct HitLanded {
+    pub source: Entity,
+    pub target: Entity,
+    pub damage: f32,
+    pub is_crit: bool,
+    pub feedback: HitFeedback,
+}
+
+// ── Player control events (moved from player/control.rs) ────────────
+
+/// Fired when the player lands a ground pound. Triggers AOE damage.
+#[derive(Event)]
+pub struct GroundPoundImpact {
+    pub position: Vec3,
+}
+
+/// Fired when the player lands after being airborne. Impact scales with downward velocity.
+#[derive(Event)]
+pub struct LandingImpact {
+    pub velocity_y: f32,
+    pub position: Vec3,
+}
+
+// ── Rules system types (moved from rules/mod.rs) ────────────────────
+
+use serde::{Deserialize, Serialize};
+use std::ops::{Deref, DerefMut};
+
+pub use game_core::rules::Stat;
+
+/// Bevy Component wrapper around shared Stats.
+#[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Stats(pub game_core::rules::Stats);
+
+impl Stats {
+    pub fn new() -> Self {
+        Self(game_core::rules::Stats::new())
+    }
+
+    pub fn with(mut self, stat: Stat, value: f32) -> Self {
+        self.0 = self.0.with(stat, value);
+        self
+    }
+}
+
+impl Deref for Stats {
+    type Target = game_core::rules::Stats;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Stats {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}

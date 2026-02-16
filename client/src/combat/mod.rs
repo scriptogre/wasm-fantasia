@@ -1,11 +1,8 @@
-use crate::models::*;
 use crate::*;
 
 mod attack;
-mod components;
 mod damage;
 mod enemy;
-pub mod events;
 mod feedback;
 mod floaters;
 mod sound;
@@ -13,15 +10,17 @@ mod targeting;
 mod vfx;
 
 pub use attack::{VFX_ARC_DEGREES, VFX_RANGE};
-pub use components::*;
-pub use events::*;
+// Re-export combat types from the models crate
+pub use crate::models::combat::{
+    AttackIntent, AttackPhase, AttackState, Combatant, DamageDealt, Died, Enemy, EnemyBehavior,
+    GroundPoundImpact, Health, HitLanded, LandingImpact, PendingKnockback, PlayerCombatant,
+};
 pub use feedback::*;
 pub use floaters::*;
 pub use targeting::LockedTarget;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((
-        components::plugin,
         attack::plugin,
         damage::plugin,
         enemy::plugin,

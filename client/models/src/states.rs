@@ -1,4 +1,4 @@
-use super::*;
+use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Session>()

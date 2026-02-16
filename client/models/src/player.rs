@@ -1,5 +1,5 @@
-use super::*;
-use crate::player::Animation;
+use bevy::prelude::*;
+use crate::animation::Animation;
 use std::collections::HashMap;
 
 #[derive(Component, Reflect, Clone)]
@@ -117,3 +117,7 @@ impl AnimationState {
         }
     }
 }
+
+/// Marker for remote (non-local) player entities.
+#[derive(Component)]
+pub struct RemotePlayer;

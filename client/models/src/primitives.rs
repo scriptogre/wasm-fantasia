@@ -1,4 +1,4 @@
-use super::*;
+use bevy::prelude::*;
 
 /// Macro to hide the derive trait boilerplate
 #[macro_export]
@@ -30,17 +30,3 @@ macro_rules! timers {
     };
 }
 timers!(JumpTimer, StepTimer);
-
-// macro_rules! sliders {
-//   ( $( $name:ident ),* ) => {
-//         $(
-//             #[derive(Component, Reflect, Debug)]
-//             #[reflect(Component)]
-//             pub struct $name{
-//                 pub current: f32
-//             }
-//         )*
-//     };
-// }
-//
-// sliders!(SliderGeneral, SliderMusic, SliderSfx);

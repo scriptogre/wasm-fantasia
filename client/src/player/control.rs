@@ -2,19 +2,14 @@ use super::*;
 
 pub const IDLE_TO_RUN_TRESHOLD: f32 = 0.01;
 
+pub use crate::combat::{GroundPoundImpact, LandingImpact};
+
 /// Fired when the player releases a charge jump. Multiple systems react independently
 /// (camera shake, VFX, audio, rumble).
 #[derive(Event)]
 pub struct JumpLaunched {
     pub charge_time: f32,
     pub height: f32,
-    pub position: Vec3,
-}
-
-/// Fired when the player lands after being airborne. Impact scales with downward velocity.
-#[derive(Event)]
-pub struct LandingImpact {
-    pub velocity_y: f32,
     pub position: Vec3,
 }
 
@@ -142,12 +137,6 @@ const ROLL_IMPULSE_SPEED: f32 = 16.0;
 #[derive(Component)]
 #[component(storage = "SparseSet")]
 pub struct GroundPoundState;
-
-/// Fired when the player lands a ground pound. Triggers AOE damage.
-#[derive(Event)]
-pub struct GroundPoundImpact {
-    pub position: Vec3,
-}
 
 const GROUND_POUND_SPEED: f32 = 40.0;
 

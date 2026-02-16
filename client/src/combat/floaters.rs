@@ -2,7 +2,7 @@ use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
-use crate::combat::components::{Enemy, Health};
+use crate::combat::{Enemy, Health};
 use crate::combat::{DamageDealt, Died, HitLanded};
 use crate::models::SceneCamera;
 use crate::ui::colors::{GRASS_GREEN, NEUTRAL450, NEUTRAL850, RED, SAND_YELLOW};

@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
 use spacetimedb::Table;
 use std::collections::HashMap;
-use wasm_fantasia_shared::combat::{self, defaults, enemy_ai_decision};
+use game_core::combat::{self, defaults, enemy_ai_decision};
 
 use crate::schema::*;
 use crate::TICK_INTERVAL_MICROS;

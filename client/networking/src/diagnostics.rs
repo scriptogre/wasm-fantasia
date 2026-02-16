@@ -8,7 +8,7 @@ use super::SpacetimeDbConnection;
 use super::generated::combat_event_table::CombatEventTableAccess;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::player_table::PlayerTableAccess;
-use crate::combat::{Health, PlayerCombatant};
+use game_client_models::combat::{Health, PlayerCombatant};
 
 #[derive(Default)]
 pub struct PlayerDiagnostic {

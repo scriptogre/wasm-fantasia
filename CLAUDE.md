@@ -23,11 +23,13 @@ Bevy 0.18 3D action RPG targeting native and WebAssembly. Flat module architectu
 
 ### Workspace
 
-| Crate                     | Purpose                                                                                         |
-|---------------------------|-------------------------------------------------------------------------------------------------|
-| `client/`                 | Bevy game client — all gameplay, rendering, UI, audio                                           |
-| `shared/`                 | Pure functions shared between client and server (combat resolution, rules, RNG). No Bevy types. |
-| `server/`                 | SpacetimeDB module — authoritative game state, reducers                                         |
+| Crate                                           | Purpose                                                                                  |
+|-------------------------------------------------|------------------------------------------------------------------------------------------|
+| `client/` (`game-client`)                       | Bevy game client — all gameplay, rendering, UI, audio                                    |
+| `client/models/` (`game-client-models`)         | Bevy-specific types: components, resources, states, events, input, animation, theme      |
+| `client/networking/` (`game-client-networking`) | SpacetimeDB SDK integration, connection, sync, reconciliation, generated bindings        |
+| `core/` (`game-core`)                           | Pure functions shared between client and server (combat resolution, RNG). No Bevy types. |
+| `server/` (`game-server`)                       | SpacetimeDB module — authoritative game state, reducers                                  |
 
 ### Animation Pipeline
 
@@ -44,11 +46,3 @@ Bevy 0.18 3D action RPG targeting native and WebAssembly. Flat module architectu
 Every game session connects to SpacetimeDB. Native singleplayer launches a local subprocess; web solo connects to a remote server with a private `world_id`; multiplayer connects to a shared remote `world_id`. The server is the single source of truth for all modes.
 
 `GameMode` resource (Singleplayer/Multiplayer) set by title screen buttons. `ServerTarget` resource (Local/Remote) describes where the SpacetimeDB instance lives. `GameMode` gates runtime behavior. Use `is_multiplayer_mode` run condition for MP-only systems.
-
-## Rules System (Data-Driven Behaviors)
-
-**Direction**: `docs/architecture/VISION.md`
-
-The rules system enables data-driven reactive behaviors. The current implementation uses Rust enums for conditions/effects; the long-term plan is embedded Lua scripting over the same building blocks. Dynamic effects (buffs, debuffs, DoTs) use the `ActiveEffect` SpacetimeDB satellite table rather than hardcoded columns on entity tables.
-
-**Always prefer composing existing blocks over writing custom code.** When adding behaviors: first check if existing Stats, Conditions, Effects, and Triggers can do it. If not, add the smallest new building block. Never bypass the rules system with one-off observers.

@@ -1,5 +1,5 @@
 [package]
-name = "wasm_fantasia"
+name = "game-client"
 edition = "2024"
 version = "0.1.5"
 authors = ["Oleks Pickle <22867443+olekspickle@users.noreply.github.com>", "Christian Tanul <git@christiantanul.com>"]
@@ -15,12 +15,13 @@ default = [
     "bevy/embedded_watcher",        # Enable embedded asset hot reloading for dev builds.
     "bevy/file_watcher",            # Enable asset hot reloading for dev builds.
 ]
-web = ["bevy/webgpu", "bevy/webgl2"]
+web = ["bevy/webgpu", "bevy/webgl2", "game-client-networking/web"]
 dev = [
     "bevy-inspector-egui",
     "bevy/bevy_dev_tools",
     "bevy/bevy_ui_debug",
     "bevy/track_location",          # Improve error messages coming from Bevy
+    "game-client-models/dev",
 ]
 profile = ["bevy/trace"]                    # Per-system text profiling (F9 benchmark)
 trace = ["profile", "bevy/trace_tracy"]     # Tracy GUI profiling (just profile)
@@ -48,7 +49,9 @@ features = [
 ]
 
 [dependencies]
-wasm-fantasia-shared = { path = "../shared" }
+game-core = { path = "../core" }
+game-client-models = { path = "models" }
+game-client-networking = { path = "networking" }
 
 # plugins
 bevy_fix_cursor_unlock_web = "^0.3"

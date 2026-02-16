@@ -45,7 +45,7 @@ fn soft_target_assist(
     mut player: Query<(&mut Transform, &AttackState), (With<Player>, Without<Enemy>)>,
     time: Res<Time>,
 ) {
-    use wasm_fantasia_shared::combat::defaults::{ATTACK_ARC, ATTACK_RANGE};
+    use game_core::combat::defaults::{ATTACK_ARC, ATTACK_RANGE};
 
     let Ok((mut player_tf, attack_state)) = player.single_mut() else {
         return;

@@ -1,8 +1,10 @@
 use bevy::input::gamepad::{
     GamepadAxisChangedEvent, GamepadButtonChangedEvent, GamepadConnectionEvent,
 };
+use bevy::prelude::*;
+use bevy_enhanced_input::prelude::*;
 
-use super::*;
+use crate::markers;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(EnhancedInputPlugin)
