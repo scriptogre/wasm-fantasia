@@ -20,8 +20,7 @@ pub fn plugin(app: &mut App) {
         .add_observer(log_crouch_start)
         .add_observer(log_crouch_end)
         .add_observer(log_attack)
-        .add_observer(log_escape)
-        .add_observer(log_venom_speak);
+        .add_observer(log_escape);
 }
 
 fn log_gamepad_events(
@@ -99,10 +98,6 @@ fn log_escape(_on: On<Start<Escape>>) {
     debug!("Escape");
 }
 
-fn log_venom_speak(_on: On<Start<VenomSpeak>>) {
-    debug!("VenomSpeak");
-}
-
 markers!(GlobalCtx, PlayerCtx, ModalCtx);
 
 #[derive(InputAction)]
@@ -152,10 +147,6 @@ pub struct SpawnEnemy;
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct ClearEnemies;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct VenomSpeak;
 
 #[derive(InputAction)]
 #[action_output(Vec2)]
@@ -236,10 +227,6 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         (
             Action::<ClearEnemies>::new(),
             bindings![KeyCode::KeyQ],
-        ),
-        (
-            Action::<VenomSpeak>::new(),
-            bindings![KeyCode::KeyT],
         ),
     ]));
 }
