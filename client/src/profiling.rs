@@ -20,8 +20,7 @@ use bevy::log::tracing_subscriber::{Layer, Registry};
 // ── Shared state (tracing layer ↔ Bevy systems) ─────────────────────────
 
 static PROFILING_ACTIVE: AtomicBool = AtomicBool::new(false);
-static STATE: LazyLock<Mutex<ProfileState>> =
-    LazyLock::new(|| Mutex::new(ProfileState::default()));
+static STATE: LazyLock<Mutex<ProfileState>> = LazyLock::new(|| Mutex::new(ProfileState::default()));
 
 #[derive(Default)]
 struct ProfileState {
@@ -54,9 +53,7 @@ pub fn stop() -> Vec<(String, Duration, u64)> {
 
 pub fn format_report(timings: &[(String, Duration, u64)], benchmark_duration: Duration) -> String {
     if timings.is_empty() {
-        return String::from(
-            "System profiling: no data (build with --features profile to enable)",
-        );
+        return String::from("System profiling: no data (build with --features profile to enable)");
     }
 
     let total_wall: f64 = benchmark_duration.as_secs_f64();
@@ -67,9 +64,7 @@ pub fn format_report(timings: &[(String, Duration, u64)], benchmark_duration: Du
         let avg_ms = total_ms / *count as f64;
         let pct = (total.as_secs_f64() / total_wall) * 100.0;
         // Trim the crate path prefix for readability
-        let short_name = name
-            .strip_prefix("game_client::")
-            .unwrap_or(name);
+        let short_name = name.strip_prefix("game_client::").unwrap_or(name);
         lines.push(format!(
             "{short_name:<60} avg={avg_ms:>7.2}ms  total={total_ms:>8.1}ms  calls={count:<6} ({pct:.1}%)",
         ));
@@ -159,10 +154,7 @@ impl Layer<Registry> for SystemProfileLayer {
         if let Some(start) = state.enter_times.remove(id) {
             if let Some(name) = state.span_names.get(id).cloned() {
                 let elapsed = start.elapsed();
-                let entry = state
-                    .timings
-                    .entry(name)
-                    .or_insert((Duration::ZERO, 0));
+                let entry = state.timings.entry(name).or_insert((Duration::ZERO, 0));
                 entry.0 += elapsed;
                 entry.1 += 1;
             }

@@ -134,24 +134,26 @@ impl Plugin for NetworkingPlugin {
         app.add_observer(combat::send_attack_to_server)
             .add_observer(combat::send_ground_pound_to_server)
             .add_systems(
-            Update,
-            (
-                connection::reap_dead_connections.run_if(resource_exists::<SpacetimeDbConnection>),
-                connection::handle_connection_events
-                    .run_if(resource_exists::<SpacetimeDbConnection>),
-                reconcile::drain_db_events
-                    .after(connection::handle_connection_events)
-                    .run_if(resource_exists::<SpacetimeDbConnection>),
-                sync::interpolate_synced_entities
-                    .after(reconcile::drain_db_events)
-                    .run_if(resource_exists::<SpacetimeDbConnection>),
-                sync::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
-                combat::request_respawn_on_death.run_if(resource_exists::<SpacetimeDbConnection>),
-                sync::measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
-                diagnostics::update_server_diagnostics
-                    .run_if(resource_exists::<SpacetimeDbConnection>),
-            ),
-        );
+                Update,
+                (
+                    connection::reap_dead_connections
+                        .run_if(resource_exists::<SpacetimeDbConnection>),
+                    connection::handle_connection_events
+                        .run_if(resource_exists::<SpacetimeDbConnection>),
+                    reconcile::drain_db_events
+                        .after(connection::handle_connection_events)
+                        .run_if(resource_exists::<SpacetimeDbConnection>),
+                    sync::interpolate_synced_entities
+                        .after(reconcile::drain_db_events)
+                        .run_if(resource_exists::<SpacetimeDbConnection>),
+                    sync::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
+                    combat::request_respawn_on_death
+                        .run_if(resource_exists::<SpacetimeDbConnection>),
+                    sync::measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
+                    diagnostics::update_server_diagnostics
+                        .run_if(resource_exists::<SpacetimeDbConnection>),
+                ),
+            );
 
         app.add_systems(
             Update,

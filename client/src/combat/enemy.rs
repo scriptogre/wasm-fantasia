@@ -1,13 +1,13 @@
 use super::*;
 use crate::asset_loading::Models;
 use crate::models::{ClearEnemies, SpawnEnemy};
-use avian3d::prelude::{Collider, CollisionLayers, RigidBody, Sensor};
 use crate::scene::GameLayer;
+use avian3d::prelude::{Collider, CollisionLayers, RigidBody, Sensor};
 use bevy::pbr::ExtendedMaterial;
 use bevy::render::storage::ShaderStorageBuffer;
-use bevy_open_vat::data::VatInstanceData;
 use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::Start;
+use bevy_open_vat::data::VatInstanceData;
 use bevy_open_vat::prelude::*;
 
 /// bevy_open_vat's material type with StandardMaterial base.
@@ -112,7 +112,10 @@ fn initialize_vat_enemy_resources(
         },
     });
 
-    commands.insert_resource(VatEnemyState { material, flash_material });
+    commands.insert_resource(VatEnemyState {
+        material,
+        flash_material,
+    });
 }
 
 // =============================================================================
@@ -189,7 +192,10 @@ fn on_enemy_added(
         Collider::capsule(0.5, 1.0),
         RigidBody::Kinematic,
         Sensor,
-        CollisionLayers::new(GameLayer::Enemy, [GameLayer::Player, GameLayer::Environment]),
+        CollisionLayers::new(
+            GameLayer::Enemy,
+            [GameLayer::Player, GameLayer::Environment],
+        ),
     ));
 
     let Some(gltf) = gltf_assets.get(&models.enemy_scene) else {

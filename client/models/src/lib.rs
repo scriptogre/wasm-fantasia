@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+pub mod animation;
+pub mod combat;
 mod event_dispatch;
 mod ext_traits;
 mod input;
@@ -9,10 +11,10 @@ mod pre_load;
 mod primitives;
 mod settings;
 mod states;
-pub mod animation;
-pub mod combat;
 pub mod theme;
 
+pub use animation::Animation;
+pub use combat::*;
 pub use event_dispatch::*;
 pub use ext_traits::*;
 pub use input::*;
@@ -22,8 +24,6 @@ pub use pre_load::*;
 pub use primitives::*;
 pub use settings::*;
 pub use states::*;
-pub use animation::Animation;
-pub use combat::*;
 pub use theme::*;
 
 pub fn plugin(app: &mut App) {

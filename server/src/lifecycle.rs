@@ -1,5 +1,5 @@
-use spacetimedb::Table;
 use game_core::combat::defaults;
+use spacetimedb::Table;
 
 use crate::schema::*;
 

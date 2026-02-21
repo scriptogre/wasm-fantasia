@@ -62,9 +62,9 @@ macro_rules! connection_builder {
                 {
                     let q = queue.clone();
                     conn.db.enemy().on_insert(move |_ctx, row| {
-                        q.lock().unwrap().push(DbEvent::EnemyInsert {
-                            enemy: row.into(),
-                        });
+                        q.lock()
+                            .unwrap()
+                            .push(DbEvent::EnemyInsert { enemy: row.into() });
                     });
                 }
                 {
@@ -85,9 +85,9 @@ macro_rules! connection_builder {
                 {
                     let q = queue.clone();
                     conn.db.player().on_insert(move |_ctx, row| {
-                        q.lock().unwrap().push(DbEvent::PlayerInsert {
-                            player: row.into(),
-                        });
+                        q.lock()
+                            .unwrap()
+                            .push(DbEvent::PlayerInsert { player: row.into() });
                     });
                 }
                 {

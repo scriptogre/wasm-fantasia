@@ -2,14 +2,16 @@
 
 use super::SpacetimeDbConnection;
 use super::generated::attack_hit_reducer::attack_hit;
+use super::generated::clear_enemies_reducer::clear_enemies;
 use super::generated::ground_pound_hit_reducer::ground_pound_hit;
 use super::generated::landing_aoe_hit_reducer::landing_aoe_hit;
 use super::generated::respawn_reducer::respawn;
-use super::generated::clear_enemies_reducer::clear_enemies;
 use super::generated::spawn_enemies_reducer::spawn_enemies;
-use game_client_models::combat::{AttackIntent, GroundPoundImpact, Health, LandingImpact, PlayerCombatant};
-use game_client_models::Player as LocalPlayer;
 use bevy::prelude::*;
+use game_client_models::Player as LocalPlayer;
+use game_client_models::combat::{
+    AttackIntent, GroundPoundImpact, Health, LandingImpact, PlayerCombatant,
+};
 
 /// Observer: when local player's attack connects, notify the server.
 pub fn send_attack_to_server(
@@ -55,20 +57,17 @@ pub fn send_ground_pound_to_server(
 ) {
     let Some(conn) = conn else { return };
     let event = on.event();
-    if let Err(e) = conn.conn.reducers.ground_pound_hit(
-        event.position.x,
-        event.position.y,
-        event.position.z,
-    ) {
+    if let Err(e) =
+        conn.conn
+            .reducers
+            .ground_pound_hit(event.position.x, event.position.y, event.position.z)
+    {
         warn!("Failed to send ground_pound_hit: {:?}", e);
     }
 }
 
 /// Observer: when a high-velocity landing occurs, notify the server.
-pub fn send_landing_aoe_to_server(
-    on: On<LandingImpact>,
-    conn: Option<Res<SpacetimeDbConnection>>,
-) {
+pub fn send_landing_aoe_to_server(on: On<LandingImpact>, conn: Option<Res<SpacetimeDbConnection>>) {
     let Some(conn) = conn else { return };
     let event = on.event();
     if event.velocity_y < game_core::combat::landing_aoe::MIN_VELOCITY {

@@ -7,9 +7,7 @@ use crate::rules::{
 };
 use bevy_enhanced_input::prelude::{Fire, Start};
 use bevy_tnua::prelude::TnuaController;
-use game_core::combat::{
-    CombatInput, HitTarget, defaults, ground_pound, resolve_combat,
-};
+use game_core::combat::{CombatInput, HitTarget, defaults, ground_pound, resolve_combat};
 use game_core::presets::EntityRules;
 
 /// Visual constants for attack effects
@@ -31,17 +29,9 @@ pub fn plugin(app: &mut App) {
 fn handle_attack(
     on: On<Fire<Attack>>,
     mut buffer: ResMut<InputBuffer>,
-    mut query: Query<
-        (
-            &mut AttackState,
-            &TnuaController<ControlScheme>,
-        ),
-        With<PlayerCombatant>,
-    >,
+    mut query: Query<(&mut AttackState, &TnuaController<ControlScheme>), With<PlayerCombatant>>,
 ) {
-    let Ok((mut attack_state, controller)) =
-        query.get_mut(on.context)
-    else {
+    let Ok((mut attack_state, controller)) = query.get_mut(on.context) else {
         return;
     };
 
@@ -62,17 +52,9 @@ fn handle_attack(
 fn handle_airborne_attack(
     on: On<Start<Attack>>,
     mut commands: Commands,
-    query: Query<
-        (
-            &TnuaController<ControlScheme>,
-            Has<GroundPoundState>,
-        ),
-        With<PlayerCombatant>,
-    >,
+    query: Query<(&TnuaController<ControlScheme>, Has<GroundPoundState>), With<PlayerCombatant>>,
 ) {
-    let Ok((controller, already_pounding)) =
-        query.get(on.context)
-    else {
+    let Ok((controller, already_pounding)) = query.get(on.context) else {
         return;
     };
 
@@ -421,4 +403,3 @@ fn on_ground_pound_hit(
         });
     }
 }
-

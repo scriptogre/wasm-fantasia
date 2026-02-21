@@ -1,7 +1,7 @@
 use super::*;
-use bevy::input::common_conditions::input_just_pressed;
-use crate::networking::diagnostics::ServerDiagnostics;
 use crate::networking::PingTracker;
+use crate::networking::diagnostics::ServerDiagnostics;
+use bevy::input::common_conditions::input_just_pressed;
 use std::time::Duration;
 
 const REFRESH_INTERVAL: Duration = Duration::from_millis(200);
@@ -10,7 +10,10 @@ const BENCHMARK_DURATION: Duration = Duration::from_secs(10);
 // ── Plugin ───────────────────────────────────────────────────────────────
 
 pub fn plugin(app: &mut App) {
-    app.insert_resource(StatsTimer(Timer::new(REFRESH_INTERVAL, TimerMode::Repeating)));
+    app.insert_resource(StatsTimer(Timer::new(
+        REFRESH_INTERVAL,
+        TimerMode::Repeating,
+    )));
     app.add_systems(
         OnEnter(crate::models::Screen::Gameplay),
         spawn_stats_overlay,
@@ -160,8 +163,7 @@ fn tick_benchmark(
         let entity_count = entities.iter().count();
         let report = build_report(&frames.frame_times, entity_count);
         let system_timings = crate::profiling::stop();
-        let system_report =
-            crate::profiling::format_report(&system_timings, frames.elapsed);
+        let system_report = crate::profiling::format_report(&system_timings, frames.elapsed);
 
         commands.remove_resource::<BenchmarkFrames>();
         for entity in &overlay_entities {

@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
+use game_core::combat::{self, defaults, enemy_ai_decision};
 use spacetimedb::Table;
 use std::collections::HashMap;
-use game_core::combat::{self, defaults, enemy_ai_decision};
 
 use crate::schema::*;
 use crate::TICK_INTERVAL_MICROS;
@@ -213,9 +213,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             // we can skip chase when being knocked back)
             let has_knockback = impulses_by_world
                 .get(world_id)
-                .is_some_and(|impulses| {
-                    impulses.iter().any(|i| i.enemy_id == enemy.id)
-                });
+                .is_some_and(|impulses| impulses.iter().any(|i| i.enemy_id == enemy.id));
             if let Some(impulses) = impulses_by_world.get(world_id) {
                 for impulse in impulses.iter().filter(|i| i.enemy_id == enemy.id) {
                     physics.apply_impulse(
@@ -228,9 +226,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             // Move toward player when chasing — but skip when being knocked
             // back so the impulse isn't immediately overridden by chase velocity.
             let (mut vx, mut vz) = (0.0_f32, 0.0_f32);
-            if !has_knockback
-                && decision == combat::EnemyBehaviorKind::Chase
-                && nearest_dist > 0.01
+            if !has_knockback && decision == combat::EnemyBehaviorKind::Chase && nearest_dist > 0.01
             {
                 let dx = nearest_pos.0 - enemy.x;
                 let dz = nearest_pos.1 - enemy.z;
@@ -310,7 +306,6 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 last_attack_time: new_last_attack_time,
             });
         }
-
     }
 
     // Delete consumed knockback impulses

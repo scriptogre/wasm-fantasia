@@ -16,12 +16,12 @@ pub use game_client_models as models;
 pub use game_client_networking as networking;
 pub mod player;
 pub mod postfx;
+pub mod profiling;
 pub mod rule_presets;
 pub mod rules;
 pub mod scene;
 pub mod screens;
 pub mod ui;
-pub mod profiling;
 
 use asset_loading::{AudioSources, Models, ResourceHandles};
 use audio::*;
@@ -58,7 +58,10 @@ fn main() {
     #[cfg(target_arch = "wasm32")]
     let render = bevy::render::RenderPlugin {
         render_creation: RenderCreation::Automatic(WgpuSettings {
-            backends: Some(bevy::render::settings::Backends::BROWSER_WEBGPU | bevy::render::settings::Backends::GL),
+            backends: Some(
+                bevy::render::settings::Backends::BROWSER_WEBGPU
+                    | bevy::render::settings::Backends::GL,
+            ),
             ..default()
         }),
         ..default()
@@ -67,7 +70,13 @@ fn main() {
     let render = bevy::render::RenderPlugin::default();
 
     app.insert_resource(ClearColor(ui::colors::VOID));
-    app.add_plugins(DefaultPlugins.set(window).set(assets).set(log_level).set(render));
+    app.add_plugins(
+        DefaultPlugins
+            .set(window)
+            .set(assets)
+            .set(log_level)
+            .set(render),
+    );
     app.add_plugins(bevy_hanabi::HanabiPlugin);
     app.add_plugins(bevy_open_vat::prelude::OpenVatPlugin);
 

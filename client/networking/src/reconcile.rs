@@ -4,17 +4,17 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
-use spacetimedb_sdk::{DbContext, Identity, Table};
 use game_core::combat::EnemyBehaviorKind;
+use spacetimedb_sdk::{DbContext, Identity, Table};
 
 use super::SpacetimeDbConnection;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::enemy_type::Enemy as ServerEnemy;
 use super::generated::player_table::PlayerTableAccess;
 use super::generated::player_type::Player as ServerPlayer;
+use game_client_models::Player as LocalPlayer;
 use game_client_models::combat::{Combatant, Enemy, EnemyBehavior, Health, Stat, Stats};
 use game_client_models::player::RemotePlayer;
-use game_client_models::Player as LocalPlayer;
 
 // =============================================================================
 // Components
@@ -167,13 +167,33 @@ impl From<&ServerPlayer> for PlayerSnapshot {
 // =============================================================================
 
 pub(super) enum DbEvent {
-    EnemyInsert { enemy: EnemySnapshot },
-    EnemyUpdate { id: u64, new: EnemySnapshot },
-    EnemyDelete { id: u64 },
-    PlayerInsert { player: PlayerSnapshot },
-    PlayerUpdate { identity: Identity, new: PlayerSnapshot },
-    PlayerDelete { identity: Identity },
-    CombatEventInsert { damage: f32, is_crit: bool, x: f32, y: f32, z: f32 },
+    EnemyInsert {
+        enemy: EnemySnapshot,
+    },
+    EnemyUpdate {
+        id: u64,
+        new: EnemySnapshot,
+    },
+    EnemyDelete {
+        id: u64,
+    },
+    PlayerInsert {
+        player: PlayerSnapshot,
+    },
+    PlayerUpdate {
+        identity: Identity,
+        new: PlayerSnapshot,
+    },
+    PlayerDelete {
+        identity: Identity,
+    },
+    CombatEventInsert {
+        damage: f32,
+        is_crit: bool,
+        x: f32,
+        y: f32,
+        z: f32,
+    },
 }
 
 #[derive(Resource, Clone, Default)]
@@ -269,9 +289,7 @@ pub(super) fn drain_db_events(
             }
             DbEvent::EnemyUpdate { id, new } => {
                 if let Some(&entity) = entity_map.enemies.get(&id) {
-                    if let Ok((mut world, mut health, behavior)) =
-                        remote_enemies.get_mut(entity)
-                    {
+                    if let Ok((mut world, mut health, behavior)) = remote_enemies.get_mut(entity) {
                         *world = WorldEntity {
                             x: new.x,
                             y: new.y,

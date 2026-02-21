@@ -112,5 +112,4 @@ fn setup_animus_scene(
         .build(),
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.7, 0.3, 0.0)),
     ));
-
 }

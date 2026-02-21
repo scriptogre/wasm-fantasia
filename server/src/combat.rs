@@ -1,9 +1,9 @@
-use spacetimedb::Table;
 use game_core::combat::{
     self, defaults, knockback_displacement, resolve_combat, CombatInput, HitTarget,
 };
 use game_core::presets;
 use game_core::rules::{Stat, Stats};
+use spacetimedb::Table;
 
 use crate::schema::*;
 
@@ -204,20 +204,24 @@ pub fn ground_pound_hit(ctx: &spacetimedb::ReducerContext, x: f32, y: f32, z: f3
         return;
     }
 
-    aoe_hit(ctx, &attacker, x, y, z, gp::RADIUS, gp::KNOCKBACK, gp::LAUNCH, gp::DAMAGE_MULTIPLIER);
+    aoe_hit(
+        ctx,
+        &attacker,
+        x,
+        y,
+        z,
+        gp::RADIUS,
+        gp::KNOCKBACK,
+        gp::LAUNCH,
+        gp::DAMAGE_MULTIPLIER,
+    );
 }
 
 // ── Landing AOE ──────────────────────────────────────────────────
 
 /// Server-authoritative landing AOE. Client sends velocity + impact position.
 #[spacetimedb::reducer]
-pub fn landing_aoe_hit(
-    ctx: &spacetimedb::ReducerContext,
-    velocity_y: f32,
-    x: f32,
-    y: f32,
-    z: f32,
-) {
+pub fn landing_aoe_hit(ctx: &spacetimedb::ReducerContext, velocity_y: f32, x: f32, y: f32, z: f32) {
     use combat::landing_aoe;
 
     let Some(attacker) = ctx.db.player().identity().find(ctx.sender) else {
@@ -232,7 +236,17 @@ pub fn landing_aoe_hit(
     }
 
     let (radius, kb, launch) = landing_aoe::scaled_params(velocity_y);
-    aoe_hit(ctx, &attacker, x, y, z, radius, kb, launch, landing_aoe::DAMAGE_MULTIPLIER);
+    aoe_hit(
+        ctx,
+        &attacker,
+        x,
+        y,
+        z,
+        radius,
+        kb,
+        launch,
+        landing_aoe::DAMAGE_MULTIPLIER,
+    );
 }
 
 // ── Shared AOE helper ────────────────────────────────────────────

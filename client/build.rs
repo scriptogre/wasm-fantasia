@@ -122,7 +122,10 @@ fn main() {
         });
     }
     // Reset scene index if it now points past the end
-    let scene_count = root.get("scenes").and_then(|s| s.as_array()).map_or(0, |s| s.len());
+    let scene_count = root
+        .get("scenes")
+        .and_then(|s| s.as_array())
+        .map_or(0, |s| s.len());
     if let Some(scene_idx) = root.get("scene").and_then(|s| s.as_u64()) {
         if scene_idx as usize >= scene_count {
             root.as_object_mut()

@@ -4,8 +4,8 @@ use bevy_hanabi::prelude::{
     self as hanabi, AccelModifier, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier,
     EffectAsset, EffectMaterial, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
     OrientModifier, ParticleEffect, ParticleTextureModifier, SetAttributeModifier,
-    SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension,
-    SizeOverLifetimeModifier, SpawnerSettings,
+    SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SizeOverLifetimeModifier,
+    SpawnerSettings,
 };
 use bevy_open_vat::prelude::OpenVatExtension;
 
@@ -464,7 +464,10 @@ pub fn make_jump_dust_cloud() -> EffectAsset {
     };
 
     let texture_slot = writer.lit(0u32).expr();
-    let random_rotation = writer.lit(0.0).uniform(writer.lit(std::f32::consts::TAU)).expr();
+    let random_rotation = writer
+        .lit(0.0)
+        .uniform(writer.lit(std::f32::consts::TAU))
+        .expr();
 
     let random_size = writer.lit(0.5).uniform(writer.lit(2.0)).expr();
     let init_size = SetAttributeModifier::new(hanabi::Attribute::SIZE, random_size);
