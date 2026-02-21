@@ -5,7 +5,6 @@ use bevy::prelude::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
 pub enum Animation {
     Idle,
-    Walk,
     JogFwd,
     Sprint,
     JumpStart,
@@ -30,7 +29,6 @@ impl Animation {
     /// All variants — used for loading and validation.
     pub const ALL: &[Animation] = &[
         Self::Idle,
-        Self::Walk,
         Self::JogFwd,
         Self::Sprint,
         Self::JumpStart,
@@ -55,7 +53,6 @@ impl Animation {
     pub fn clip_name(self) -> &'static str {
         match self {
             Self::Idle => "Idle_Loop",
-            Self::Walk => "Walk_Loop",
             Self::JogFwd => "Jog_Fwd_Loop",
             Self::Sprint => "Sprint_Loop",
             Self::JumpStart => "Jump_Start",

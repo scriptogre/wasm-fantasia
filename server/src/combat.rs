@@ -142,7 +142,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
                     enemy_id: enemy.id,
                     world_id: attacker.world_id.clone(),
                     impulse_x: disp.x * enemy_mass,
-                    impulse_y: hit.launch * enemy_mass,
+                    impulse_y: disp.y * enemy_mass,
                     impulse_z: disp.z * enemy_mass,
                 });
 
@@ -352,7 +352,7 @@ fn aoe_hit(
                 enemy_id: enemy.id,
                 world_id: attacker.world_id.clone(),
                 impulse_x: disp.x * enemy_mass,
-                impulse_y: launch * enemy_mass,
+                impulse_y: disp.y * enemy_mass,
                 impulse_z: disp.z * enemy_mass,
             });
 

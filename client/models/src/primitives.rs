@@ -18,15 +18,3 @@ markers!(SceneCamera);
 #[component(storage = "SparseSet")]
 #[reflect(Component)]
 pub struct BlocksGameplay;
-
-#[macro_export]
-macro_rules! timers {
-  ( $( $name:ident ),* ) => {
-        $(
-            #[derive(Component, Reflect, Deref, DerefMut, Debug)]
-            #[reflect(Component)]
-            pub struct $name(pub Timer);
-        )*
-    };
-}
-timers!(JumpTimer);

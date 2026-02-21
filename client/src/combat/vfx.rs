@@ -260,10 +260,11 @@ fn setup_debug_hitbox_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    const DEBUG_RANGE: f32 = 3.6;
-    const DEBUG_ARC: f32 = 150.0;
+    use game_core::combat::defaults;
+    let debug_range = defaults::ATTACK_RANGE;
+    let debug_arc = defaults::ATTACK_ARC;
 
-    let arc_mesh = create_arc_mesh(DEBUG_RANGE, DEBUG_ARC.to_radians(), 0.1, 24);
+    let arc_mesh = create_arc_mesh(debug_range, debug_arc.to_radians(), 0.1, 24);
     let mesh = meshes.add(arc_mesh);
 
     let material = materials.add(StandardMaterial {

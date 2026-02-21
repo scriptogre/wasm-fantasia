@@ -1,5 +1,5 @@
 use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
-use crate::models::player::{JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS, WALK_FOOT_CONTACTS};
+use crate::models::player::{JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
 use crate::rule_presets;
 use crate::rules::{Stat, Stats};
 use crate::scene::GameLayer;
@@ -169,8 +169,6 @@ pub fn spawn_player(
             ),
             // other player related components
             (
-                JumpTimer(Timer::from_seconds(cfg.timers.jump, TimerMode::Repeating)),
-                control::JumpCharge::default(),
                 control::AirborneTracker::default(),
                 InheritedVisibility::default(), // silence the warning because of adding SceneRoot as a child
             ),
@@ -359,7 +357,6 @@ fn prepare_remote_player_scene(
 
         // Inject FootContact events into locomotion clips (same as local player)
         match anim {
-            Animation::Walk => inject_foot_contacts(&mut clip, WALK_FOOT_CONTACTS),
             Animation::JogFwd => inject_foot_contacts(&mut clip, JOG_FOOT_CONTACTS),
             Animation::Sprint => inject_foot_contacts(&mut clip, SPRINT_FOOT_CONTACTS),
             _ => {}

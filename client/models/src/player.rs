@@ -11,7 +11,6 @@ pub struct FootContact;
 
 /// Foot-contact fractions within one loop cycle (0.0–1.0).
 /// Two contacts per cycle = two steps.
-pub const WALK_FOOT_CONTACTS: &[f32] = &[0.0, 0.5];
 pub const JOG_FOOT_CONTACTS: &[f32] = &[0.0, 0.5];
 pub const SPRINT_FOOT_CONTACTS: &[f32] = &[0.0, 0.5];
 

@@ -24,10 +24,6 @@
             height: 1
         ),
     ),
-    // seconds
-    timers: (
-        jump: 0.45,
-    ),
     sound: (
         general: 1.0,
         music: 0.0,

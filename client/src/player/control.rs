@@ -112,13 +112,6 @@ impl InputBuffer {
 /// Jump height in meters.
 pub const JUMP_HEIGHT: f32 = 6.0;
 
-/// Kept for compatibility with animation/camera systems that query it.
-#[derive(Component, Default)]
-pub struct JumpCharge {
-    pub charging: bool,
-    pub charge_time: f32,
-}
-
 /// Tracks jump state so the movement system can feed the jump action every frame.
 /// Uses a resource (not a component) to avoid deferred-command timing gaps.
 #[derive(Resource, Default)]

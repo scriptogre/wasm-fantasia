@@ -9,7 +9,6 @@ pub struct Config {
     pub physics: PhysicsPreset,
     pub player: PlayerPreset,
     pub settings: SettingsPreset,
-    pub timers: TimersPreset,
 }
 
 #[derive(Resource, Debug, Clone, Serialize, Deserialize, Reflect)]
@@ -68,11 +67,6 @@ pub struct SettingsPreset {
     pub min_fov: f32,
     pub max_fov: f32,
     pub step: f32,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
-pub struct TimersPreset {
-    pub jump: f32,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]

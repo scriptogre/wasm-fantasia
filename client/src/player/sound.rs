@@ -60,7 +60,6 @@ fn jump_sound(
     _: On<Start<Jump>>,
     state: Res<Session>,
     settings: Res<Settings>,
-    // jump_timer: Query<&JumpTimer, With<Player>>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
 ) -> Result {
@@ -68,12 +67,9 @@ fn jump_sound(
         return Ok(());
     }
 
-    // let jump_timer = jump_timer.get(on.target())?;
-    // if jump_timer.just_finished() {
     let mut rng = rand::rng();
     let handle = sources.steps.pick(&mut rng);
     cmds.spawn(SamplePlayer::new(handle.clone()).with_volume(settings.sfx()));
-    // }
 
     Ok(())
 }

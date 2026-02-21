@@ -1,9 +1,7 @@
 use super::*;
 use crate::combat::AttackState;
 use crate::models::Animation;
-use crate::models::player::{
-    FootContact, JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS, WALK_FOOT_CONTACTS,
-};
+use crate::models::player::{FootContact, JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
 use crate::player::control::{GroundPoundState, LandingStun, RollingState};
 use crate::rules::{Stat, Stats};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
@@ -102,7 +100,6 @@ pub fn prepare_animations(
 
         // Inject FootContact events into locomotion clips
         match anim {
-            Animation::Walk => inject_foot_contacts(&mut clip, WALK_FOOT_CONTACTS),
             Animation::JogFwd => inject_foot_contacts(&mut clip, JOG_FOOT_CONTACTS),
             Animation::Sprint => inject_foot_contacts(&mut clip, SPRINT_FOOT_CONTACTS),
             _ => {}
