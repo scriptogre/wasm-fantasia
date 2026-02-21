@@ -29,4 +29,4 @@ macro_rules! timers {
         )*
     };
 }
-timers!(JumpTimer, StepTimer);
+timers!(JumpTimer);

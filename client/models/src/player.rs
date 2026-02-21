@@ -1,6 +1,19 @@
-use bevy::prelude::*;
 use crate::animation::Animation;
+use bevy::animation::AnimationEvent;
+use bevy::prelude::*;
 use std::collections::HashMap;
+
+/// Animation event fired when a foot contacts the ground during locomotion clips.
+/// Injected into Walk and JogFwd clips at load time so it fires for any entity
+/// playing those animations (local or remote).
+#[derive(AnimationEvent, Clone)]
+pub struct FootContact;
+
+/// Foot-contact fractions within one loop cycle (0.0–1.0).
+/// Two contacts per cycle = two steps.
+pub const WALK_FOOT_CONTACTS: &[f32] = &[0.0, 0.5];
+pub const JOG_FOOT_CONTACTS: &[f32] = &[0.0, 0.5];
+pub const SPRINT_FOOT_CONTACTS: &[f32] = &[0.0, 0.5];
 
 #[derive(Component, Reflect, Clone)]
 #[reflect(Component)]

@@ -141,7 +141,6 @@ pub struct RollingState {
     pub direction: Vec3,
 }
 
-
 /// Player is diving downward for a ground pound attack.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
@@ -162,7 +161,6 @@ pub struct Footstep {
     pub position: Vec3,
     pub is_sprinting: bool,
 }
-
 
 // ============================================================================
 
@@ -208,14 +206,13 @@ fn movement(
     mut player_query: Query<(
         &mut Player,
         &mut TnuaController<ControlScheme>,
-        &mut StepTimer,
         Option<&RollingState>,
         Has<GroundPoundState>,
         Has<Sprinting>,
     )>,
 ) -> Result {
     let Ok(navigate) = navigate.single() else {
-        for (_player, mut controller, _step_timer, _, _, _) in player_query.iter_mut() {
+        for (_player, mut controller, _, _, _) in player_query.iter_mut() {
             controller.basis = TnuaBuiltinWalk {
                 desired_motion: Vec3::ZERO,
                 desired_forward: None,
@@ -227,7 +224,8 @@ fn movement(
     let crouch = crouch.single().copied().unwrap_or_default();
     let dt = time.delta_secs();
 
-    for (player, mut controller, mut step_timer, rolling, ground_pounding, _is_sprinting) in player_query.iter_mut() {
+    for (player, mut controller, rolling, ground_pounding, _is_sprinting) in player_query.iter_mut()
+    {
         let cam_transform = camera.single()?;
         let curved_input = apply_response_curve(*navigate, MOVEMENT_CURVE_EXPONENT);
 
@@ -259,25 +257,26 @@ fn movement(
         let max_turn_rate = std::f32::consts::TAU * (1.0 - speed_ratio) + 2.0 * speed_ratio;
 
         // Limit direction change based on turn rate
-        let desired_forward = if actual_speed > IDLE_TO_RUN_TRESHOLD && direction.length_squared() > 0.01 {
-            let current_forward = controller.basis_memory.running_velocity.normalize_or_zero();
-            if current_forward.length_squared() > 0.01 {
-                let max_angle = max_turn_rate * dt;
-                let angle = current_forward.xz().angle_to(direction.xz());
-                if angle.abs() > max_angle {
-                    let clamped_angle = angle.clamp(-max_angle, max_angle);
-                    let rot = Quat::from_rotation_y(clamped_angle);
-                    let turned = rot * current_forward;
-                    Dir3::new(turned).ok()
+        let desired_forward =
+            if actual_speed > IDLE_TO_RUN_TRESHOLD && direction.length_squared() > 0.01 {
+                let current_forward = controller.basis_memory.running_velocity.normalize_or_zero();
+                if current_forward.length_squared() > 0.01 {
+                    let max_angle = max_turn_rate * dt;
+                    let angle = current_forward.xz().angle_to(direction.xz());
+                    if angle.abs() > max_angle {
+                        let clamped_angle = angle.clamp(-max_angle, max_angle);
+                        let rot = Quat::from_rotation_y(clamped_angle);
+                        let turned = rot * current_forward;
+                        Dir3::new(turned).ok()
+                    } else {
+                        Dir3::new(direction).ok()
+                    }
                 } else {
                     Dir3::new(direction).ok()
                 }
             } else {
                 Dir3::new(direction).ok()
-            }
-        } else {
-            Dir3::new(direction).ok()
-        };
+            };
 
         // During roll or ground pound, suppress Tnua movement so it doesn't fight the impulse
         let desired_motion = if rolling.is_some() || ground_pounding {
@@ -301,15 +300,6 @@ fn movement(
         if *crouch && !jump_state.active {
             controller.action(ControlScheme::Crouch(TnuaBuiltinCrouch));
         }
-
-        // update step timer dynamically based on actual speed
-        let current_actual_speed = controller.basis_memory.running_velocity.length();
-        if current_actual_speed > IDLE_TO_RUN_TRESHOLD {
-            let ratio = cfg.player.movement.speed / current_actual_speed;
-            let adjusted_step_time_f32 = cfg.timers.step * ratio;
-            let adjusted_step_time = Duration::from_secs_f32(adjusted_step_time_f32);
-            step_timer.set_duration(adjusted_step_time);
-        }
     }
 
     Ok(())
@@ -328,13 +318,7 @@ fn on_jump(
     mut commands: Commands,
     mut buffer: ResMut<InputBuffer>,
     mut jump_state: ResMut<JumpState>,
-    query: Query<
-        (
-            &TnuaController<ControlScheme>,
-            &Transform,
-        ),
-        With<Player>,
-    >,
+    query: Query<(&TnuaController<ControlScheme>, &Transform), With<Player>>,
 ) {
     let Ok((controller, transform)) = query.get(on.context) else {
         return;
@@ -359,13 +343,7 @@ fn process_buffered_jump(
     mut buffer: ResMut<InputBuffer>,
     mut jump_state: ResMut<JumpState>,
     mut commands: Commands,
-    player_query: Query<
-        (
-            &Transform,
-            &TnuaController<ControlScheme>,
-        ),
-        With<Player>,
-    >,
+    player_query: Query<(&Transform, &TnuaController<ControlScheme>), With<Player>>,
 ) {
     if buffer.jump.is_none() {
         return;

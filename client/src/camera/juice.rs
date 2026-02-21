@@ -4,7 +4,7 @@ use bevy::transform::TransformSystems;
 use bevy_third_person_camera::CameraSyncSet;
 
 use crate::models::{Config, Player, SceneCamera, Screen};
-use crate::player::control::{AirborneTracker, Footstep, LandingImpact, LandingStun, Sprinting};
+use crate::player::control::{AirborneTracker, LandingImpact, LandingStun, Sprinting};
 
 /// Tracks dynamic FOV state for smooth interpolation.
 #[derive(Resource)]
@@ -30,26 +30,13 @@ pub struct ScreenShake {
     timer: f32,
 }
 
-/// Footstep camera bob — spring dynamics push camera down on each step.
-#[derive(Resource, Default)]
-pub struct FootstepBob {
-    offset: f32,
-    velocity: f32,
-}
-
-const BOB_STIFFNESS: f32 = 120.0;
-const BOB_DAMPING: f32 = 12.0;
-const BOB_MAX: f32 = 0.15;
-
 pub fn plugin(app: &mut App) {
     app.init_resource::<DynamicFov>()
         .init_resource::<ScreenShake>()
-        .init_resource::<FootstepBob>()
         .add_observer(on_landing_shake)
-        .add_observer(on_footstep_bob)
         .add_systems(
             PostUpdate,
-            (dynamic_fov, sprint_micro_shake, fall_camera_dip, apply_screen_shake, apply_footstep_bob)
+            (dynamic_fov, fall_camera_dip, apply_screen_shake)
                 .after(CameraSyncSet)
                 .before(TransformSystems::Propagate)
                 .run_if(in_state(Screen::Gameplay)),
@@ -80,8 +67,7 @@ fn dynamic_fov(
     >,
     mut camera: Query<&mut Projection, With<SceneCamera>>,
 ) {
-    let Ok((controller, velocity, is_sprinting, landing_stun)) = player.single()
-    else {
+    let Ok((controller, velocity, is_sprinting, landing_stun)) = player.single() else {
         return;
     };
     let Ok(mut projection) = camera.single_mut() else {
@@ -122,7 +108,6 @@ fn dynamic_fov(
         }
     }
 
-
     // Landing stun: FOV punch on impact (10°), smoothly recovers as stun wears off
     if let Some(stun) = landing_stun {
         let impact_strength = 1.0 - stun.timer.fraction();
@@ -146,10 +131,7 @@ fn dynamic_fov(
 /// Camera Y dip when falling — simulates the gut-drop weight of a fall.
 /// Pushes camera slightly downward relative to the player, scaling with fall speed.
 fn fall_camera_dip(
-    player: Query<
-        (&LinearVelocity, &AirborneTracker),
-        With<Player>,
-    >,
+    player: Query<(&LinearVelocity, &AirborneTracker), With<Player>>,
     mut camera: Query<&mut Transform, With<SceneCamera>>,
 ) {
     let Ok((velocity, tracker)) = player.single() else {
@@ -170,48 +152,6 @@ fn fall_camera_dip(
         // Push camera down by up to 1.5 units at max fall speed
         cam_transform.translation.y -= 1.5 * fall_t * fall_t; // Quadratic for acceleration feel
     }
-}
-
-fn sprint_micro_shake(
-    time: Res<Time>,
-    cfg: Res<Config>,
-    player: Query<
-        (
-            &bevy_tnua::prelude::TnuaController<crate::player::ControlScheme>,
-            Has<Sprinting>,
-        ),
-        With<Player>,
-    >,
-    mut camera: Query<&mut Transform, With<SceneCamera>>,
-) {
-    let Ok((controller, is_sprinting)) = player.single() else {
-        return;
-    };
-    if !is_sprinting {
-        return;
-    }
-    let Ok(mut transform) = camera.single_mut() else {
-        return;
-    };
-
-    let speed = controller.basis_memory.running_velocity.length();
-    let sprint_speed = cfg.player.movement.speed * cfg.player.movement.sprint_factor;
-    let speed_ratio = (speed / sprint_speed).clamp(0.0, 1.0);
-
-    // Only shake when actually moving while sprinting
-    if speed_ratio < 0.3 {
-        return;
-    }
-
-    let amplitude = 0.02 + 0.04 * speed_ratio;
-    let t = time.elapsed_secs();
-
-    // Multiple sine waves for organic procedural noise
-    let x = (t * 8.3).sin() * 0.5 + (t * 17.1).cos() * 0.3 + (t * 23.7).sin() * 0.2;
-    let y = (t * 11.7).cos() * 0.5 + (t * 19.3).sin() * 0.3 + (t * 29.1).cos() * 0.2;
-
-    transform.translation.x += x * amplitude;
-    transform.translation.y += y * amplitude;
 }
 
 // ── Screen Shake ────────────────────────────────────────────────────
@@ -252,41 +192,4 @@ fn apply_screen_shake(
 
     cam_transform.translation.x += x * shake.intensity * decay;
     cam_transform.translation.y += y * shake.intensity * decay;
-}
-
-// ── Footstep Camera Bob ─────────────────────────────────────────────
-
-fn on_footstep_bob(on: On<Footstep>, mut bob: ResMut<FootstepBob>) {
-    let event = on.event();
-    // Sprint: stronger downward push
-    let impulse = if event.is_sprinting { -0.06 } else { -0.025 };
-    bob.velocity += impulse * BOB_STIFFNESS;
-}
-
-fn apply_footstep_bob(
-    time: Res<Time>,
-    mut bob: ResMut<FootstepBob>,
-    mut camera: Query<&mut Transform, With<SceneCamera>>,
-) {
-    let dt = time.delta_secs();
-
-    // Spring dynamics: stiffness pulls back to 0, damping prevents oscillation
-    let spring_force = -BOB_STIFFNESS * bob.offset;
-    let damping_force = -BOB_DAMPING * bob.velocity;
-    bob.velocity += (spring_force + damping_force) * dt;
-    bob.offset += bob.velocity * dt;
-    bob.offset = bob.offset.clamp(-BOB_MAX, BOB_MAX);
-
-    // Kill tiny oscillations
-    if bob.offset.abs() < 0.0005 && bob.velocity.abs() < 0.005 {
-        bob.offset = 0.0;
-        bob.velocity = 0.0;
-        return;
-    }
-
-    let Ok(mut cam_transform) = camera.single_mut() else {
-        return;
-    };
-
-    cam_transform.translation.y += bob.offset;
 }

@@ -1,53 +1,59 @@
 use super::*;
+use crate::models::player::FootContact;
 use crate::player::control::{Footstep, JumpLaunched, LandingImpact, Sprinting};
 use bevy_seedling::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_observer(movement_sound)
+    app.add_observer(on_foot_contact)
         .add_observer(jump_sound)
         .add_observer(launch_boom)
         .add_observer(landing_boom);
 }
 
-#[allow(clippy::too_many_arguments)]
-fn movement_sound(
-    on: On<Fire<Navigate>>,
-    time: Res<Time>,
+/// Fires on any entity whose AnimationPlayer hits a FootContact event in a locomotion clip.
+/// Walks up the hierarchy to find the player root, then triggers sound + Footstep event.
+fn on_foot_contact(
+    on: On<FootContact>,
     state: Res<Session>,
     settings: Res<Settings>,
-    tnua: Query<(&TnuaController<ControlScheme>, &Transform, Has<Sprinting>), With<Player>>,
-    crouch: Single<&Action<Crouch>>,
+    parents: Query<&ChildOf>,
+    transforms: Query<&Transform>,
+    sprinting: Query<Has<Sprinting>>,
+    players: Query<(), With<Player>>,
+    remote_players: Query<(), With<RemotePlayer>>,
     mut cmds: Commands,
     mut sources: ResMut<AudioSources>,
-    mut step_timer: Query<&mut StepTimer, With<Player>>,
-) -> Result {
+) {
     if state.muted {
-        return Ok(());
+        return;
     }
 
-    let (controller, transform, is_sprinting) = tnua.get(on.context)?;
-    let mut step_timer = step_timer.get_mut(on.context)?;
-
-    // WALK SOUND
-    if step_timer.tick(time.delta()).just_finished()
-        && controller.basis_memory.standing_on_entity().is_some()
-    {
-        let mut rng = rand::rng();
-        let crouch = ***crouch;
-        let handle = if crouch {
-            // TODO: select crouch steps
-            sources.steps.pick(&mut rng)
+    // Walk up parent chain from AnimationPlayer entity to find the player root
+    let mut entity = on.trigger().target;
+    let player_root = loop {
+        if players.contains(entity) || remote_players.contains(entity) {
+            break entity;
+        }
+        if let Ok(parent) = parents.get(entity) {
+            entity = parent.parent();
         } else {
-            sources.steps.pick(&mut rng)
-        };
-        cmds.spawn(SamplePlayer::new(handle.clone()).with_volume(settings.sfx()));
-        cmds.trigger(Footstep {
-            position: transform.translation,
-            is_sprinting,
-        });
-    }
+            return; // no player found in hierarchy
+        }
+    };
 
-    Ok(())
+    let Ok(transform) = transforms.get(player_root) else {
+        return;
+    };
+
+    let is_sprinting = sprinting.get(player_root).unwrap_or(false);
+
+    let mut rng = rand::rng();
+    let handle = sources.steps.pick(&mut rng);
+    cmds.spawn(SamplePlayer::new(handle.clone()).with_volume(settings.sfx()));
+    cmds.trigger(Footstep {
+        position: transform.translation,
+        is_sprinting,
+    });
 }
 
 fn jump_sound(

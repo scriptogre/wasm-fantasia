@@ -1,6 +1,9 @@
 use super::*;
 use crate::combat::AttackState;
 use crate::models::Animation;
+use crate::models::player::{
+    FootContact, JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS, WALK_FOOT_CONTACTS,
+};
 use crate::player::control::{GroundPoundState, LandingStun, RollingState};
 use crate::rules::{Stat, Stats};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
@@ -8,6 +11,18 @@ use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 mod anim_knobs {
     pub const GENERAL_SPEED: f32 = 0.15;
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
+}
+
+/// Inject `FootContact` animation events into a locomotion clip at the given fractions.
+pub fn inject_foot_contacts(clip: &mut AnimationClip, fractions: &[f32]) {
+    let duration = clip.duration();
+    if duration <= 0.0 {
+        return;
+    }
+    for &frac in fractions {
+        let time = frac * duration;
+        clip.add_event(time, FootContact);
+    }
 }
 
 /// Track which attack animation is playing to detect new attacks reliably
@@ -83,7 +98,16 @@ pub fn prepare_animations(
             continue;
         };
 
-        let clip = original_clip.clone();
+        let mut clip = original_clip.clone();
+
+        // Inject FootContact events into locomotion clips
+        match anim {
+            Animation::Walk => inject_foot_contacts(&mut clip, WALK_FOOT_CONTACTS),
+            Animation::JogFwd => inject_foot_contacts(&mut clip, JOG_FOOT_CONTACTS),
+            Animation::Sprint => inject_foot_contacts(&mut clip, SPRINT_FOOT_CONTACTS),
+            _ => {}
+        }
+
         let modified_handle = animation_clips.add(clip);
         let node_index = graph.add_clip(modified_handle, 1.0, root_node);
         player.animations.insert(anim, node_index);

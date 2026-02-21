@@ -1,4 +1,5 @@
 use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
+use crate::models::player::{JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS, WALK_FOOT_CONTACTS};
 use crate::rule_presets;
 use crate::rules::{Stat, Stats};
 use crate::scene::GameLayer;
@@ -12,9 +13,9 @@ use bevy_tnua::builtins::*;
 use bevy_tnua::control_helpers::{TnuaActionSlots, TnuaAirActionsPlugin};
 use bevy_tnua::prelude::*;
 use bevy_tnua_avian3d::*;
+use game_core::combat::defaults;
 use std::collections::HashMap;
 use std::time::Duration;
-use game_core::combat::defaults;
 
 // ── Tnua Control Scheme ─────────────────────────────────────────────
 
@@ -161,12 +162,14 @@ pub fn spawn_player(
                 collider,
                 RigidBody::Dynamic,
                 Friction::ZERO.with_combine_rule(CoefficientCombine::Multiply),
-                CollisionLayers::new(GameLayer::Player, [GameLayer::Enemy, GameLayer::Environment]),
+                CollisionLayers::new(
+                    GameLayer::Player,
+                    [GameLayer::Enemy, GameLayer::Environment],
+                ),
             ),
             // other player related components
             (
                 JumpTimer(Timer::from_seconds(cfg.timers.jump, TimerMode::Repeating)),
-                StepTimer(Timer::from_seconds(cfg.timers.step, TimerMode::Repeating)),
                 control::JumpCharge::default(),
                 control::AirborneTracker::default(),
                 InheritedVisibility::default(), // silence the warning because of adding SceneRoot as a child
@@ -314,6 +317,7 @@ fn prepare_remote_player_scene(
     mut remote_q: Query<&mut RemotePlayerAnimations>,
     mut commands: Commands,
     mut animation_graphs: ResMut<Assets<AnimationGraph>>,
+    mut animation_clips: ResMut<Assets<AnimationClip>>,
 ) {
     let scene_entity = on.entity;
 
@@ -346,7 +350,23 @@ fn prepare_remote_player_scene(
         let Some(anim) = Animation::from_clip_name(name) else {
             continue;
         };
-        let node_index = graph.add_clip(clip_handle.clone(), 1.0, root_node);
+
+        let Some(original_clip) = animation_clips.get(clip_handle) else {
+            continue;
+        };
+
+        let mut clip = original_clip.clone();
+
+        // Inject FootContact events into locomotion clips (same as local player)
+        match anim {
+            Animation::Walk => inject_foot_contacts(&mut clip, WALK_FOOT_CONTACTS),
+            Animation::JogFwd => inject_foot_contacts(&mut clip, JOG_FOOT_CONTACTS),
+            Animation::Sprint => inject_foot_contacts(&mut clip, SPRINT_FOOT_CONTACTS),
+            _ => {}
+        }
+
+        let modified_handle = animation_clips.add(clip);
+        let node_index = graph.add_clip(modified_handle, 1.0, root_node);
         anims.animations.insert(anim, node_index);
     }
 

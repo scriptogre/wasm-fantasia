@@ -72,7 +72,6 @@ pub struct SettingsPreset {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
 pub struct TimersPreset {
-    pub step: f32,
     pub jump: f32,
 }
 
