@@ -9,6 +9,9 @@ use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 mod anim_knobs {
     pub const GENERAL_SPEED: f32 = 0.15;
     pub const CROUCH_ANIMATION_SPEED: f32 = 2.2;
+    /// Cap sprint animation speed — heavy bounding strides, not frantic scurrying.
+    /// The character covers more ground per step rather than moving legs faster.
+    pub const MAX_SPRINT_ANIM_SPEED: f32 = 1.0;
 }
 
 /// Inject `FootContact` animation events into a locomotion clip at the given fractions.
@@ -207,6 +210,8 @@ pub fn animating(
 
     // Blend duration for smooth transitions
     const BLEND_DURATION: Duration = Duration::from_millis(150);
+    /// Longer crossfade for jog ↔ sprint to smooth out the gear-shift feel.
+    const JOG_SPRINT_BLEND: Duration = Duration::from_millis(350);
 
     // Check if player is attacking - override Tnua animation
     if let Some(attack) = attack_state {
@@ -225,15 +230,12 @@ pub fn animating(
             };
 
             // Detect new attack by comparing attack_count (gameplay truth)
-            // This is reliable regardless of system ordering or TnuaAnimatingState bugs
             let is_new_attack = attack.attack_count != attack_anim.last_attack_count;
 
             if is_new_attack {
                 attack_anim.last_attack_count = attack.attack_count;
 
                 if let Some(index) = player.animations.get(&anim) {
-                    // Start at base speed - wind-up should look normal
-                    // Hook is slightly slower for dramatic effect
                     let start_speed = if attack.is_crit { 1.1 } else { 1.3 };
                     transitions
                         .play(&mut animation_player, *index, BLEND_DURATION)
@@ -241,17 +243,11 @@ pub fn animating(
                 }
             } else {
                 // Speed curve: keep wind-up/impact readable, speed up recovery
-                // This ensures punches always reach full extension visually
                 let progress = attack.progress();
-
-                // Wind-up to impact (0-55%): minimal speed boost
-                // Recovery (55-100%): heavy speed boost from stacks
                 let base_speed = if attack.is_crit { 1.1 } else { 1.3 };
                 let anim_speed = if progress < 0.55 {
-                    // Wind-up and impact: slight boost only
                     base_speed + (speed_mult - 1.0) * 0.25
                 } else {
-                    // Recovery: full speed boost kicks in
                     base_speed * speed_mult
                 };
 
@@ -377,8 +373,8 @@ pub fn animating(
                 let basis_speed = controller.basis_memory.running_velocity.length();
                 if basis_speed > cfg.player.movement.idle_to_run_threshold {
                     let speed = anim_knobs::GENERAL_SPEED * basis_speed;
-                    // Use sprint animation when at 90%+ of max speed
-                    if basis_speed >= cfg.player.movement.speed * 1.3 {
+                    // Use sprint animation when at higher speed threshold — transition feels earned
+                    if basis_speed >= cfg.player.movement.speed * 1.5 {
                         AnimationState::Sprint(speed)
                     } else {
                         AnimationState::Run(speed)
@@ -408,8 +404,9 @@ pub fn animating(
                 }
             }
             AnimationState::Sprint(speed) => {
+                let clamped = (*speed * 0.75).min(anim_knobs::MAX_SPRINT_ANIM_SPEED);
                 for (_, active_animation) in animation_player.playing_animations_mut() {
-                    active_animation.set_speed(*speed * 0.8);
+                    active_animation.set_speed(clamped);
                 }
             }
             // Jumping can be chained, we want to start a new jump animation
@@ -422,16 +419,20 @@ pub fn animating(
             // For other animations we don't have anything special to do - so we just let them continue.
             _ => {}
         },
-        TnuaAnimatingStateDirective::Alter {
-            old_state: _,
-            state,
-        } => {
+        TnuaAnimatingStateDirective::Alter { old_state, state } => {
+            // Longer blend for jog ↔ sprint transitions
+            let blend = match (&old_state, &state) {
+                (Some(AnimationState::Run(_)), AnimationState::Sprint(_))
+                | (Some(AnimationState::Sprint(_)), AnimationState::Run(_)) => JOG_SPRINT_BLEND,
+                _ => BLEND_DURATION,
+            };
+
             // Use transitions for smooth blending between animations
             match state {
                 AnimationState::StandIdle => {
                     if let Some(index) = player.animations.get(&Animation::Idle) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.0)
                             .repeat();
                     }
@@ -439,37 +440,38 @@ pub fn animating(
                 AnimationState::Run(speed) => {
                     if let Some(index) = player.animations.get(&Animation::JogFwd) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(*speed)
                             .repeat();
                     }
                 }
                 AnimationState::Sprint(speed) => {
                     if let Some(index) = player.animations.get(&Animation::Sprint) {
+                        let clamped = (*speed * 0.75).min(anim_knobs::MAX_SPRINT_ANIM_SPEED);
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
-                            .set_speed(*speed * 0.8)
+                            .play(&mut animation_player, *index, blend)
+                            .set_speed(clamped)
                             .repeat();
                     }
                 }
                 AnimationState::JumpStart => {
                     if let Some(index) = player.animations.get(&Animation::NinjaJumpStart) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.5);
                     }
                 }
                 AnimationState::JumpLand => {
                     if let Some(index) = player.animations.get(&Animation::NinjaJumpLand) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.5);
                     }
                 }
                 AnimationState::JumpLoop => {
                     if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.0)
                             .repeat();
                     }
@@ -477,14 +479,14 @@ pub fn animating(
                 AnimationState::WallJump => {
                     if let Some(index) = player.animations.get(&Animation::NinjaJumpStart) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(2.0);
                     }
                 }
                 AnimationState::WallSlide => {
                     if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.0)
                             .repeat();
                     }
@@ -492,7 +494,7 @@ pub fn animating(
                 AnimationState::Fall => {
                     if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.0)
                             .repeat();
                     }
@@ -500,7 +502,7 @@ pub fn animating(
                 AnimationState::Crouch(speed) => {
                     if let Some(index) = player.animations.get(&Animation::CrouchFwd) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(*speed * anim_knobs::CROUCH_ANIMATION_SPEED)
                             .repeat();
                     }
@@ -508,7 +510,7 @@ pub fn animating(
                 AnimationState::CrouchIdle => {
                     if let Some(index) = player.animations.get(&Animation::CrouchIdle) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.0)
                             .repeat();
                     }
@@ -522,14 +524,14 @@ pub fn animating(
                 AnimationState::KnockBack => {
                     if let Some(index) = player.animations.get(&Animation::HitChest) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(1.0);
                     }
                 }
                 AnimationState::Climb(speed) => {
                     if let Some(index) = player.animations.get(&Animation::NinjaJumpIdle) {
                         transitions
-                            .play(&mut animation_player, *index, BLEND_DURATION)
+                            .play(&mut animation_player, *index, blend)
                             .set_speed(*speed)
                             .repeat();
                     }
