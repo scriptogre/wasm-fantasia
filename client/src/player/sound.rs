@@ -12,13 +12,18 @@ pub fn plugin(app: &mut App) {
 
 /// Fires on any entity whose AnimationPlayer hits a FootContact event in a locomotion clip.
 /// Walks up the hierarchy to find the player root, then triggers sound + Footstep event.
+///
+/// Sound blends between jog and sprint pools based on actual velocity, not the binary
+/// Sprinting component. This creates a smooth audio transition as the character accelerates.
 fn on_foot_contact(
     on: On<FootContact>,
+    cfg: Res<Config>,
     state: Res<Session>,
     settings: Res<Settings>,
     parents: Query<&ChildOf>,
     transforms: Query<&Transform>,
     sprinting: Query<Has<Sprinting>>,
+    controllers: Query<&TnuaController<ControlScheme>>,
     players: Query<(), With<Player>>,
     remote_players: Query<(), With<RemotePlayer>>,
     mut cmds: Commands,
@@ -46,10 +51,40 @@ fn on_foot_contact(
     };
 
     let is_sprinting = sprinting.get(player_root).unwrap_or(false);
-
     let mut rng = rand::rng();
-    let handle = sources.steps.pick(&mut rng);
-    cmds.spawn(SamplePlayer::new(handle.clone()).with_volume(settings.sfx()));
+
+    // Velocity-based sound layering: jog step always plays for surface contact,
+    // sprint impact layer fades in on top as the character accelerates.
+    let sprint_threshold = cfg.player.movement.speed * 1.5;
+    let sprint_speed = cfg.player.movement.speed * cfg.player.movement.sprint_factor;
+
+    let actual_speed = controllers
+        .get(player_root)
+        .map(|c| c.basis_memory.running_velocity.length())
+        .unwrap_or(0.0);
+
+    // 0.0 = no sprint layer, 1.0 = full sprint layer volume
+    let sprint_blend = ((actual_speed - sprint_threshold) / (sprint_speed - sprint_threshold))
+        .clamp(0.0, 1.0);
+
+    // Always play jog step for consistent surface texture
+    let jog_handle = sources.jog_steps.pick(&mut rng);
+    cmds.spawn(SamplePlayer::new(jog_handle.clone()).with_volume(settings.sfx()));
+
+    // Layer sprint impact on top, volume scales with speed
+    if sprint_blend > 0.05 {
+        let Volume::Linear(base_vol) = settings.sfx() else {
+            cmds.trigger(Footstep {
+                position: transform.translation,
+                is_sprinting,
+            });
+            return;
+        };
+        let sprint_handle = sources.sprint_steps.pick(&mut rng);
+        let sprint_vol = Volume::Linear(base_vol * sprint_blend);
+        cmds.spawn(SamplePlayer::new(sprint_handle.clone()).with_volume(sprint_vol));
+    }
+
     cmds.trigger(Footstep {
         position: transform.translation,
         is_sprinting,
@@ -121,7 +156,7 @@ fn landing_boom(
         return;
     };
     let vol_scale = 0.5 + 0.5 * t;
-    let volume = Volume::Linear(base_vol * vol_scale * 1.3);
+    let volume = Volume::Linear(base_vol * vol_scale * 2.0);
 
     let mut rng = rand::rng();
     let handle = sources.steps.pick(&mut rng);

@@ -13,11 +13,11 @@
         fov: 75,
         zoom: (4.0, 16.0),  // More zoomed out for better combat visibility
         movement: (
-            speed: 6,
-            sprint_factor: 2.8,
+            speed: 6.5,
+            sprint_factor: 3.4,
             crouch_factor: 0.2,
             actions_in_air: 3,
-            idle_to_run_threshold: 0.01,
+            idle_to_run_threshold: 0.03,
         ),
         hitbox:(
             radius: 0.5,

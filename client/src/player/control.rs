@@ -32,8 +32,9 @@ fn apply_response_curve(input: Vec2, exponent: f32) -> Vec2 {
     input.normalize() * curved_length
 }
 
-/// Movement stick uses slight curve (1.3) for precise positioning
-const MOVEMENT_CURVE_EXPONENT: f32 = 1.3;
+/// Movement stick uses steeper curve for precise positioning at low values,
+/// requiring deliberate full input to reach top speed — sells mass and weight.
+const MOVEMENT_CURVE_EXPONENT: f32 = 1.6;
 
 /// Smoothed input for Prototype-style exponential acceleration and slide-stop.
 /// Asymmetric lerp: fast ramp-up, slow decay creates momentum/inertia feel.
@@ -42,10 +43,10 @@ pub struct SmoothedInput {
     pub current: Vec2,
 }
 
-/// Ramp-up lerp speed — near-instant so input feels responsive
-const INPUT_RAMP_UP_SPEED: f32 = 50.0;
-/// Slow-down lerp speed — ~0.25s slide to stop for momentum feel
-const INPUT_SLOW_DOWN_SPEED: f32 = 4.0;
+/// Ramp-up lerp speed — responsive but not instant, lets acceleration sell the weight
+const INPUT_RAMP_UP_SPEED: f32 = 30.0;
+/// Slow-down lerp speed — momentum slide-to-stop, character has to decelerate
+const INPUT_SLOW_DOWN_SPEED: f32 = 5.0;
 
 fn jump_action() -> ControlScheme {
     ControlScheme::Jump(TnuaBuiltinJump {
@@ -164,6 +165,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                ramp_sprint_speed,
                 movement.in_set(TnuaUserControlsSystems),
                 tick_input_buffer,
                 detect_landing,
@@ -242,12 +244,12 @@ fn movement(
 
         let direction = cam_transform.movement_direction(smoothed_input.current);
 
-        // Speed-dependent turn rate clamping (Prototype: instant at walk, ~120°/s at sprint)
+        // Speed-dependent turn rate clamping (Prototype: snappy at walk, restricted at sprint)
         let sprint_speed = cfg.player.movement.speed * cfg.player.movement.sprint_factor;
         let actual_speed = controller.basis_memory.running_velocity.length();
         let speed_ratio = (actual_speed / sprint_speed).clamp(0.0, 1.0);
-        // radians/sec: ~full circle at walk, ~120°/s (2.09 rad/s) at sprint
-        let max_turn_rate = std::f32::consts::TAU * (1.0 - speed_ratio) + 2.0 * speed_ratio;
+        // radians/sec: ~full circle at walk, ~86°/s (1.5 rad/s) at sprint — wide arcs at speed
+        let max_turn_rate = std::f32::consts::TAU * (1.0 - speed_ratio) + 1.5 * speed_ratio;
 
         // Limit direction change based on turn rate
         let desired_forward =
@@ -480,30 +482,51 @@ fn tick_landing_stun(
     }
 }
 
+/// How fast sprint speed ramps up (units/sec² toward target).
+/// At 6.0, it takes ~2.5s to go from jog (6.5) to full sprint (22.1).
+const SPRINT_RAMP_SPEED: f32 = 6.0;
+/// How fast sprint speed ramps back down when releasing sprint.
+const SPRINT_DERAMP_SPEED: f32 = 12.0;
+
 fn sprint_start(
     on: On<Start<Sprint>>,
-    cfg: Res<Config>,
-    mut player: Query<&mut Player, With<PlayerCtx>>,
     mut commands: Commands,
 ) {
-    let Ok(mut player) = player.get_mut(on.context) else {
-        return;
-    };
-    player.speed = cfg.player.movement.speed * cfg.player.movement.sprint_factor;
+    // Don't set player.speed instantly — the ramp_sprint_speed system handles the gradual buildup.
     commands.entity(on.context).try_insert(Sprinting);
 }
 
 fn sprint_end(
     on: On<Complete<Sprint>>,
-    cfg: Res<Config>,
-    mut player: Query<&mut Player, With<PlayerCtx>>,
     mut commands: Commands,
 ) {
-    let Ok(mut player) = player.get_mut(on.context) else {
-        return;
-    };
-    player.speed = cfg.player.movement.speed;
+    // Speed ramps back down in ramp_sprint_speed system.
     commands.entity(on.context).try_remove::<Sprinting>();
+}
+
+/// Gradually ramp player.speed toward sprint or jog target.
+/// Creates the Prototype-style sustained acceleration buildup.
+fn ramp_sprint_speed(
+    time: Res<Time>,
+    cfg: Res<Config>,
+    mut player_query: Query<(&mut Player, Has<Sprinting>)>,
+) {
+    let dt = time.delta_secs();
+    let base_speed = cfg.player.movement.speed;
+    let max_sprint = base_speed * cfg.player.movement.sprint_factor;
+
+    for (mut player, is_sprinting) in player_query.iter_mut() {
+        let target = if is_sprinting { max_sprint } else { base_speed };
+        let ramp = if is_sprinting { SPRINT_RAMP_SPEED } else { SPRINT_DERAMP_SPEED };
+
+        if (player.speed - target).abs() < 0.01 {
+            player.speed = target;
+        } else if player.speed < target {
+            player.speed = (player.speed + ramp * dt).min(target);
+        } else {
+            player.speed = (player.speed - ramp * dt).max(target);
+        }
+    }
 }
 
 pub fn crouch_in(

@@ -87,9 +87,9 @@ fn dynamic_fov(
     let mut target = fov_state.base;
 
     if is_sprinting && speed > idle_threshold {
-        // Sprint FOV: +20° with smoothstep for dramatic tunnel vision (Prototype-style)
+        // Sprint FOV: +14° with smoothstep — enough tunnel vision to sell speed without nausea
         let sprint_ratio = (speed / sprint_speed).clamp(0.0, 1.0);
-        target += 20_f32.to_radians() * smoothstep(sprint_ratio);
+        target += 14_f32.to_radians() * smoothstep(sprint_ratio);
     }
 
     // Airborne at high speed: keep FOV expanded based on velocity
@@ -104,22 +104,22 @@ fn dynamic_fov(
         let fall_speed = (-velocity.y).max(0.0);
         if fall_speed > 3.0 {
             let fall_t = ((fall_speed - 3.0) / (FALL_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
-            target += 15_f32.to_radians() * fall_t;
+            target += 18_f32.to_radians() * fall_t;
         }
     }
 
-    // Landing stun: FOV punch on impact (10°), smoothly recovers as stun wears off
+    // Landing stun: FOV punch on impact (12°), smoothly recovers as stun wears off
     if let Some(stun) = landing_stun {
         let impact_strength = 1.0 - stun.timer.fraction();
-        target -= 10_f32.to_radians() * impact_strength;
+        target -= 12_f32.to_radians() * impact_strength;
     }
 
-    // Smooth interpolation — fast expand on launch/fall, slower return to base
+    // Smooth interpolation — slower expand builds tension, fast contract snaps on stop
     let dt = time.delta_secs();
     let lerp_speed = if target > fov_state.current {
-        10.0 // Fast expand (launch, fall)
+        6.0 // Gradual expand — feel the speed building
     } else {
-        4.0 // Slower contract
+        8.0 // Faster contract — sudden stop feels jarring/impactful
     };
     fov_state.current += (target - fov_state.current) * (lerp_speed * dt).min(1.0);
 
@@ -149,8 +149,8 @@ fn fall_camera_dip(
     let fall_speed = (-velocity.y).max(0.0);
     if fall_speed > 3.0 {
         let fall_t = ((fall_speed - 3.0) / (FALL_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
-        // Push camera down by up to 1.5 units at max fall speed
-        cam_transform.translation.y -= 1.5 * fall_t * fall_t; // Quadratic for acceleration feel
+        // Push camera down by up to 2.0 units at max fall speed — gut-drop weight
+        cam_transform.translation.y -= 2.0 * fall_t * fall_t; // Quadratic for acceleration feel
     }
 }
 
@@ -160,9 +160,9 @@ fn on_landing_shake(on: On<LandingImpact>, mut shake: ResMut<ScreenShake>) {
     let event = on.event();
     let t = ((event.velocity_y - 3.0) / 22.0).clamp(0.0, 1.0);
 
-    // Quadratic intensity scaling — heavy falls shake hard
-    shake.intensity = 0.03 + 0.15 * t * t;
-    shake.duration = 0.15 + 0.2 * t;
+    // Quadratic intensity scaling — heavy falls shake hard (max 0.25 at terminal velocity)
+    shake.intensity = 0.04 + 0.21 * t * t;
+    shake.duration = 0.2 + 0.25 * t;
     shake.timer = 0.0;
 }
 

@@ -91,6 +91,10 @@ pub struct AudioSources {
     #[dependency]
     pub steps: ShuffleBag<Handle<AudioSample>>,
     #[dependency]
+    pub jog_steps: ShuffleBag<Handle<AudioSample>>,
+    #[dependency]
+    pub sprint_steps: ShuffleBag<Handle<AudioSample>>,
+    #[dependency]
     pub punches: ShuffleBag<Handle<AudioSample>>,
 
     // music
@@ -111,6 +115,20 @@ impl AudioSources {
         "audio/sfx/step3.ogg",
         "audio/sfx/step4.ogg",
     ];
+    pub const JOG_STEPS: &[&'static str] = &[
+        "audio/sfx/jog_step1.ogg",
+        "audio/sfx/jog_step2.ogg",
+        "audio/sfx/jog_step3.ogg",
+        "audio/sfx/jog_step4.ogg",
+        "audio/sfx/jog_step5.ogg",
+    ];
+    pub const SPRINT_STEPS: &[&'static str] = &[
+        "audio/sfx/sprint_step1.ogg",
+        "audio/sfx/sprint_step2.ogg",
+        "audio/sfx/sprint_step3.ogg",
+        "audio/sfx/sprint_step4.ogg",
+        "audio/sfx/sprint_step5.ogg",
+    ];
     pub const PUNCHES: &[&'static str] = &["audio/sfx/punch.wav"];
     pub const GAMEPLAY: &'static str = "audio/music/embrace-the-fight.ogg";
 }
@@ -121,11 +139,15 @@ impl FromWorld for AudioSources {
         let a = world.resource::<AssetServer>();
 
         let steps = Self::STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+        let jog_steps = Self::JOG_STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+        let sprint_steps = Self::SPRINT_STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
         let punches = Self::PUNCHES.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
         let gameplay: Handle<AudioSample> = a.load(Self::GAMEPLAY);
 
         Self {
             steps: ShuffleBag::try_new(steps, &mut rng).unwrap(),
+            jog_steps: ShuffleBag::try_new(jog_steps, &mut rng).unwrap(),
+            sprint_steps: ShuffleBag::try_new(sprint_steps, &mut rng).unwrap(),
             punches: ShuffleBag::try_new(punches, &mut rng).unwrap(),
             // Same track for both moods
             combat: ShuffleBag::try_new(vec![gameplay.clone()], &mut rng).unwrap(),
