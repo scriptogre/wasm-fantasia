@@ -81,7 +81,7 @@ impl<'ctx> __sdk::Table for WorldPauseTableHandle<'ctx> {
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
     let _table = client_cache.get_or_make_table::<WorldPause>("world_pause");
-    _table.add_unique_constraint::<String>("world_id", |row| &row.world_id);
+    _table.add_unique_constraint::<u32>("world_id", |row| &row.world_id);
 }
 pub struct WorldPauseUpdateCallbackId(__sdk::CallbackId);
 
@@ -119,7 +119,7 @@ pub(super) fn parse_table_update(
 /// but to directly chain method calls,
 /// like `ctx.db.world_pause().world_id().find(...)`.
 pub struct WorldPauseWorldIdUnique<'ctx> {
-    imp: __sdk::UniqueConstraintHandle<WorldPause, String>,
+    imp: __sdk::UniqueConstraintHandle<WorldPause, u32>,
     phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
 }
 
@@ -127,7 +127,7 @@ impl<'ctx> WorldPauseTableHandle<'ctx> {
     /// Get a handle on the `world_id` unique index on the table `world_pause`.
     pub fn world_id(&self) -> WorldPauseWorldIdUnique<'ctx> {
         WorldPauseWorldIdUnique {
-            imp: self.imp.get_unique_constraint::<String>("world_id"),
+            imp: self.imp.get_unique_constraint::<u32>("world_id"),
             phantom: std::marker::PhantomData,
         }
     }
@@ -136,7 +136,7 @@ impl<'ctx> WorldPauseTableHandle<'ctx> {
 impl<'ctx> WorldPauseWorldIdUnique<'ctx> {
     /// Find the subscribed row whose `world_id` column value is equal to `col_val`,
     /// if such a row is present in the client cache.
-    pub fn find(&self, col_val: &String) -> Option<WorldPause> {
+    pub fn find(&self, col_val: &u32) -> Option<WorldPause> {
         self.imp.find(col_val)
     }
 }

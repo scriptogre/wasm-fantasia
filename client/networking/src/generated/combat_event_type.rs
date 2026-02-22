@@ -13,7 +13,7 @@ pub struct CombatEvent {
     pub z: f32,
     pub damage: f32,
     pub is_crit: bool,
-    pub world_id: String,
+    pub world_id: u32,
     pub timestamp: i64,
 }
 

@@ -94,7 +94,7 @@ pub enum Reducer {
     },
     JoinGame {
         name: Option<String>,
-        world_id: String,
+        world_id: u32,
     },
     LandingAoeHit {
         velocity_y: f32,

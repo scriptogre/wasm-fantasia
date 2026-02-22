@@ -27,7 +27,7 @@ pub fn init(ctx: &spacetimedb::ReducerContext) {
 pub fn pause_world(ctx: &spacetimedb::ReducerContext) {
     if let Some(player) = ctx.db.player().identity().find(ctx.sender) {
         let _ = ctx.db.world_pause().insert(WorldPause {
-            world_id: player.world_id.clone(),
+            world_id: player.world_id,
         });
     }
 }

@@ -4,7 +4,7 @@ use spacetimedb::Table;
 use crate::schema::*;
 
 #[spacetimedb::reducer]
-pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_id: String) {
+pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_id: u32) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
     if let Some(existing) = ctx.db.player().identity().find(ctx.sender) {
         ctx.db.player().identity().update(Player {
@@ -92,9 +92,8 @@ pub fn on_disconnect(ctx: &spacetimedb::ReducerContext) {
 
 fn set_player_offline(ctx: &spacetimedb::ReducerContext) {
     if let Some(player) = ctx.db.player().identity().find(ctx.sender) {
-        // Take world_id before the update consumes player
-        let world_id = player.world_id.clone();
-        let is_solo = world_id != "shared";
+        let world_id = player.world_id;
+        let is_solo = world_id != 0;
 
         ctx.db.player().identity().update(Player {
             online: false,

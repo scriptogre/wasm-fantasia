@@ -120,22 +120,30 @@ macro_rules! connection_builder {
                     });
                 }
 
-                let world_id = if is_solo {
-                    identity.to_hex().to_string()
+                let world_id: u32 = if is_solo {
+                    // Hash identity bytes to u32 for solo world partitioning.
+                    // Collision probability is negligible for concurrent player counts.
+                    let hex = identity.to_hex();
+                    let mut h: u32 = 2166136261; // FNV-1a offset basis
+                    for b in hex.as_bytes() {
+                        h ^= *b as u32;
+                        h = h.wrapping_mul(16777619); // FNV-1a prime
+                    }
+                    h | 1 // Ensure non-zero (0 = shared/multiplayer world)
                 } else {
-                    "shared".to_string()
+                    0 // Multiplayer: all players share world 0
                 };
 
                 if let Err(e) = conn
                     .reducers
-                    .join_game(Some("Player".to_string()), world_id.clone())
+                    .join_game(Some("Player".to_string()), world_id)
                 {
                     error!("Failed to call join_game: {:?}", e);
                 }
                 conn.subscription_builder().subscribe([
-                    format!("SELECT * FROM player WHERE world_id = '{world_id}'"),
-                    format!("SELECT * FROM enemy WHERE world_id = '{world_id}'"),
-                    format!("SELECT * FROM combat_event WHERE world_id = '{world_id}'"),
+                    format!("SELECT * FROM player WHERE world_id = {world_id}"),
+                    format!("SELECT * FROM enemy WHERE world_id = {world_id}"),
+                    format!("SELECT * FROM combat_event WHERE world_id = {world_id}"),
                     "SELECT * FROM active_effect".to_string(),
                 ]);
             })

@@ -9,7 +9,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub struct KnockbackImpulse {
     pub id: u64,
     pub enemy_id: u64,
-    pub world_id: String,
+    pub world_id: u32,
     pub impulse_x: f32,
     pub impulse_y: f32,
     pub impulse_z: f32,

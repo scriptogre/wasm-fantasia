@@ -5,7 +5,7 @@ pub struct Player {
     pub identity: spacetimedb::Identity,
     pub name: Option<String>,
     pub online: bool,
-    pub world_id: String,
+    pub world_id: u32,
     pub last_update: i64,
 
     // Position
@@ -41,7 +41,7 @@ pub struct Enemy {
     #[auto_inc]
     pub id: u64,
     pub enemy_type: u8,
-    pub world_id: String,
+    pub world_id: u32,
 
     // Position
     pub x: f32,
@@ -79,7 +79,7 @@ pub struct CombatEvent {
     pub z: f32,
     pub damage: f32,
     pub is_crit: bool,
-    pub world_id: String,
+    pub world_id: u32,
     pub timestamp: i64,
 }
 
@@ -90,6 +90,7 @@ pub struct ActiveEffect {
     #[primary_key]
     #[auto_inc]
     pub id: u64,
+    #[index(btree)]
     pub owner: spacetimedb::Identity,
     pub effect_type: u8,
     pub magnitude: f32,
@@ -114,7 +115,7 @@ pub struct KnockbackImpulse {
     #[auto_inc]
     pub id: u64,
     pub enemy_id: u64,
-    pub world_id: String,
+    pub world_id: u32,
     pub impulse_x: f32,
     pub impulse_y: f32,
     pub impulse_z: f32,
@@ -124,5 +125,5 @@ pub struct KnockbackImpulse {
 #[spacetimedb::table(name = world_pause, public)]
 pub struct WorldPause {
     #[primary_key]
-    pub world_id: String,
+    pub world_id: u32,
 }

@@ -8,7 +8,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[sats(crate = __lib)]
 pub(super) struct JoinGameArgs {
     pub name: Option<String>,
-    pub world_id: String,
+    pub world_id: u32,
 }
 
 impl From<JoinGameArgs> for super::Reducer {
@@ -36,7 +36,7 @@ pub trait join_game {
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
     ///  and its status can be observed by listening for [`Self::on_join_game`] callbacks.
-    fn join_game(&self, name: Option<String>, world_id: String) -> __sdk::Result<()>;
+    fn join_game(&self, name: Option<String>, world_id: u32) -> __sdk::Result<()>;
     /// Register a callback to run whenever we are notified of an invocation of the reducer `join_game`.
     ///
     /// Callbacks should inspect the [`__sdk::ReducerEvent`] contained in the [`super::ReducerEventContext`]
@@ -46,7 +46,7 @@ pub trait join_game {
     /// to cancel the callback.
     fn on_join_game(
         &self,
-        callback: impl FnMut(&super::ReducerEventContext, &Option<String>, &String) + Send + 'static,
+        callback: impl FnMut(&super::ReducerEventContext, &Option<String>, &u32) + Send + 'static,
     ) -> JoinGameCallbackId;
     /// Cancel a callback previously registered by [`Self::on_join_game`],
     /// causing it not to run in the future.
@@ -54,13 +54,13 @@ pub trait join_game {
 }
 
 impl join_game for super::RemoteReducers {
-    fn join_game(&self, name: Option<String>, world_id: String) -> __sdk::Result<()> {
+    fn join_game(&self, name: Option<String>, world_id: u32) -> __sdk::Result<()> {
         self.imp
             .call_reducer("join_game", JoinGameArgs { name, world_id })
     }
     fn on_join_game(
         &self,
-        mut callback: impl FnMut(&super::ReducerEventContext, &Option<String>, &String) + Send + 'static,
+        mut callback: impl FnMut(&super::ReducerEventContext, &Option<String>, &u32) + Send + 'static,
     ) -> JoinGameCallbackId {
         JoinGameCallbackId(self.imp.on_reducer(
             "join_game",
