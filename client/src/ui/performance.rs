@@ -1,8 +1,10 @@
 use super::*;
 use crate::networking::PingTracker;
 use crate::networking::diagnostics::ServerDiagnostics;
+use bevy::diagnostic::{DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin};
 use bevy::input::common_conditions::input_just_pressed;
 use std::time::Duration;
+use web_time::Instant;
 
 const REFRESH_INTERVAL: Duration = Duration::from_millis(200);
 const BENCHMARK_DURATION: Duration = Duration::from_secs(10);
@@ -14,6 +16,9 @@ pub fn plugin(app: &mut App) {
         REFRESH_INTERVAL,
         TimerMode::Repeating,
     )));
+    app.init_resource::<CpuFrameTimer>();
+    app.add_systems(First, mark_frame_start);
+    app.add_systems(Last, mark_frame_end);
     app.add_systems(
         OnEnter(crate::models::Screen::Gameplay),
         spawn_stats_overlay,
@@ -30,6 +35,36 @@ pub fn plugin(app: &mut App) {
         Update,
         tick_benchmark.run_if(resource_exists::<BenchmarkFrames>),
     );
+}
+
+// ── CPU time tracking ───────────────────────────────────────────────────
+
+#[derive(Resource)]
+struct CpuFrameTimer {
+    frame_start: Option<Instant>,
+    /// Smoothed CPU time in ms (exponential moving average)
+    cpu_ms: f64,
+}
+
+impl Default for CpuFrameTimer {
+    fn default() -> Self {
+        Self {
+            frame_start: None,
+            cpu_ms: 0.0,
+        }
+    }
+}
+
+fn mark_frame_start(mut timer: ResMut<CpuFrameTimer>) {
+    timer.frame_start = Some(Instant::now());
+}
+
+fn mark_frame_end(mut timer: ResMut<CpuFrameTimer>) {
+    if let Some(start) = timer.frame_start.take() {
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+        // EMA with ~10-frame smoothing
+        timer.cpu_ms = timer.cpu_ms * 0.9 + elapsed_ms * 0.1;
+    }
 }
 
 // ── Stats overlay ────────────────────────────────────────────────────────
@@ -65,6 +100,8 @@ fn tick_stats_overlay(
     mut timer: ResMut<StatsTimer>,
     diag: Option<Res<ServerDiagnostics>>,
     ping: Option<Res<PingTracker>>,
+    diagnostics: Res<DiagnosticsStore>,
+    cpu_timer: Res<CpuFrameTimer>,
     mut texts: Query<&mut Text, With<StatsOverlayText>>,
 ) {
     timer.0.tick(time.delta());
@@ -72,19 +109,45 @@ fn tick_stats_overlay(
         return;
     }
 
-    let fps = (1.0 / time.delta_secs()).round() as u32;
+    let fps = diagnostics
+        .get(&FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(|d| d.smoothed())
+        .unwrap_or(0.0);
+    let frame_ms = diagnostics
+        .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+        .and_then(|d| d.smoothed())
+        .unwrap_or(0.0);
+    let entity_count = diagnostics
+        .get(&EntityCountDiagnosticsPlugin::ENTITY_COUNT)
+        .and_then(|d| d.value())
+        .unwrap_or(0.0) as u32;
+
+    let cpu_ms = cpu_timer.cpu_ms;
     let enemies = diag.as_ref().map(|d| d.enemy_alive).unwrap_or(0);
     let players = diag.as_ref().map(|d| d.players.len()).unwrap_or(0);
     let ping_ms = ping.as_ref().map(|p| p.smoothed_rtt_ms).unwrap_or(0.0);
 
-    let new = if ping_ms > 0.0 {
-        format!("{fps} FPS  |  {enemies} enemies  |  {players} players  |  {ping_ms:.0} ms")
+    // If CPU time is >80% of frame time, we're CPU-bound
+    let bottleneck = if frame_ms > 0.1 {
+        if cpu_ms / frame_ms > 0.80 {
+            "CPU"
+        } else {
+            "GPU"
+        }
     } else {
-        format!("{fps} FPS  |  {enemies} enemies  |  {players} players")
+        "—"
     };
-    for mut text in &mut texts {
-        if text.0 != new {
-            text.0 = new.clone();
+
+    let mut line = format!(
+        "{fps:.0} FPS  {frame_ms:.1}ms (cpu {cpu_ms:.1}ms) [{bottleneck}]  |  {entity_count} ent  {enemies} enemies  {players} players"
+    );
+    if ping_ms > 0.0 {
+        line.push_str(&format!("  |  {ping_ms:.0} ms"));
+    }
+
+    if let Ok(mut text) = texts.single_mut() {
+        if text.0 != line {
+            text.0 = line;
         }
     }
 }
@@ -177,10 +240,6 @@ fn tick_benchmark(
 // ── Report generation ────────────────────────────────────────────────────
 
 fn build_report(frame_times: &[f32], entity_count: usize) -> String {
-    frame_summary(frame_times, entity_count)
-}
-
-fn frame_summary(frame_times: &[f32], entity_count: usize) -> String {
     let count = frame_times.len();
     if count == 0 {
         return "No frames recorded.".to_string();

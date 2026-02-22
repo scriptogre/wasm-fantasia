@@ -43,8 +43,6 @@ fn main() {
         meta_check: AssetMetaCheck::Never,
         ..default()
     };
-    // DEBUG
-    // let filter = "debug,symphonia=off,naga=off,wgpu=warn,bevy_enhanced_input=debug".to_string();
     let filter = "info,cosmic_text=info,calloop=off,symphonia=off,naga=off,wgpu=warn,wgpu_core=error,bevy_core_pipeline=error,bevy_pbr=error,bevy_dev_tools=warn".to_string();
     let log_level = log::LogPlugin {
         level: log::Level::TRACE,
@@ -77,6 +75,10 @@ fn main() {
             .set(log_level)
             .set(render),
     );
+    app.add_plugins((
+        bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+        bevy::diagnostic::EntityCountDiagnosticsPlugin::default(),
+    ));
     app.add_plugins(bevy_hanabi::HanabiPlugin);
     app.add_plugins(bevy_open_vat::prelude::OpenVatPlugin);
 

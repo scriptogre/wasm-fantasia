@@ -2,8 +2,8 @@ use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::{
     self as hanabi, AccelModifier, ColorBlendMask, ColorBlendMode, ColorOverLifetimeModifier,
-    EffectAsset, EffectMaterial, ExprWriter, ImageSampleMapping, LinearDragModifier, OrientMode,
-    OrientModifier, ParticleEffect, ParticleTextureModifier, SetAttributeModifier,
+    EffectAsset, EffectMaterial, EffectSpawner, ExprWriter, ImageSampleMapping, LinearDragModifier,
+    OrientMode, OrientModifier, ParticleEffect, ParticleTextureModifier, SetAttributeModifier,
     SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SizeOverLifetimeModifier,
     SpawnerSettings,
 };
@@ -36,7 +36,7 @@ pub fn plugin(app: &mut App) {
         .add_observer(on_ground_pound_vfx)
         .add_observer(on_footstep_dust)
         .add_systems(Startup, setup_particle_effects)
-        .add_systems(Update, tick_debris_chunks);
+        .add_systems(Update, (tick_debris_chunks, despawn_finished_effects));
 }
 
 // ── Hit Flash ───────────────────────────────────────────────────────
@@ -692,6 +692,26 @@ fn tick_debris_chunks(
     }
 }
 
+// ── Auto-despawn finished one-shot particle effects ─────────────────
+
+/// Despawns `ParticleEffect` entities whose spawner has completed and whose
+/// particles have had time to expire. Without this, one-shot effects (hit
+/// sparks, dust bursts, etc.) leave empty entities in the world forever.
+fn despawn_finished_effects(
+    mut commands: Commands,
+    effects: Query<(Entity, &EffectSpawner), With<ParticleEffect>>,
+) {
+    for (entity, spawner) in &effects {
+        // The spawner has finished emitting and enough time has passed for
+        // all particles to die. The longest particle lifetime across our
+        // effects is ~3s; EffectSpawner stops ticking once done, so
+        // has_completed() stays true permanently for once-spawners.
+        if spawner.has_completed() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 // ── Observer Handlers ───────────────────────────────────────────────
 
 fn on_jump_vfx(
@@ -761,7 +781,7 @@ fn on_landing_vfx(
     let pos = event.position - Vec3::Y * 0.8;
 
     if let Some(effects) = effects {
-        let scale = 0.6 + 0.8 * t;
+        let scale = 0.8 + 1.2 * t;
         commands.spawn((
             ParticleEffect::new(effects.landing_impact.clone()),
             Transform::from_translation(pos).with_scale(Vec3::splat(scale)),
@@ -797,7 +817,7 @@ fn on_footstep_dust(
     let event = on.event();
     let pos = event.position - Vec3::Y * 0.8;
 
-    let scale = if event.is_sprinting { 1.2 } else { 0.6 };
+    let scale = if event.is_sprinting { 1.8 } else { 0.8 };
 
     commands.spawn((
         ParticleEffect::new(effects.dust_burst.clone()),
