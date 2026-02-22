@@ -89,8 +89,8 @@ impl spawn_enemies for super::RemoteReducers {
     fn on_spawn_enemies(
         &self,
         mut callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &f32)
-        + Send
-        + 'static,
+            + Send
+            + 'static,
     ) -> SpawnEnemiesCallbackId {
         SpawnEnemiesCallbackId(self.imp.on_reducer(
             "spawn_enemies",

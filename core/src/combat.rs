@@ -49,7 +49,7 @@ pub fn enemy_ai_decision(distance: f32, attack_cooldown_ready: bool) -> EnemyBeh
 }
 
 /// Shared enum for enemy AI decisions. Mirrors the client `EnemyBehavior`
-/// component and the server `animation_state` string.
+/// component and the server `animation_state` column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnemyBehaviorKind {
     Idle,
@@ -58,7 +58,29 @@ pub enum EnemyBehaviorKind {
 }
 
 impl EnemyBehaviorKind {
-    /// Convert to the string representation used in server DB rows.
+    pub const IDLE: u8 = 0;
+    pub const CHASE: u8 = 1;
+    pub const ATTACK: u8 = 2;
+
+    /// Convert to the u8 representation used in server DB rows.
+    pub fn as_u8(self) -> u8 {
+        match self {
+            Self::Idle => Self::IDLE,
+            Self::Chase => Self::CHASE,
+            Self::Attack => Self::ATTACK,
+        }
+    }
+
+    /// Parse from the server DB u8 representation.
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            Self::CHASE => Self::Chase,
+            Self::ATTACK => Self::Attack,
+            _ => Self::Idle,
+        }
+    }
+
+    /// Convert to the string representation (for player animation protocol).
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Idle => "Idle",
@@ -67,7 +89,7 @@ impl EnemyBehaviorKind {
         }
     }
 
-    /// Parse from the server DB string representation.
+    /// Parse from the string representation.
     pub fn parse_str(s: &str) -> Self {
         match s {
             "Chase" => Self::Chase,
@@ -75,6 +97,16 @@ impl EnemyBehaviorKind {
             _ => Self::Idle,
         }
     }
+}
+
+/// Enemy type encoding for the server DB.
+pub mod enemy_types {
+    pub const BASIC: u8 = 0;
+}
+
+/// Effect type encoding for the server DB.
+pub mod effect_types {
+    pub const STACKING_DAMAGE: u8 = 0;
 }
 
 /// Attack timing constants (at 1.0x speed)

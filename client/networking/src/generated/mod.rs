@@ -36,40 +36,40 @@ pub mod world_pause_type;
 
 pub use active_effect_table::*;
 pub use active_effect_type::ActiveEffect;
-pub use attack_hit_reducer::{AttackHitCallbackId, attack_hit, set_flags_for_attack_hit};
+pub use attack_hit_reducer::{attack_hit, set_flags_for_attack_hit, AttackHitCallbackId};
 pub use clear_enemies_reducer::{
-    ClearEnemiesCallbackId, clear_enemies, set_flags_for_clear_enemies,
+    clear_enemies, set_flags_for_clear_enemies, ClearEnemiesCallbackId,
 };
 pub use combat_event_table::*;
 pub use combat_event_type::CombatEvent;
 pub use enemy_table::*;
 pub use enemy_type::Enemy;
-pub use game_tick_reducer::{GameTickCallbackId, game_tick, set_flags_for_game_tick};
+pub use game_tick_reducer::{game_tick, set_flags_for_game_tick, GameTickCallbackId};
 pub use ground_pound_hit_reducer::{
-    GroundPoundHitCallbackId, ground_pound_hit, set_flags_for_ground_pound_hit,
+    ground_pound_hit, set_flags_for_ground_pound_hit, GroundPoundHitCallbackId,
 };
-pub use join_game_reducer::{JoinGameCallbackId, join_game, set_flags_for_join_game};
+pub use join_game_reducer::{join_game, set_flags_for_join_game, JoinGameCallbackId};
 pub use knockback_impulse_table::*;
 pub use knockback_impulse_type::KnockbackImpulse;
 pub use landing_aoe_hit_reducer::{
-    LandingAoeHitCallbackId, landing_aoe_hit, set_flags_for_landing_aoe_hit,
+    landing_aoe_hit, set_flags_for_landing_aoe_hit, LandingAoeHitCallbackId,
 };
-pub use leave_game_reducer::{LeaveGameCallbackId, leave_game, set_flags_for_leave_game};
+pub use leave_game_reducer::{leave_game, set_flags_for_leave_game, LeaveGameCallbackId};
 pub use on_disconnect_reducer::{
-    OnDisconnectCallbackId, on_disconnect, set_flags_for_on_disconnect,
+    on_disconnect, set_flags_for_on_disconnect, OnDisconnectCallbackId,
 };
-pub use pause_world_reducer::{PauseWorldCallbackId, pause_world, set_flags_for_pause_world};
+pub use pause_world_reducer::{pause_world, set_flags_for_pause_world, PauseWorldCallbackId};
 pub use player_table::*;
 pub use player_type::Player;
-pub use respawn_reducer::{RespawnCallbackId, respawn, set_flags_for_respawn};
-pub use resume_world_reducer::{ResumeWorldCallbackId, resume_world, set_flags_for_resume_world};
+pub use respawn_reducer::{respawn, set_flags_for_respawn, RespawnCallbackId};
+pub use resume_world_reducer::{resume_world, set_flags_for_resume_world, ResumeWorldCallbackId};
 pub use spawn_enemies_reducer::{
-    SpawnEnemiesCallbackId, set_flags_for_spawn_enemies, spawn_enemies,
+    set_flags_for_spawn_enemies, spawn_enemies, SpawnEnemiesCallbackId,
 };
 pub use tick_schedule_table::*;
 pub use tick_schedule_type::TickSchedule;
 pub use update_position_reducer::{
-    UpdatePositionCallbackId, set_flags_for_update_position, update_position,
+    set_flags_for_update_position, update_position, UpdatePositionCallbackId,
 };
 pub use world_pause_table::*;
 pub use world_pause_type::WorldPause;
@@ -638,21 +638,21 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
 /// either a [`DbConnection`] or an [`EventContext`] and operate on either.
 pub trait RemoteDbContext:
     __sdk::DbContext<
-        DbView = RemoteTables,
-        Reducers = RemoteReducers,
-        SetReducerFlags = SetReducerFlags,
-        SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
-    >
+    DbView = RemoteTables,
+    Reducers = RemoteReducers,
+    SetReducerFlags = SetReducerFlags,
+    SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
+>
 {
 }
 impl<
-    Ctx: __sdk::DbContext<
+        Ctx: __sdk::DbContext<
             DbView = RemoteTables,
             Reducers = RemoteReducers,
             SetReducerFlags = SetReducerFlags,
             SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>,
         >,
-> RemoteDbContext for Ctx
+    > RemoteDbContext for Ctx
 {
 }
 

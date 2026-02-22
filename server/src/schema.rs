@@ -40,7 +40,7 @@ pub struct Enemy {
     #[primary_key]
     #[auto_inc]
     pub id: u64,
-    pub enemy_type: String,
+    pub enemy_type: u8,
     pub world_id: String,
 
     // Position
@@ -55,7 +55,7 @@ pub struct Enemy {
     pub velocity_z: f32,
 
     // Animation
-    pub animation_state: String,
+    pub animation_state: u8,
 
     // Health
     pub health: f32,
@@ -91,7 +91,7 @@ pub struct ActiveEffect {
     #[auto_inc]
     pub id: u64,
     pub owner: spacetimedb::Identity,
-    pub effect_type: String,
+    pub effect_type: u8,
     pub magnitude: f32,
     pub duration: f32,
     pub timestamp: i64,

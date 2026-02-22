@@ -1,11 +1,15 @@
 use game_core::combat::{
-    self, defaults, knockback_displacement, resolve_combat, CombatInput, HitTarget,
+    self, defaults, effect_types, knockback_displacement, resolve_combat, CombatInput, HitTarget,
 };
-use game_core::presets;
+use game_core::presets::{self, EntityRules};
 use game_core::rules::{Stat, Stats};
 use spacetimedb::Table;
 
 use crate::schema::*;
+
+thread_local! {
+    static PLAYER_RULES: EntityRules = presets::default_player_rules();
+}
 
 /// Server-authoritative attack resolution.
 #[spacetimedb::reducer]
@@ -21,14 +25,15 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
 
     // Cleanup old combat events in this world (older than 5 seconds)
     let stale_threshold = now - 5_000_000;
-    let stale_events: Vec<CombatEvent> = ctx
+    let stale_ids: Vec<u64> = ctx
         .db
         .combat_event()
         .iter()
         .filter(|e| e.world_id == attacker.world_id && e.timestamp < stale_threshold)
+        .map(|e| e.id)
         .collect();
-    for event in stale_events {
-        ctx.db.combat_event().delete(event);
+    for id in stale_ids {
+        ctx.db.combat_event().id().delete(id);
     }
 
     // Cooldown check
@@ -41,7 +46,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .db
         .active_effect()
         .iter()
-        .find(|e| e.owner == ctx.sender && e.effect_type == "stacking_damage");
+        .find(|e| e.owner == ctx.sender && e.effect_type == effect_types::STACKING_DAMAGE);
 
     let (stacks, last_hit_time) = if let Some(ref effect) = stacking_effect {
         let decay_elapsed = (now - effect.timestamp) as f64 / 1_000_000.0;
@@ -57,8 +62,6 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         1.0
     };
 
-    let rules = presets::default_player_rules();
-
     let half_arc_cos = (attacker.attack_arc / 2.0_f32).to_radians().cos();
     let fwd = glam::Vec2::new(-attacker.rotation_y.sin(), -attacker.rotation_y.cos());
     let origin = glam::Vec2::new(attacker.x, attacker.z);
@@ -70,7 +73,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .with(Stat::Knockback, attacker.knockback_force)
         .with(Stat::AttackRange, attacker.attack_range)
         .with(Stat::AttackArc, attacker.attack_arc)
-        .with(Stat::Custom("Stacks".into()), stacks)
+        .with(Stat::Stacks, stacks)
         .with(Stat::AttackSpeed, effective_speed);
 
     // Build target list from enemies in the same world
@@ -79,6 +82,12 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .enemy()
         .iter()
         .filter(|e| e.health > 0.0 && e.world_id == attacker.world_id)
+        .collect();
+
+    // O(1) position lookup for combat events (avoids O(N) linear search per hit)
+    let enemy_pos_index: std::collections::HashMap<u64, (f32, f32, f32)> = enemy_targets
+        .iter()
+        .map(|e| (e.id, (e.x, e.y, e.z)))
         .collect();
 
     let hit_targets: Vec<HitTarget> = enemy_targets
@@ -90,23 +99,24 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         })
         .collect();
 
-    let output = resolve_combat(&CombatInput {
-        origin,
-        forward: fwd,
-        base_range: attacker.attack_range,
-        half_arc_cos,
-        attacker_stats: &attacker_stats,
-        rules: &rules,
-        rng_seed: now as u64,
-        targets: &hit_targets,
+    let output = PLAYER_RULES.with(|rules| {
+        resolve_combat(&CombatInput {
+            origin,
+            forward: fwd,
+            base_range: attacker.attack_range,
+            half_arc_cos,
+            attacker_stats: &attacker_stats,
+            rules,
+            rng_seed: now as u64,
+            targets: &hit_targets,
+        })
     });
 
     // Apply results to DB
     for hit in &output.hits {
-        // Combat event at the target's position for VFX
-        let target_enemy = enemy_targets.iter().find(|e| e.id == hit.target_id);
-        let (hit_x, hit_y, hit_z) = target_enemy
-            .map(|e| (e.x, e.y, e.z))
+        let (hit_x, hit_y, hit_z) = enemy_pos_index
+            .get(&hit.target_id)
+            .copied()
             .unwrap_or((attacker.x, attacker.y, attacker.z));
 
         ctx.db.combat_event().insert(CombatEvent {
@@ -155,7 +165,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
     }
 
     // Update attacker state
-    let new_stacks = output.attacker_stats.get(&Stat::Custom("Stacks".into()));
+    let new_stacks = output.attacker_stats.get(&Stat::Stacks);
     let new_speed = output.attacker_stats.get(&Stat::AttackSpeed);
 
     // Persist stacking buff to active_effect
@@ -174,7 +184,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
             ctx.db.active_effect().insert(ActiveEffect {
                 id: 0,
                 owner: ctx.sender,
-                effect_type: "stacking_damage".to_string(),
+                effect_type: effect_types::STACKING_DAMAGE,
                 magnitude: new_stacks,
                 duration: -1.0,
                 timestamp: now,
@@ -263,7 +273,6 @@ fn aoe_hit(
     damage_multiplier: f32,
 ) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
-    let rules = presets::default_player_rules();
 
     let base_damage = if attacker.attack_damage > 0.0 {
         attacker.attack_damage
@@ -311,15 +320,17 @@ fn aoe_hit(
     let origin_xz = glam::Vec2::new(impact_x, impact_z);
     let forward_xz = glam::Vec2::new(1.0, 0.0); // direction irrelevant for 360° AOE
 
-    let output = resolve_combat(&CombatInput {
-        origin: origin_xz,
-        forward: forward_xz,
-        base_range: radius,
-        half_arc_cos: -1.0, // Full 360° AOE
-        attacker_stats: &attacker_stats,
-        rules: &rules,
-        rng_seed: now as u64,
-        targets: &hit_targets,
+    let output = PLAYER_RULES.with(|rules| {
+        resolve_combat(&CombatInput {
+            origin: origin_xz,
+            forward: forward_xz,
+            base_range: radius,
+            half_arc_cos: -1.0, // Full 360° AOE
+            attacker_stats: &attacker_stats,
+            rules,
+            rng_seed: now as u64,
+            targets: &hit_targets,
+        })
     });
 
     let enemy_mass = 50.0_f32;

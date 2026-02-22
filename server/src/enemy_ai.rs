@@ -1,5 +1,5 @@
 use avian3d::prelude::*;
-use game_core::combat::{self, defaults, enemy_ai_decision};
+use game_core::combat::{self, defaults, enemy_ai_decision, enemy_types, EnemyBehaviorKind};
 use spacetimedb::Table;
 use std::collections::HashMap;
 
@@ -24,7 +24,7 @@ pub fn spawn_enemies(
 
     // Per-enemy scatter using hash that varies meaningfully per index
     let seed = ctx.timestamp.to_micros_since_unix_epoch() as u64;
-    let count = 80 + (seed % 41) as u32; // 80–120 enemies
+    let count = 500;
 
     for i in 0..count {
         let h = (seed ^ 0xDEADBEEF)
@@ -37,7 +37,7 @@ pub fn spawn_enemies(
 
         ctx.db.enemy().insert(Enemy {
             id: 0,
-            enemy_type: "basic".to_string(),
+            enemy_type: enemy_types::BASIC,
             world_id: world_id.clone(),
             x: x + angle.cos() * radius,
             y,
@@ -46,7 +46,7 @@ pub fn spawn_enemies(
             velocity_x: 0.0,
             velocity_y: 0.0,
             velocity_z: 0.0,
-            animation_state: "Idle".to_string(),
+            animation_state: EnemyBehaviorKind::IDLE,
             health: defaults::ENEMY_HEALTH,
             max_health: defaults::ENEMY_HEALTH,
             attack_damage: defaults::ENEMY_ATTACK_DAMAGE,
@@ -65,16 +65,17 @@ pub fn clear_enemies(ctx: &spacetimedb::ReducerContext) {
     };
 
     let world_id = player.world_id;
-    let enemies: Vec<Enemy> = ctx
+    let enemy_ids: Vec<u64> = ctx
         .db
         .enemy()
         .iter()
         .filter(|e| e.world_id == world_id)
+        .map(|e| e.id)
         .collect();
 
-    let count = enemies.len();
-    for enemy in enemies {
-        ctx.db.enemy().delete(enemy);
+    let count = enemy_ids.len();
+    for id in enemy_ids {
+        ctx.db.enemy().id().delete(id);
     }
 
     spacetimedb::log::info!("Cleared {} enemies from world {}", count, world_id);
@@ -103,10 +104,12 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         .iter()
         .filter(|p| p.online && p.health > 0.0)
     {
-        players_by_world
-            .entry(p.world_id.clone())
-            .or_default()
-            .push(p);
+        // Only clone world_id when inserting a new key (avoids clone per row)
+        if let Some(vec) = players_by_world.get_mut(&p.world_id) {
+            vec.push(p);
+        } else {
+            players_by_world.insert(p.world_id.clone(), vec![p]);
+        }
     }
 
     if players_by_world.is_empty() {
@@ -116,10 +119,11 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     // Group alive enemies by world_id
     let mut enemies_by_world: HashMap<String, Vec<Enemy>> = HashMap::new();
     for e in ctx.db.enemy().iter().filter(|e| e.health > 0.0) {
-        enemies_by_world
-            .entry(e.world_id.clone())
-            .or_default()
-            .push(e);
+        if let Some(vec) = enemies_by_world.get_mut(&e.world_id) {
+            vec.push(e);
+        } else {
+            enemies_by_world.insert(e.world_id.clone(), vec![e]);
+        }
     }
 
     // S4: Index knockback impulses by enemy_id for O(1) lookup
@@ -140,31 +144,6 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         let Some(players) = players_by_world.get(world_id) else {
             continue;
         };
-
-        // Create a physics world for this tick
-        let mut physics = PhysicsWorld::new(PhysicsConfig {
-            gravity: Vector::new(0.0, -30.0, 0.0),
-            substeps: 4,
-            ..Default::default()
-        });
-
-        // Add a static floor
-        let floor = physics.add_body(RigidBodyBundle::static_body(Vector::ZERO));
-        physics.add_collider(floor, ColliderBundle::half_space(Vector::Y));
-
-        // Add enemies as dynamic bodies
-        let mut enemy_handles: Vec<(BodyHandle, &Enemy)> = Vec::with_capacity(enemies.len());
-        for enemy in enemies {
-            let handle = physics.add_body(RigidBodyBundle {
-                body_type: RigidBodyType::Dynamic,
-                position: Vector::new(enemy.x, enemy.y, enemy.z),
-                linear_velocity: Vector::new(enemy.velocity_x, enemy.velocity_y, enemy.velocity_z),
-                mass: 50.0,
-                ..Default::default()
-            });
-            physics.add_collider(handle, ColliderBundle::capsule(0.5, 1.0));
-            enemy_handles.push((handle, enemy));
-        }
 
         // S1: Spatial grid for enemy separation (O(N) instead of O(N²))
         let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
@@ -211,12 +190,28 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             }
         }
 
-        // S3: Pre-compute nearest player + AI decision for each enemy (avoids
-        // recomputing after physics step). Also apply velocities + knockback.
-        let mut decisions: Vec<(combat::EnemyBehaviorKind, f32, (f32, f32))> =
-            Vec::with_capacity(enemies.len());
+        // Pre-compute nearest player + AI decision for each enemy.
+        // Also classify enemies as grounded (simple XZ movement) or airborne
+        // (need full physics). This avoids adding ~5000 bodies to PhysicsWorld
+        // when only ~0-50 are actually airborne from knockback.
+        struct EnemyUpdate {
+            decision: combat::EnemyBehaviorKind,
+            nearest_dist: f32,
+            nearest_pos: (f32, f32),
+            new_x: f32,
+            new_y: f32,
+            new_z: f32,
+            new_vx: f32,
+            new_vy: f32,
+            new_vz: f32,
+        }
 
-        for (idx, (handle, enemy)) in enemy_handles.iter().enumerate() {
+        let mut updates: Vec<EnemyUpdate> = Vec::with_capacity(enemies.len());
+
+        // Collect airborne enemy indices + their impulses for physics
+        let mut airborne_indices: Vec<usize> = Vec::new();
+
+        for (idx, enemy) in enemies.iter().enumerate() {
             let mut nearest_dist = f32::MAX;
             let mut nearest_pos = (0.0_f32, 0.0_f32);
             for p in players {
@@ -231,21 +226,11 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
 
             let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
             let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
-            decisions.push((decision, nearest_dist, nearest_pos));
 
-            // Apply knockback impulses (S4: O(1) lookup by enemy_id)
             let has_knockback = impulses_by_enemy.contains_key(&enemy.id);
-            if let Some(impulses) = impulses_by_enemy.get(&enemy.id) {
-                for impulse in impulses {
-                    physics.apply_impulse(
-                        *handle,
-                        Vector::new(impulse.impulse_x, impulse.impulse_y, impulse.impulse_z),
-                    );
-                }
-            }
+            let is_airborne = has_knockback || enemy.velocity_y.abs() > 0.1;
 
-            // Move toward player when chasing — but skip when being knocked
-            // back so the impulse isn't immediately overridden by chase velocity.
+            // Chase velocity (only when grounded and not being knocked back)
             let (mut vx, mut vz) = (0.0_f32, 0.0_f32);
             if !has_knockback && decision == combat::EnemyBehaviorKind::Chase && nearest_dist > 0.01
             {
@@ -260,43 +245,117 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             vx += separation[idx].0;
             vz += separation[idx].1;
 
-            if vx != 0.0 || vz != 0.0 || has_knockback {
-                physics.set_linear_velocity(
-                    *handle,
-                    Vector::new(vx, physics.body(*handle).linear_velocity().y, vz),
-                );
+            if is_airborne {
+                // This enemy needs physics — will be processed below
+                airborne_indices.push(idx);
+                updates.push(EnemyUpdate {
+                    decision,
+                    nearest_dist,
+                    nearest_pos,
+                    // Placeholder — physics will overwrite these
+                    new_x: enemy.x,
+                    new_y: enemy.y,
+                    new_z: enemy.z,
+                    new_vx: vx,
+                    new_vy: enemy.velocity_y,
+                    new_vz: vz,
+                });
+            } else {
+                // Grounded: simple XZ movement, y stays the same
+                updates.push(EnemyUpdate {
+                    decision,
+                    nearest_dist,
+                    nearest_pos,
+                    new_x: enemy.x + vx * dt,
+                    new_y: enemy.y,
+                    new_z: enemy.z + vz * dt,
+                    new_vx: vx,
+                    new_vy: 0.0,
+                    new_vz: vz,
+                });
             }
         }
 
-        // Step physics
-        let _result = physics.step(dt);
+        // Only create PhysicsWorld if there are airborne enemies
+        if !airborne_indices.is_empty() {
+            let mut physics = PhysicsWorld::new(PhysicsConfig {
+                gravity: Vector::new(0.0, -30.0, 0.0),
+                substeps: 4,
+                ..Default::default()
+            });
 
-        // Write back physics state to DB and update AI state
-        for (idx, (handle, enemy)) in enemy_handles.iter().enumerate() {
-            let body = physics.body(*handle);
-            let (decision, nearest_dist, nearest_pos) = decisions[idx];
+            let floor = physics.add_body(RigidBodyBundle::static_body(Vector::ZERO));
+            physics.add_collider(floor, ColliderBundle::half_space(Vector::Y));
+
+            let mut handles: Vec<BodyHandle> = Vec::with_capacity(airborne_indices.len());
+            for &idx in &airborne_indices {
+                let enemy = &enemies[idx];
+                let update = &updates[idx];
+                let handle = physics.add_body(RigidBodyBundle {
+                    body_type: RigidBodyType::Dynamic,
+                    position: Vector::new(enemy.x, enemy.y, enemy.z),
+                    linear_velocity: Vector::new(
+                        update.new_vx,
+                        enemy.velocity_y,
+                        update.new_vz,
+                    ),
+                    mass: defaults::ENEMY_MASS,
+                    ..Default::default()
+                });
+                physics.add_collider(handle, ColliderBundle::capsule(0.5, 1.0));
+
+                // Apply knockback impulses
+                if let Some(impulses) = impulses_by_enemy.get(&enemy.id) {
+                    for impulse in impulses {
+                        physics.apply_impulse(
+                            handle,
+                            Vector::new(impulse.impulse_x, impulse.impulse_y, impulse.impulse_z),
+                        );
+                    }
+                }
+
+                handles.push(handle);
+            }
+
+            let _result = physics.step(dt);
+
+            // Write physics results back into updates
+            for (i, &idx) in airborne_indices.iter().enumerate() {
+                let body = physics.body(handles[i]);
+                let pos = body.position();
+                let vel = body.linear_velocity();
+                updates[idx].new_x = pos.x;
+                updates[idx].new_y = pos.y;
+                updates[idx].new_z = pos.z;
+                updates[idx].new_vx = vel.x;
+                updates[idx].new_vy = vel.y;
+                updates[idx].new_vz = vel.z;
+            }
+        }
+
+        // Write back to DB
+        for (idx, enemy) in enemies.iter().enumerate() {
+            let update = &updates[idx];
 
             let mut new_rotation_y = enemy.rotation_y;
-            if decision != combat::EnemyBehaviorKind::Idle && nearest_dist > 0.01 {
-                let dx = nearest_pos.0 - enemy.x;
-                let dz = nearest_pos.1 - enemy.z;
+            if update.decision != combat::EnemyBehaviorKind::Idle && update.nearest_dist > 0.01 {
+                let dx = update.nearest_pos.0 - enemy.x;
+                let dz = update.nearest_pos.1 - enemy.z;
                 new_rotation_y = f32::atan2(-dx, -dz);
             }
 
-            let new_last_attack_time = if decision == combat::EnemyBehaviorKind::Attack {
+            let new_last_attack_time = if update.decision == combat::EnemyBehaviorKind::Attack {
                 now
             } else {
                 enemy.last_attack_time
             };
 
-            let pos = body.position();
-            let vel = body.linear_velocity();
-            let new_anim = decision.as_str();
+            let new_anim = update.decision.as_u8();
 
             // S2: Skip DB write if nothing meaningful changed
-            let pos_changed = (pos.x - enemy.x).abs() > 0.01
-                || (pos.y - enemy.y).abs() > 0.01
-                || (pos.z - enemy.z).abs() > 0.01;
+            let pos_changed = (update.new_x - enemy.x).abs() > 0.01
+                || (update.new_y - enemy.y).abs() > 0.01
+                || (update.new_z - enemy.z).abs() > 0.01;
             let anim_changed = enemy.animation_state != new_anim;
             let attack_changed = new_last_attack_time != enemy.last_attack_time;
 
@@ -306,16 +365,16 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
 
             ctx.db.enemy().id().update(Enemy {
                 id: enemy.id,
-                enemy_type: enemy.enemy_type.clone(),
+                enemy_type: enemy.enemy_type,
                 world_id: enemy.world_id.clone(),
-                x: pos.x,
-                y: pos.y,
-                z: pos.z,
+                x: update.new_x,
+                y: update.new_y,
+                z: update.new_z,
                 rotation_y: new_rotation_y,
-                velocity_x: vel.x,
-                velocity_y: vel.y,
-                velocity_z: vel.z,
-                animation_state: new_anim.to_string(),
+                velocity_x: update.new_vx,
+                velocity_y: update.new_vy,
+                velocity_z: update.new_vz,
+                animation_state: new_anim,
                 health: enemy.health,
                 max_health: enemy.max_health,
                 attack_damage: enemy.attack_damage,
@@ -327,7 +386,8 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     }
 
     // Delete consumed knockback impulses
-    for impulse in ctx.db.knockback_impulse().iter().collect::<Vec<_>>() {
-        ctx.db.knockback_impulse().id().delete(impulse.id);
+    let impulse_ids: Vec<u64> = ctx.db.knockback_impulse().iter().map(|i| i.id).collect();
+    for id in impulse_ids {
+        ctx.db.knockback_impulse().id().delete(id);
     }
 }

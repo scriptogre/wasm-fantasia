@@ -105,6 +105,10 @@ pub enum Stat {
     AttackRange,
     AttackArc,
 
+    // === Stacking ===
+    Stacks,
+    StackDecay,
+
     // === Extension ===
     Custom(String),
 }

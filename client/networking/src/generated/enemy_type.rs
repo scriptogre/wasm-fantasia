@@ -8,7 +8,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 #[sats(crate = __lib)]
 pub struct Enemy {
     pub id: u64,
-    pub enemy_type: String,
+    pub enemy_type: u8,
     pub world_id: String,
     pub x: f32,
     pub y: f32,
@@ -17,7 +17,7 @@ pub struct Enemy {
     pub velocity_x: f32,
     pub velocity_y: f32,
     pub velocity_z: f32,
-    pub animation_state: String,
+    pub animation_state: u8,
     pub health: f32,
     pub max_health: f32,
     pub attack_damage: f32,

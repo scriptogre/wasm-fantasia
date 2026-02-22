@@ -56,14 +56,15 @@ pub fn respawn(ctx: &spacetimedb::ReducerContext) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
 
     // Clear stacking buff on respawn
-    let stacking: Vec<ActiveEffect> = ctx
+    let effect_ids: Vec<u64> = ctx
         .db
         .active_effect()
         .iter()
         .filter(|e| e.owner == ctx.sender)
+        .map(|e| e.id)
         .collect();
-    for effect in stacking {
-        ctx.db.active_effect().delete(effect);
+    for id in effect_ids {
+        ctx.db.active_effect().id().delete(id);
     }
 
     ctx.db.player().identity().update(Player {
@@ -102,23 +103,25 @@ fn set_player_offline(ctx: &spacetimedb::ReducerContext) {
         // Clean up solo world data to prevent abandoned state accumulating.
         // "shared" is the multiplayer world — never delete its entities.
         if world_id != "shared" {
-            let enemies: Vec<Enemy> = ctx
+            let enemy_ids: Vec<u64> = ctx
                 .db
                 .enemy()
                 .iter()
                 .filter(|e| e.world_id == world_id)
+                .map(|e| e.id)
                 .collect();
-            for enemy in enemies {
-                ctx.db.enemy().delete(enemy);
+            for id in enemy_ids {
+                ctx.db.enemy().id().delete(id);
             }
-            let events: Vec<CombatEvent> = ctx
+            let event_ids: Vec<u64> = ctx
                 .db
                 .combat_event()
                 .iter()
                 .filter(|e| e.world_id == world_id)
+                .map(|e| e.id)
                 .collect();
-            for event in events {
-                ctx.db.combat_event().delete(event);
+            for id in event_ids {
+                ctx.db.combat_event().id().delete(id);
             }
         }
     }

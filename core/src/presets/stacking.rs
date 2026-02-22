@@ -3,11 +3,11 @@
 use crate::rules::{ActionVar, Condition, Effect, Expr, Rule, Stat, action, stat, val};
 
 fn stacks_stat() -> Stat {
-    Stat::Custom("Stacks".into())
+    Stat::Stacks
 }
 
 fn decay_stat() -> Stat {
-    Stat::Custom("StackDecay".into())
+    Stat::StackDecay
 }
 
 #[derive(Clone, Debug)]

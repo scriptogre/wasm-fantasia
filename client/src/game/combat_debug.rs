@@ -302,7 +302,7 @@ fn update_overlay(
     // ── Player stats ────────────────────────────────────────
     if let Ok((health, stats)) = player_query.single() {
         let stacks = stats
-            .map(|s| s.get(&Stat::Custom("Stacks".into())) as u32)
+            .map(|s| s.get(&Stat::Stacks) as u32)
             .unwrap_or(0);
         let atk_spd = stats.map(|s| s.get(&Stat::AttackSpeed)).unwrap_or(1.0);
         spawn_title(

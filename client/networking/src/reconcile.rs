@@ -107,7 +107,7 @@ pub(super) struct EnemySnapshot {
     pub velocity_x: f32,
     pub velocity_y: f32,
     pub velocity_z: f32,
-    pub animation_state: String,
+    pub animation_state: u8,
     pub health: f32,
     pub max_health: f32,
 }
@@ -137,7 +137,7 @@ impl From<&ServerEnemy> for EnemySnapshot {
             velocity_x: e.velocity_x,
             velocity_y: e.velocity_y,
             velocity_z: e.velocity_z,
-            animation_state: e.animation_state.clone(),
+            animation_state: e.animation_state,
             health: e.health,
             max_health: e.max_health,
         }
@@ -303,7 +303,7 @@ pub(super) fn drain_db_events(
                         health.max = new.max_health;
 
                         if let Some(mut behavior) = behavior {
-                            let kind = EnemyBehaviorKind::parse_str(&new.animation_state);
+                            let kind = EnemyBehaviorKind::from_u8(new.animation_state);
                             let new_behavior = match kind {
                                 EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
                                 EnemyBehaviorKind::Chase => EnemyBehavior::Chase,

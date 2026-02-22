@@ -384,44 +384,55 @@ impl PhysicsWorld {
     }
 
     /// Detect collisions and apply contact impulses. Returns the number of contacts.
+    ///
+    /// Only static-vs-dynamic pairs are resolved (e.g. floor-vs-enemy).
+    /// Dynamic-dynamic contacts are skipped because the server uses soft
+    /// separation for enemy-enemy repulsion; rigid impulses in dense groups
+    /// cause oscillation.
+    ///
+    /// Colliders are partitioned by body type so the loop is O(S*D) where
+    /// S = static colliders and D = dynamic colliders. With a single floor
+    /// this is O(D) — linear in the number of enemies.
     fn solve_contacts(&mut self, _dt: Scalar) -> usize {
         let mut contact_count = 0;
-        let num_colliders = self.colliders.len();
 
-        // Iterate over all collider pairs (broad phase: brute-force for simplicity).
-        for i in 0..num_colliders {
-            for j in (i + 1)..num_colliders {
-                let body_a_idx = self.colliders[i].body.0;
-                let body_b_idx = self.colliders[j].body.0;
-
-                // Skip if either body is tombstoned.
-                if !self.bodies[body_a_idx].alive || !self.bodies[body_b_idx].alive {
-                    continue;
+        // Partition collider indices by body type to avoid O(C²) all-pairs loop.
+        let mut static_colliders: Vec<usize> = Vec::new();
+        let mut dynamic_colliders: Vec<usize> = Vec::new();
+        for (idx, entry) in self.colliders.iter().enumerate() {
+            let body = &self.bodies[entry.body.0];
+            if !body.alive {
+                continue;
+            }
+            match body.body_type {
+                RigidBodyType::Static | RigidBodyType::Kinematic => {
+                    static_colliders.push(idx);
                 }
-
-                // Only resolve static-vs-dynamic pairs (e.g. floor-vs-enemy).
-                // Dynamic-dynamic contacts are skipped because the server uses
-                // soft separation (not rigid contacts) for enemy-enemy repulsion,
-                // and the impulse chaos from dense groups causes oscillation.
-                let a_dynamic = self.bodies[body_a_idx].body_type == RigidBodyType::Dynamic;
-                let b_dynamic = self.bodies[body_b_idx].body_type == RigidBodyType::Dynamic;
-                if a_dynamic == b_dynamic {
-                    continue;
+                RigidBodyType::Dynamic => {
+                    dynamic_colliders.push(idx);
                 }
+            }
+        }
 
-                let pos_a = self.bodies[body_a_idx].position;
-                let rot_a = self.bodies[body_a_idx].rotation;
-                let pos_b = self.bodies[body_b_idx].position;
-                let rot_b = self.bodies[body_b_idx].rotation;
+        // Only check cross-type pairs: each dynamic collider vs each static collider.
+        for &si in &static_colliders {
+            for &di in &dynamic_colliders {
+                let body_s_idx = self.colliders[si].body.0;
+                let body_d_idx = self.colliders[di].body.0;
+
+                let pos_s = self.bodies[body_s_idx].position;
+                let rot_s = self.bodies[body_s_idx].rotation;
+                let pos_d = self.bodies[body_d_idx].position;
+                let rot_d = self.bodies[body_d_idx].rotation;
 
                 // Use avian's contact query (wraps Parry).
                 let contact = contact_query::contact(
-                    &self.colliders[i].shape,
-                    pos_a,
-                    rot_a,
-                    &self.colliders[j].shape,
-                    pos_b,
-                    rot_b,
+                    &self.colliders[si].shape,
+                    pos_s,
+                    rot_s,
+                    &self.colliders[di].shape,
+                    pos_d,
+                    rot_d,
                     self.config.speculative_margin,
                 );
 
@@ -436,97 +447,74 @@ impl PhysicsWorld {
 
                 contact_count += 1;
 
-                let normal = c.global_normal1(&rot_a);
-                let inv_mass_a = if a_dynamic {
-                    self.bodies[body_a_idx].inv_mass
-                } else {
-                    0.0
-                };
-                let inv_mass_b = if b_dynamic {
-                    self.bodies[body_b_idx].inv_mass
-                } else {
-                    0.0
-                };
-                let inv_mass_sum = inv_mass_a + inv_mass_b;
+                let normal = c.global_normal1(&rot_s);
+                let inv_mass_s = 0.0; // static body
+                let inv_mass_d = self.bodies[body_d_idx].inv_mass;
+                let inv_mass_sum = inv_mass_d; // inv_mass_s is always 0
 
                 if inv_mass_sum <= 0.0 {
                     continue;
                 }
 
                 // Relative velocity at contact point.
-                let vel_a = self.bodies[body_a_idx].linear_velocity;
-                let vel_b = self.bodies[body_b_idx].linear_velocity;
-                let relative_vel = vel_a - vel_b;
+                let vel_s = self.bodies[body_s_idx].linear_velocity;
+                let vel_d = self.bodies[body_d_idx].linear_velocity;
+                let relative_vel = vel_s - vel_d;
                 let normal_speed = relative_vel.dot(normal);
 
-                // Skip impulse if bodies are separating (normal points from A to B,
-                // so normal_speed > 0 means A is approaching B).
+                // Skip impulse if bodies are separating.
                 if normal_speed < 0.0 {
-                    // Bodies are separating; only apply positional correction.
                     self.apply_positional_correction(
-                        body_a_idx,
-                        body_b_idx,
+                        body_s_idx,
+                        body_d_idx,
                         normal,
                         c.penetration,
-                        inv_mass_a,
-                        inv_mass_b,
+                        inv_mass_s,
+                        inv_mass_d,
                         inv_mass_sum,
                     );
                     continue;
                 }
 
                 // Restitution from the pair.
-                let restitution = (self.bodies[body_a_idx].restitution
-                    + self.bodies[body_b_idx].restitution)
+                let restitution = (self.bodies[body_s_idx].restitution
+                    + self.bodies[body_d_idx].restitution)
                     * 0.5;
 
                 // Normal impulse magnitude.
                 let j_n = -(1.0 + restitution) * normal_speed / inv_mass_sum;
                 let impulse = normal * j_n;
 
-                if a_dynamic {
-                    self.bodies[body_a_idx].linear_velocity += impulse * inv_mass_a;
-                }
-                if b_dynamic {
-                    self.bodies[body_b_idx].linear_velocity -= impulse * inv_mass_b;
-                }
+                self.bodies[body_d_idx].linear_velocity -= impulse * inv_mass_d;
 
                 // Friction impulse.
                 let friction =
-                    (self.bodies[body_a_idx].friction + self.bodies[body_b_idx].friction) * 0.5;
+                    (self.bodies[body_s_idx].friction + self.bodies[body_d_idx].friction) * 0.5;
                 if friction > 0.0 {
-                    // Recompute relative velocity after normal impulse.
-                    let vel_a = self.bodies[body_a_idx].linear_velocity;
-                    let vel_b = self.bodies[body_b_idx].linear_velocity;
-                    let relative_vel = vel_a - vel_b;
+                    let vel_s = self.bodies[body_s_idx].linear_velocity;
+                    let vel_d = self.bodies[body_d_idx].linear_velocity;
+                    let relative_vel = vel_s - vel_d;
                     let tangent_vel = relative_vel - normal * relative_vel.dot(normal);
                     let tangent_speed = tangent_vel.length();
 
                     if tangent_speed > 1e-6 {
                         let tangent = tangent_vel / tangent_speed;
-                        // Coulomb friction: clamp tangent impulse magnitude.
                         let j_t = (-tangent_speed / inv_mass_sum).max(-j_n * friction);
                         let friction_impulse = tangent * j_t;
 
-                        if a_dynamic {
-                            self.bodies[body_a_idx].linear_velocity +=
-                                friction_impulse * inv_mass_a;
-                        }
-                        if b_dynamic {
-                            self.bodies[body_b_idx].linear_velocity -=
-                                friction_impulse * inv_mass_b;
-                        }
+                        self.bodies[body_d_idx].linear_velocity -=
+                            friction_impulse * inv_mass_d;
                     }
                 }
 
                 // Positional correction (Baumgarte stabilization).
                 self.apply_positional_correction(
-                    body_a_idx,
-                    body_b_idx,
+                    body_s_idx,
+                    body_d_idx,
                     normal,
                     c.penetration,
-                    inv_mass_a,
-                    inv_mass_b,
+                    inv_mass_s,
+                    inv_mass_d,
                     inv_mass_sum,
                 );
             }

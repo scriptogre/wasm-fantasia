@@ -9,7 +9,7 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub struct ActiveEffect {
     pub id: u64,
     pub owner: __sdk::Identity,
-    pub effect_type: String,
+    pub effect_type: u8,
     pub magnitude: f32,
     pub duration: f32,
     pub timestamp: i64,

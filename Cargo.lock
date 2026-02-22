@@ -4455,6 +4455,7 @@ dependencies = [
 name = "game-core"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "glam 0.30.9",
  "serde",
 ]
