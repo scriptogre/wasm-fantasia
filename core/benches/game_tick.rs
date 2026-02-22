@@ -14,6 +14,9 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use game_core::combat::{defaults, enemy_ai_decision, EnemyBehaviorKind};
 use std::collections::HashMap;
 
+/// Half-neighbor offsets for symmetric pair visitation.
+const HALF_NEIGHBORS: [(i32, i32); 5] = [(0, 0), (1, 0), (-1, 1), (0, 1), (1, 1)];
+
 // ============================================================================
 // Mirror structs — same layout as server schema, without SpacetimeDB deps
 // ============================================================================
@@ -45,7 +48,7 @@ struct EnemyOld {
 struct EnemyNew {
     id: u64,
     enemy_type: u8,
-    world_id: String,
+    world_id: u32,
     x: f32,
     y: f32,
     z: f32,
@@ -62,23 +65,23 @@ struct EnemyNew {
     last_attack_time: i64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct Player {
     x: f32,
     z: f32,
-    world_id: String,
+    world_id: u32,
 }
 
 // ============================================================================
 // Data generation
 // ============================================================================
 
-fn make_players(count: usize, world_id: &str) -> Vec<Player> {
+fn make_players(count: usize, world_id: u32) -> Vec<Player> {
     (0..count)
         .map(|_| Player {
             x: 0.0,
             z: 0.0,
-            world_id: world_id.to_string(),
+            world_id,
         })
         .collect()
 }
@@ -115,7 +118,7 @@ fn make_enemies_old(count: usize, world_id: &str) -> Vec<EnemyOld> {
         .collect()
 }
 
-fn make_enemies_new(count: usize, world_id: &str) -> Vec<EnemyNew> {
+fn make_enemies_new(count: usize, world_id: u32) -> Vec<EnemyNew> {
     let seed = 12345u64;
     (0..count)
         .map(|i| {
@@ -127,7 +130,7 @@ fn make_enemies_new(count: usize, world_id: &str) -> Vec<EnemyNew> {
             EnemyNew {
                 id: i as u64,
                 enemy_type: 0,
-                world_id: world_id.to_string(),
+                world_id,
                 x: angle.cos() * radius,
                 y: 0.0,
                 z: angle.sin() * radius,
@@ -156,7 +159,7 @@ fn bench_grouping(c: &mut Criterion) {
 
     for count in [1000, 5000, 10000] {
         let enemies_old = make_enemies_old(count, "world1");
-        let enemies_new = make_enemies_new(count, "world1");
+        let enemies_new = make_enemies_new(count, 1);
 
         // Old approach: entry().or_default() clones world_id every row
         group.bench_with_input(
@@ -173,19 +176,15 @@ fn bench_grouping(c: &mut Criterion) {
             },
         );
 
-        // New approach: get_mut/insert only clones on first occurrence
+        // New approach: u32 world_id — no allocation, just copy
         group.bench_with_input(
-            BenchmarkId::new("new_get_mut", count),
+            BenchmarkId::new("new_u32", count),
             &enemies_new,
             |b, enemies| {
                 b.iter(|| {
-                    let mut by_world: HashMap<String, Vec<&EnemyNew>> = HashMap::new();
+                    let mut by_world: HashMap<u32, Vec<&EnemyNew>> = HashMap::new();
                     for e in enemies {
-                        if let Some(vec) = by_world.get_mut(&e.world_id) {
-                            vec.push(e);
-                        } else {
-                            by_world.insert(e.world_id.clone(), vec![e]);
-                        }
+                        by_world.entry(e.world_id).or_default().push(e);
                     }
                     black_box(&by_world);
                 })
@@ -204,10 +203,11 @@ fn bench_spatial_grid(c: &mut Criterion) {
     let mut group = c.benchmark_group("spatial_grid");
 
     for count in [1000, 5000, 10000] {
-        let enemies = make_enemies_new(count, "world1");
+        let enemies = make_enemies_new(count, 1);
 
+        // Old: HashMap grid with 9-neighbor lookup
         group.bench_with_input(
-            BenchmarkId::from_parameter(count),
+            BenchmarkId::new("old_hashmap", count),
             &enemies,
             |b, enemies| {
                 let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
@@ -258,9 +258,149 @@ fn bench_spatial_grid(c: &mut Criterion) {
                 })
             },
         );
+
+        // New: flat counting-sort grid with half-neighbor pattern
+        group.bench_with_input(
+            BenchmarkId::new("new_flat_grid", count),
+            &enemies,
+            |b, enemies| {
+                let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
+                let sep_radius_sq = sep_radius * sep_radius;
+                let sep_strength = defaults::ENEMY_SEPARATION_STRENGTH;
+                let inv_cell = 1.0 / sep_radius;
+
+                b.iter(|| {
+                    flat_grid_separation(enemies, inv_cell, sep_radius_sq, sep_strength);
+                })
+            },
+        );
     }
 
     group.finish();
+}
+
+/// Flat counting-sort grid with half-neighbor separation.
+/// Extracted so both `bench_spatial_grid` and `bench_full_tick_simulation` can share it.
+fn flat_grid_separation(
+    enemies: &[EnemyNew],
+    inv_cell: f32,
+    sep_radius_sq: f32,
+    sep_strength: f32,
+) -> Vec<(f32, f32)> {
+    // Pass 1: cell coords + bounding box
+    let mut cell_coords: Vec<(i32, i32)> = Vec::with_capacity(enemies.len());
+    let (mut min_cx, mut max_cx) = (i32::MAX, i32::MIN);
+    let (mut min_cz, mut max_cz) = (i32::MAX, i32::MIN);
+    for enemy in enemies.iter() {
+        let cx = (enemy.x * inv_cell).floor() as i32;
+        let cz = (enemy.z * inv_cell).floor() as i32;
+        cell_coords.push((cx, cz));
+        min_cx = min_cx.min(cx);
+        max_cx = max_cx.max(cx);
+        min_cz = min_cz.min(cz);
+        max_cz = max_cz.max(cz);
+    }
+
+    let grid_w = (max_cx - min_cx + 1) as usize;
+    let grid_h = (max_cz - min_cz + 1) as usize;
+    let grid_size = grid_w * grid_h;
+
+    let mut separation = vec![(0.0f32, 0.0f32); enemies.len()];
+
+    // Pass 2: count
+    let mut counts = vec![0u32; grid_size];
+    for &(cx, cz) in &cell_coords {
+        counts[(cz - min_cz) as usize * grid_w + (cx - min_cx) as usize] += 1;
+    }
+
+    // Pass 3: prefix sum
+    let mut offsets = vec![0u32; grid_size + 1];
+    for i in 0..grid_size {
+        offsets[i + 1] = offsets[i] + counts[i];
+    }
+
+    // Pass 4: place indices
+    let mut sorted = vec![0usize; enemies.len()];
+    let mut write_pos = offsets.clone();
+    for (idx, &(cx, cz)) in cell_coords.iter().enumerate() {
+        let flat = (cz - min_cz) as usize * grid_w + (cx - min_cx) as usize;
+        sorted[write_pos[flat] as usize] = idx;
+        write_pos[flat] += 1;
+    }
+
+    let sep_radius = sep_radius_sq.sqrt();
+
+    // Half-neighbor separation
+    for gz in 0..grid_h as i32 {
+        for gx in 0..grid_w as i32 {
+            let cell_flat = gz as usize * grid_w + gx as usize;
+            let cell_start = offsets[cell_flat] as usize;
+            let cell_end = offsets[cell_flat + 1] as usize;
+            if cell_start == cell_end {
+                continue;
+            }
+
+            for &(dx, dz) in &HALF_NEIGHBORS {
+                let nx = gx + dx;
+                let nz = gz + dz;
+                if nx < 0 || nx >= grid_w as i32 || nz < 0 || nz >= grid_h as i32 {
+                    continue;
+                }
+                let nb_flat = nz as usize * grid_w + nx as usize;
+                let nb_start = offsets[nb_flat] as usize;
+                let nb_end = offsets[nb_flat + 1] as usize;
+                if nb_start == nb_end {
+                    continue;
+                }
+
+                if cell_flat == nb_flat {
+                    for ai in cell_start..cell_end {
+                        for bi in (ai + 1)..cell_end {
+                            let i = sorted[ai];
+                            let j = sorted[bi];
+                            let edx = enemies[i].x - enemies[j].x;
+                            let edz = enemies[i].z - enemies[j].z;
+                            let dist_sq = edx * edx + edz * edz;
+                            if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
+                                let dist = dist_sq.sqrt();
+                                let overlap = 1.0 - dist / sep_radius;
+                                let push = overlap * sep_strength / dist;
+                                let px = edx * push;
+                                let pz = edz * push;
+                                separation[i].0 += px;
+                                separation[i].1 += pz;
+                                separation[j].0 -= px;
+                                separation[j].1 -= pz;
+                            }
+                        }
+                    }
+                } else {
+                    for ai in cell_start..cell_end {
+                        for bi in nb_start..nb_end {
+                            let i = sorted[ai];
+                            let j = sorted[bi];
+                            let edx = enemies[i].x - enemies[j].x;
+                            let edz = enemies[i].z - enemies[j].z;
+                            let dist_sq = edx * edx + edz * edz;
+                            if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
+                                let dist = dist_sq.sqrt();
+                                let overlap = 1.0 - dist / sep_radius;
+                                let push = overlap * sep_strength / dist;
+                                let px = edx * push;
+                                let pz = edz * push;
+                                separation[i].0 += px;
+                                separation[i].1 += pz;
+                                separation[j].0 -= px;
+                                separation[j].1 -= pz;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    black_box(separation)
 }
 
 // ============================================================================
@@ -271,8 +411,8 @@ fn bench_ai_decisions(c: &mut Criterion) {
     let mut group = c.benchmark_group("ai_decisions");
 
     for count in [1000, 5000, 10000] {
-        let enemies = make_enemies_new(count, "world1");
-        let players = make_players(1, "world1");
+        let enemies = make_enemies_new(count, 1);
+        let players = make_players(1, 1);
         let now = 1_000_000_000i64;
         let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
 
@@ -317,7 +457,7 @@ fn bench_build_update(c: &mut Criterion) {
 
     for count in [1000, 5000, 10000] {
         let enemies_old = make_enemies_old(count, "world1");
-        let enemies_new = make_enemies_new(count, "world1");
+        let enemies_new = make_enemies_new(count, 1);
 
         // Old: clone enemy_type String + clone world_id + allocate animation_state
         group.bench_with_input(
@@ -352,7 +492,7 @@ fn bench_build_update(c: &mut Criterion) {
             },
         );
 
-        // New: copy u8 fields + clone world_id only (no String alloc for anim/type)
+        // New: copy u8/u32 fields — zero String allocations
         group.bench_with_input(
             BenchmarkId::new("new_u8", count),
             &enemies_new,
@@ -363,7 +503,7 @@ fn bench_build_update(c: &mut Criterion) {
                         updates.push(EnemyNew {
                             id: enemy.id,
                             enemy_type: enemy.enemy_type,
-                            world_id: enemy.world_id.clone(),
+                            world_id: enemy.world_id,
                             x: enemy.x + 0.1,
                             y: enemy.y,
                             z: enemy.z + 0.1,
@@ -405,7 +545,7 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
             &count,
             |b, &count| {
                 let enemies = make_enemies_old(count, "world1");
-                let players = make_players(1, "world1");
+                let players = make_players(1, 1);
                 let now = 1_000_000_000i64;
                 let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
                 let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
@@ -420,18 +560,9 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
                             .or_default()
                             .push(e);
                     }
-                    let mut players_by_world: HashMap<String, Vec<&Player>> = HashMap::new();
-                    for p in &players {
-                        players_by_world
-                            .entry(p.world_id.clone())
-                            .or_default()
-                            .push(p);
-                    }
 
-                    for (world_id, enemies) in &enemies_by_world {
-                        let Some(players) = players_by_world.get(world_id) else {
-                            continue;
-                        };
+                    for (_world_id, enemies) in &enemies_by_world {
+                        let players = &players;
 
                         // 2. Spatial grid
                         let mut grid: HashMap<(i32, i32), Vec<usize>> =
@@ -492,30 +623,22 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
             BenchmarkId::new("new_u8", count),
             &count,
             |b, &count| {
-                let enemies = make_enemies_new(count, "world1");
-                let players = make_players(1, "world1");
+                let enemies = make_enemies_new(count, 1);
+                let players = make_players(1, 1);
                 let now = 1_000_000_000i64;
                 let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
                 let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
                 let inv_cell = 1.0 / sep_radius;
 
                 b.iter(|| {
-                    // 1. Group by world_id (new: get_mut avoids clone)
-                    let mut enemies_by_world: HashMap<String, Vec<&EnemyNew>> = HashMap::new();
+                    // 1. Group by world_id (new: u32 key — zero-cost copy)
+                    let mut enemies_by_world: HashMap<u32, Vec<&EnemyNew>> = HashMap::new();
                     for e in &enemies {
-                        if let Some(vec) = enemies_by_world.get_mut(&e.world_id) {
-                            vec.push(e);
-                        } else {
-                            enemies_by_world.insert(e.world_id.clone(), vec![e]);
-                        }
+                        enemies_by_world.entry(e.world_id).or_default().push(e);
                     }
-                    let mut players_by_world: HashMap<String, Vec<&Player>> = HashMap::new();
+                    let mut players_by_world: HashMap<u32, Vec<&Player>> = HashMap::new();
                     for p in &players {
-                        if let Some(vec) = players_by_world.get_mut(&p.world_id) {
-                            vec.push(p);
-                        } else {
-                            players_by_world.insert(p.world_id.clone(), vec![p]);
-                        }
+                        players_by_world.entry(p.world_id).or_default().push(p);
                     }
 
                     for (world_id, enemies) in &enemies_by_world {
@@ -523,14 +646,16 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
                             continue;
                         };
 
-                        // 2. Spatial grid
-                        let mut grid: HashMap<(i32, i32), Vec<usize>> =
-                            HashMap::with_capacity(enemies.len());
-                        for (idx, enemy) in enemies.iter().enumerate() {
-                            let cx = (enemy.x * inv_cell).floor() as i32;
-                            let cz = (enemy.z * inv_cell).floor() as i32;
-                            grid.entry((cx, cz)).or_default().push(idx);
-                        }
+                        // 2. Spatial grid (flat counting-sort)
+                        // Convert &[&EnemyNew] to temporary slice for flat_grid_separation
+                        let enemy_slice: Vec<EnemyNew> =
+                            enemies.iter().map(|e| (*e).clone()).collect();
+                        let _separation = flat_grid_separation(
+                            &enemy_slice,
+                            inv_cell,
+                            sep_radius * sep_radius,
+                            defaults::ENEMY_SEPARATION_STRENGTH,
+                        );
 
                         // 3. AI decisions
                         let mut decisions = Vec::with_capacity(enemies.len());
@@ -548,13 +673,13 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
                             decisions.push(enemy_ai_decision(nearest_dist, ready));
                         }
 
-                        // 4. Build update structs (new: u8 copy, no String alloc)
+                        // 4. Build update structs (new: u8/u32 copy, no String alloc)
                         let mut updates = Vec::with_capacity(enemies.len());
                         for (i, enemy) in enemies.iter().enumerate() {
                             updates.push(EnemyNew {
                                 id: enemy.id,
                                 enemy_type: enemy.enemy_type,
-                                world_id: enemy.world_id.clone(),
+                                world_id: enemy.world_id,
                                 x: enemy.x,
                                 y: enemy.y,
                                 z: enemy.z,
@@ -582,8 +707,7 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
 }
 
 // ============================================================================
-// Benchmark: world_id clone cost — how much the per-enemy String clone costs
-// relative to the update with skip-unchanged optimization.
+// Benchmark: world_id copy cost — with u32, this is trivial.
 // Shows that the S2 skip-unchanged check is the real win.
 // ============================================================================
 
@@ -591,21 +715,21 @@ fn bench_world_id_skip_unchanged(c: &mut Criterion) {
     let mut group = c.benchmark_group("world_id_skip_unchanged");
 
     for count in [1000, 5000, 10000] {
-        let enemies = make_enemies_new(count, "world1");
+        let enemies = make_enemies_new(count, 1);
 
-        // All enemies update (worst case: N clones)
+        // All enemies update (worst case: N copies — trivial with u32)
         group.bench_with_input(
             BenchmarkId::new("all_changed", count),
             &enemies,
             |b, enemies| {
                 b.iter(|| {
-                    let world_id = enemies[0].world_id.clone();
+                    let world_id = enemies[0].world_id;
                     let mut updates = Vec::with_capacity(enemies.len());
                     for enemy in enemies {
                         updates.push(EnemyNew {
                             id: enemy.id,
                             enemy_type: enemy.enemy_type,
-                            world_id: world_id.clone(),
+                            world_id,
                             x: enemy.x + 0.1,
                             y: enemy.y,
                             z: enemy.z + 0.1,
@@ -633,7 +757,7 @@ fn bench_world_id_skip_unchanged(c: &mut Criterion) {
             &enemies,
             |b, enemies| {
                 b.iter(|| {
-                    let world_id = enemies[0].world_id.clone();
+                    let world_id = enemies[0].world_id;
                     let mut updates = Vec::with_capacity(enemies.len() / 10);
                     for (i, enemy) in enemies.iter().enumerate() {
                         // Simulate skip-unchanged: only 10% actually write
@@ -643,7 +767,7 @@ fn bench_world_id_skip_unchanged(c: &mut Criterion) {
                         updates.push(EnemyNew {
                             id: enemy.id,
                             enemy_type: enemy.enemy_type,
-                            world_id: world_id.clone(),
+                            world_id,
                             x: enemy.x + 0.1,
                             y: enemy.y,
                             z: enemy.z + 0.1,

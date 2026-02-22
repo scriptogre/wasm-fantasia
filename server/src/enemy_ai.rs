@@ -3,6 +3,10 @@ use game_core::combat::{self, defaults, enemy_ai_decision, enemy_types, EnemyBeh
 use spacetimedb::Table;
 use std::collections::HashMap;
 
+/// Half-neighbor offsets for symmetric pair visitation.
+/// Each pair (i, j) is visited exactly once — no `j <= i` skip needed.
+const HALF_NEIGHBORS: [(i32, i32); 5] = [(0, 0), (1, 0), (-1, 1), (0, 1), (1, 1)];
+
 use crate::schema::*;
 use crate::TICK_INTERVAL_MICROS;
 
@@ -38,7 +42,7 @@ pub fn spawn_enemies(
         ctx.db.enemy().insert(Enemy {
             id: 0,
             enemy_type: enemy_types::BASIC,
-            world_id: world_id.clone(),
+            world_id,
             x: x + angle.cos() * radius,
             y,
             z: z + angle.sin() * radius,
@@ -97,19 +101,14 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
 
     // Group alive online players by world_id
-    let mut players_by_world: HashMap<String, Vec<Player>> = HashMap::new();
+    let mut players_by_world: HashMap<u32, Vec<Player>> = HashMap::new();
     for p in ctx
         .db
         .player()
         .iter()
         .filter(|p| p.online && p.health > 0.0)
     {
-        // Only clone world_id when inserting a new key (avoids clone per row)
-        if let Some(vec) = players_by_world.get_mut(&p.world_id) {
-            vec.push(p);
-        } else {
-            players_by_world.insert(p.world_id.clone(), vec![p]);
-        }
+        players_by_world.entry(p.world_id).or_default().push(p);
     }
 
     if players_by_world.is_empty() {
@@ -117,13 +116,9 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     }
 
     // Group alive enemies by world_id
-    let mut enemies_by_world: HashMap<String, Vec<Enemy>> = HashMap::new();
+    let mut enemies_by_world: HashMap<u32, Vec<Enemy>> = HashMap::new();
     for e in ctx.db.enemy().iter().filter(|e| e.health > 0.0) {
-        if let Some(vec) = enemies_by_world.get_mut(&e.world_id) {
-            vec.push(e);
-        } else {
-            enemies_by_world.insert(e.world_id.clone(), vec![e]);
-        }
+        enemies_by_world.entry(e.world_id).or_default().push(e);
     }
 
     // S4: Index knockback impulses by enemy_id for O(1) lookup
@@ -137,16 +132,13 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
 
     let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
 
-    for (world_id_key, enemies) in &enemies_by_world {
-        if ctx.db.world_pause().world_id().find(world_id_key).is_some() {
+    for (&world_id, enemies) in &enemies_by_world {
+        if ctx.db.world_pause().world_id().find(&world_id).is_some() {
             continue;
         }
-        let Some(players) = players_by_world.get(world_id_key) else {
+        let Some(players) = players_by_world.get(&world_id) else {
             continue;
         };
-
-        // Clone world_id once per world, not per enemy
-        let world_id = world_id_key.clone();
 
         // S1: Spatial grid for enemy separation (O(N) instead of O(N²))
         let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
@@ -154,37 +146,152 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         let sep_strength = defaults::ENEMY_SEPARATION_STRENGTH;
         let inv_cell = 1.0 / sep_radius;
 
-        let mut grid: HashMap<(i32, i32), Vec<usize>> =
-            HashMap::with_capacity(enemies.len());
-        for (idx, enemy) in enemies.iter().enumerate() {
+        // Pass 1: compute cell coords + bounding box
+        let mut cell_coords: Vec<(i32, i32)> = Vec::with_capacity(enemies.len());
+        let (mut min_cx, mut max_cx) = (i32::MAX, i32::MIN);
+        let (mut min_cz, mut max_cz) = (i32::MAX, i32::MIN);
+        for enemy in enemies.iter() {
             let cx = (enemy.x * inv_cell).floor() as i32;
             let cz = (enemy.z * inv_cell).floor() as i32;
-            grid.entry((cx, cz)).or_default().push(idx);
+            cell_coords.push((cx, cz));
+            min_cx = min_cx.min(cx);
+            max_cx = max_cx.max(cx);
+            min_cz = min_cz.min(cz);
+            max_cz = max_cz.max(cz);
         }
 
+        let grid_w = (max_cx - min_cx + 1) as usize;
+        let grid_h = (max_cz - min_cz + 1) as usize;
+
         let mut separation: Vec<(f32, f32)> = vec![(0.0, 0.0); enemies.len()];
-        for (&(cx, cz), cell_indices) in &grid {
-            for &i in cell_indices {
-                for dcx in -1..=1 {
-                    for dcz in -1..=1 {
-                        if let Some(neighbor_indices) = grid.get(&(cx + dcx, cz + dcz)) {
-                            for &j in neighbor_indices {
-                                if j <= i {
-                                    continue;
+
+        if grid_w * grid_h <= 100_000 {
+            // Flat counting-sort grid
+            let grid_size = grid_w * grid_h;
+
+            // Pass 2: count enemies per cell
+            let mut counts = vec![0u32; grid_size];
+            for &(cx, cz) in &cell_coords {
+                let flat = (cz - min_cz) as usize * grid_w + (cx - min_cx) as usize;
+                counts[flat] += 1;
+            }
+
+            // Pass 3: prefix sum → start offsets
+            let mut offsets = vec![0u32; grid_size + 1];
+            for i in 0..grid_size {
+                offsets[i + 1] = offsets[i] + counts[i];
+            }
+
+            // Pass 4: place enemy indices into sorted array
+            let mut sorted = vec![0usize; enemies.len()];
+            let mut write_pos = offsets.clone();
+            for (idx, &(cx, cz)) in cell_coords.iter().enumerate() {
+                let flat = (cz - min_cz) as usize * grid_w + (cx - min_cx) as usize;
+                sorted[write_pos[flat] as usize] = idx;
+                write_pos[flat] += 1;
+            }
+
+            // Separation with half-neighbor pattern (5 lookups per cell, each pair once)
+            for gz in 0..grid_h as i32 {
+                for gx in 0..grid_w as i32 {
+                    let cell_flat = gz as usize * grid_w + gx as usize;
+                    let cell_start = offsets[cell_flat] as usize;
+                    let cell_end = offsets[cell_flat + 1] as usize;
+                    if cell_start == cell_end {
+                        continue;
+                    }
+
+                    for &(dx, dz) in &HALF_NEIGHBORS {
+                        let nx = gx + dx;
+                        let nz = gz + dz;
+                        if nx < 0 || nx >= grid_w as i32 || nz < 0 || nz >= grid_h as i32 {
+                            continue;
+                        }
+                        let nb_flat = nz as usize * grid_w + nx as usize;
+                        let nb_start = offsets[nb_flat] as usize;
+                        let nb_end = offsets[nb_flat + 1] as usize;
+                        if nb_start == nb_end {
+                            continue;
+                        }
+
+                        if cell_flat == nb_flat {
+                            // Same cell: check all unique pairs within
+                            for ai in cell_start..cell_end {
+                                for bi in (ai + 1)..cell_end {
+                                    let i = sorted[ai];
+                                    let j = sorted[bi];
+                                    let edx = enemies[i].x - enemies[j].x;
+                                    let edz = enemies[i].z - enemies[j].z;
+                                    let dist_sq = edx * edx + edz * edz;
+                                    if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
+                                        let dist = dist_sq.sqrt();
+                                        let overlap = 1.0 - dist / sep_radius;
+                                        let push = overlap * sep_strength / dist;
+                                        let px = edx * push;
+                                        let pz = edz * push;
+                                        separation[i].0 += px;
+                                        separation[i].1 += pz;
+                                        separation[j].0 -= px;
+                                        separation[j].1 -= pz;
+                                    }
                                 }
-                                let dx = enemies[i].x - enemies[j].x;
-                                let dz = enemies[i].z - enemies[j].z;
-                                let dist_sq = dx * dx + dz * dz;
-                                if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
-                                    let dist = dist_sq.sqrt();
-                                    let overlap = 1.0 - dist / sep_radius;
-                                    let push = overlap * sep_strength / dist;
-                                    let px = dx * push;
-                                    let pz = dz * push;
-                                    separation[i].0 += px;
-                                    separation[i].1 += pz;
-                                    separation[j].0 -= px;
-                                    separation[j].1 -= pz;
+                            }
+                        } else {
+                            // Different cells: all pairs between cell and neighbor
+                            for ai in cell_start..cell_end {
+                                for bi in nb_start..nb_end {
+                                    let i = sorted[ai];
+                                    let j = sorted[bi];
+                                    let edx = enemies[i].x - enemies[j].x;
+                                    let edz = enemies[i].z - enemies[j].z;
+                                    let dist_sq = edx * edx + edz * edz;
+                                    if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
+                                        let dist = dist_sq.sqrt();
+                                        let overlap = 1.0 - dist / sep_radius;
+                                        let push = overlap * sep_strength / dist;
+                                        let px = edx * push;
+                                        let pz = edz * push;
+                                        separation[i].0 += px;
+                                        separation[i].1 += pz;
+                                        separation[j].0 -= px;
+                                        separation[j].1 -= pz;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Fallback: HashMap grid for extremely sparse distributions
+            let mut grid: HashMap<(i32, i32), Vec<usize>> =
+                HashMap::with_capacity(enemies.len());
+            for (idx, &(cx, cz)) in cell_coords.iter().enumerate() {
+                grid.entry((cx, cz)).or_default().push(idx);
+            }
+            for (&(cx, cz), cell_indices) in &grid {
+                for &i in cell_indices {
+                    for dcx in -1..=1 {
+                        for dcz in -1..=1 {
+                            if let Some(neighbor_indices) = grid.get(&(cx + dcx, cz + dcz)) {
+                                for &j in neighbor_indices {
+                                    if j <= i {
+                                        continue;
+                                    }
+                                    let dx = enemies[i].x - enemies[j].x;
+                                    let dz = enemies[i].z - enemies[j].z;
+                                    let dist_sq = dx * dx + dz * dz;
+                                    if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
+                                        let dist = dist_sq.sqrt();
+                                        let overlap = 1.0 - dist / sep_radius;
+                                        let push = overlap * sep_strength / dist;
+                                        let px = dx * push;
+                                        let pz = dz * push;
+                                        separation[i].0 += px;
+                                        separation[i].1 += pz;
+                                        separation[j].0 -= px;
+                                        separation[j].1 -= pz;
+                                    }
                                 }
                             }
                         }
@@ -212,20 +319,21 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         let mut updates: Vec<EnemyUpdate> = Vec::with_capacity(enemies.len());
 
         // Collect airborne enemy indices + their impulses for physics
-        let mut airborne_indices: Vec<usize> = Vec::new();
+        let mut airborne_indices: Vec<usize> = Vec::with_capacity(64);
 
         for (idx, enemy) in enemies.iter().enumerate() {
-            let mut nearest_dist = f32::MAX;
+            let mut nearest_dist_sq = f32::MAX;
             let mut nearest_pos = (0.0_f32, 0.0_f32);
             for p in players {
                 let dx = p.x - enemy.x;
                 let dz = p.z - enemy.z;
-                let dist = (dx * dx + dz * dz).sqrt();
-                if dist < nearest_dist {
-                    nearest_dist = dist;
+                let dist_sq = dx * dx + dz * dz;
+                if dist_sq < nearest_dist_sq {
+                    nearest_dist_sq = dist_sq;
                     nearest_pos = (p.x, p.z);
                 }
             }
+            let nearest_dist = nearest_dist_sq.sqrt();
 
             let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
             let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
@@ -369,7 +477,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             ctx.db.enemy().id().update(Enemy {
                 id: enemy.id,
                 enemy_type: enemy.enemy_type,
-                world_id: world_id.clone(),
+                world_id,
                 x: update.new_x,
                 y: update.new_y,
                 z: update.new_z,
