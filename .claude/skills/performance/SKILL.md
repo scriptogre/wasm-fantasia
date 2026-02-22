@@ -98,6 +98,88 @@ If the project targets WASM (check for `wasm32` targets, `[lib] crate-type = ["c
 - Prefer `&str` borrows over `String` ownership where lifetime allows
 - Pre-size `Vec::with_capacity()` when the count is known
 
+## GPU / Rendering Checklist
+
+Work through each rule below in the same way as the CPU checklist. These apply to the Bevy client and are especially important for WebGPU where driver overhead is higher than native Vulkan/Metal.
+
+### 12. Share material and mesh handles — never allocate per entity
+
+Every unique `Handle<Mesh>` + `Handle<Material>` pair is a separate draw call. Thousands of enemies should use the same handles.
+
+Red flags: `materials.add()` or `meshes.add()` inside a spawn loop or an update system. `asset_server.load()` called repeatedly for the same path inside a loop.
+
+Fix: Create the handle once in a setup system, store it in a `Resource`, clone the handle (not the asset) when spawning.
+
+### 13. Never create or swap material/mesh handles per frame
+
+Changing a `Handle<StandardMaterial>` on an entity forces a bind group rebind. Modifying material properties (color, emissive) via `Assets<StandardMaterial>.get_mut()` also invalidates the bind group.
+
+Red flags: `*handle = materials.add(...)` inside a system that runs every frame. `materials.get_mut(handle).base_color = ...` on many entities per frame.
+
+Fix: Drive per-entity visual variation through components and custom shader uniforms (SSBO), not material properties. Use a shared material with instance data.
+
+### 14. Minimize transparent / alpha-blended entities
+
+Transparent objects can't use early depth rejection, must be sorted back-to-front, and cause overdraw. Each overlapping transparent layer re-shades the same pixel.
+
+Red flags: `AlphaMode::Blend` on materials used by many entities. Layered transparent sprites/particles covering large screen areas. Particle systems with high spawn counts and long lifetimes creating dense overlap.
+
+Fix: Use `AlphaMode::Opaque` wherever possible. Prefer additive blending (`AlphaMode::Add`) for VFX — it's order-independent and cheaper. Cap particle counts. Use short lifetimes so particles don't accumulate.
+
+### 15. Use `NoFrustumCulling` sparingly
+
+Bevy frustum-culls by default. Adding `NoFrustumCulling` means the entity is always submitted to the GPU regardless of camera visibility.
+
+Red flags: `NoFrustumCulling` on anything other than skyboxes or full-screen post-process quads. Bulk-spawned entities with `NoFrustumCulling`.
+
+### 16. Implement distance-based LOD or visibility cutoff for large entity counts
+
+At 10K+ entities, even frustum-culled meshes that are tiny on screen waste vertex processing.
+
+Red flags: No `VisibilityRange` or manual LOD system when entity counts exceed ~1000. All entities use the same high-poly mesh regardless of camera distance.
+
+Fix: Use Bevy's `VisibilityRange` component to hide distant entities entirely. Or swap to a lower-poly mesh beyond a distance threshold. Consider enabling the `meshlet` feature for GPU-driven culling when available.
+
+### 17. Avoid Vec3 in GPU buffer structs — use Vec4 for alignment
+
+GPU uniform/storage buffers follow std140/std430 alignment. `Vec3` (12 bytes) wastes 4 bytes of padding to reach 16-byte alignment. Using `Vec4` costs the same memory but avoids hidden padding and potential alignment bugs.
+
+Red flags: `Vec3` fields in `#[derive(ShaderType)]` structs. Multiple `Vec3` fields in a row in uniform buffers.
+
+Fix: Replace `Vec3` with `Vec4` (set w to 0.0 or 1.0). Or add an explicit `_padding: f32` field after each `Vec3`.
+
+### 18. Keep shadow caster count low
+
+Every shadow-casting entity is re-rendered per shadow cascade. With 2 cascades and 10K entities, that's 20K extra draw submissions.
+
+Red flags: Large numbers of entities with shadows enabled (the default). Small or distant entities casting shadows nobody can see.
+
+Fix: Add `NotShadowCaster` to entities that don't need shadows (enemies, particles, debris, small props). Keep shadow cascade count and distance low.
+
+### 19. Minimize unique render pipelines
+
+Each unique combination of (shader, material type, mesh vertex layout, render features) compiles a separate GPU pipeline. Pipeline switches are expensive.
+
+Red flags: Many custom `Material` trait implementations. Materials with feature flags that create a combinatorial explosion of shader variants.
+
+Fix: Keep custom material types to a minimum (<5). Use uniform data for variation, not separate material types. Consolidate similar materials.
+
+### 20. Don't load assets in update systems
+
+`asset_server.load()` in a per-frame system triggers repeated filesystem/cache lookups even if the asset is already loaded.
+
+Red flags: `asset_server.load("...")` inside any system that isn't gated by `run_once`, `OnEnter`, or a startup schedule.
+
+Fix: Load all assets during setup or state transitions. Store handles in Resources.
+
+### 21. Batch entity spawning with `Commands::spawn_batch`
+
+Spawning entities one at a time with `commands.spawn()` in a loop has per-call overhead. `spawn_batch` amortizes it.
+
+Red flags: `for ... { commands.spawn(...); }` loops spawning 100+ entities.
+
+Fix: Use `commands.spawn_batch(iterator)` when spawning many identical-structure entities. Or use `commands.spawn_empty()` with `insert_batch()`.
+
 ## Output Format
 
 After the audit, produce a summary table:
