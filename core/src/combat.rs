@@ -246,9 +246,9 @@ use crate::rules::{
 };
 
 /// Input to the shared attack resolver.
-pub struct AttackInput {
-    pub attacker_stats: Stats,
-    pub pre_hit_rules: Vec<Rule>,
+pub struct AttackInput<'a> {
+    pub attacker_stats: &'a Stats,
+    pub pre_hit_rules: &'a [Rule],
     pub rng_roll: f32,
 }
 
@@ -266,8 +266,8 @@ pub struct AttackOutput {
 /// Unified attack resolution. Both client and server call this with identical inputs
 /// to produce identical outputs. Deterministic when `rng_roll` is computed from
 /// shared RNG with the same seeds.
-pub fn resolve_attack(input: &AttackInput) -> AttackOutput {
-    let stats = &input.attacker_stats;
+pub fn resolve_attack(input: &AttackInput<'_>) -> AttackOutput {
+    let stats = input.attacker_stats;
 
     let base_damage = {
         let v = stats.get(&crate::rules::Stat::AttackDamage);
@@ -292,7 +292,7 @@ pub fn resolve_attack(input: &AttackInput) -> AttackOutput {
     // Execute pre-hit rules with deterministic roll
     let mut eval_stats = input.attacker_stats.clone();
     let rule_output = execute_rules_with_roll(
-        &input.pre_hit_rules,
+        input.pre_hit_rules,
         &mut eval_stats,
         &mut action,
         input.rng_roll,
@@ -379,7 +379,7 @@ pub struct CombatOutput {
 /// Callers build [`CombatInput`] from their storage (ECS or DB), call this,
 /// then apply [`CombatOutput`] back. Zero game logic lives in the callers.
 pub fn resolve_combat(input: &CombatInput) -> CombatOutput {
-    let mut hits = Vec::new();
+    let mut hits = Vec::with_capacity(input.targets.len());
     let mut rule_stats = input.attacker_stats.clone();
     let mut hit_any = false;
 
@@ -388,8 +388,8 @@ pub fn resolve_combat(input: &CombatInput) -> CombatOutput {
         let rng_roll = crate::rng::deterministic_random_u64(input.rng_seed as i64, target.id);
 
         let result = resolve_attack(&AttackInput {
-            attacker_stats: input.attacker_stats.clone(),
-            pre_hit_rules: input.rules.pre_hit.clone(),
+            attacker_stats: input.attacker_stats,
+            pre_hit_rules: &input.rules.pre_hit,
             rng_roll,
         });
 

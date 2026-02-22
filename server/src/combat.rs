@@ -41,12 +41,13 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         return;
     }
 
-    // Read stacking buff from active_effect table
+    // Read stacking buff from active_effect table (btree index on owner)
     let stacking_effect = ctx
         .db
         .active_effect()
-        .iter()
-        .find(|e| e.owner == ctx.sender && e.effect_type == effect_types::STACKING_DAMAGE);
+        .owner()
+        .filter(&ctx.sender)
+        .find(|e| e.effect_type == effect_types::STACKING_DAMAGE);
 
     let (stacks, last_hit_time) = if let Some(ref effect) = stacking_effect {
         let decay_elapsed = (now - effect.timestamp) as f64 / 1_000_000.0;
@@ -112,8 +113,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         })
     });
 
-    // Apply results to DB — clone world_id once for all inserts
-    let world_id = attacker.world_id.clone();
+    let world_id = attacker.world_id;
     for hit in &output.hits {
         let (hit_x, hit_y, hit_z) = enemy_pos_index
             .get(&hit.target_id)
@@ -127,7 +127,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
             z: hit_z,
             damage: hit.damage,
             is_crit: hit.is_crit,
-            world_id: world_id.clone(),
+            world_id,
             timestamp: now,
         });
 
@@ -151,7 +151,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
                 ctx.db.knockback_impulse().insert(KnockbackImpulse {
                     id: 0,
                     enemy_id: enemy.id,
-                    world_id: world_id.clone(),
+                    world_id,
                     impulse_x: disp.x * enemy_mass,
                     impulse_y: disp.y * enemy_mass,
                     impulse_z: disp.z * enemy_mass,
@@ -336,8 +336,7 @@ fn aoe_hit(
 
     let enemy_mass = 50.0_f32;
 
-    // Clone world_id once for all inserts
-    let world_id = attacker.world_id.clone();
+    let world_id = attacker.world_id;
     for hit in &output.hits {
         let Some(enemy) = ctx.db.enemy().id().find(hit.target_id) else {
             continue;
@@ -350,7 +349,7 @@ fn aoe_hit(
             z: enemy.z,
             damage: hit.damage,
             is_crit: hit.is_crit,
-            world_id: world_id.clone(),
+            world_id,
             timestamp: now,
         });
 
@@ -364,7 +363,7 @@ fn aoe_hit(
             ctx.db.knockback_impulse().insert(KnockbackImpulse {
                 id: 0,
                 enemy_id: enemy.id,
-                world_id: world_id.clone(),
+                world_id,
                 impulse_x: disp.x * enemy_mass,
                 impulse_y: disp.y * enemy_mass,
                 impulse_z: disp.z * enemy_mass,

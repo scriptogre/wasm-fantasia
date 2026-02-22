@@ -115,8 +115,8 @@ fn bench_resolve_attack(c: &mut Criterion) {
         let stats = default_attacker_stats(0.0);
         b.iter(|| {
             black_box(resolve_attack(&AttackInput {
-                attacker_stats: stats.clone(),
-                pre_hit_rules: rules.pre_hit.clone(),
+                attacker_stats: &stats,
+                pre_hit_rules: &rules.pre_hit,
                 rng_roll: 0.99, // no crit
             }));
         })
@@ -126,8 +126,8 @@ fn bench_resolve_attack(c: &mut Criterion) {
         let stats = default_attacker_stats(5.0);
         b.iter(|| {
             black_box(resolve_attack(&AttackInput {
-                attacker_stats: stats.clone(),
-                pre_hit_rules: rules.pre_hit.clone(),
+                attacker_stats: &stats,
+                pre_hit_rules: &rules.pre_hit,
                 rng_roll: 0.01, // guaranteed crit
             }));
         })
