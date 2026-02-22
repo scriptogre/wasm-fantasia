@@ -581,12 +581,101 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
     group.finish();
 }
 
+// ============================================================================
+// Benchmark: world_id clone cost — how much the per-enemy String clone costs
+// relative to the update with skip-unchanged optimization.
+// Shows that the S2 skip-unchanged check is the real win.
+// ============================================================================
+
+fn bench_world_id_skip_unchanged(c: &mut Criterion) {
+    let mut group = c.benchmark_group("world_id_skip_unchanged");
+
+    for count in [1000, 5000, 10000] {
+        let enemies = make_enemies_new(count, "world1");
+
+        // All enemies update (worst case: N clones)
+        group.bench_with_input(
+            BenchmarkId::new("all_changed", count),
+            &enemies,
+            |b, enemies| {
+                b.iter(|| {
+                    let world_id = enemies[0].world_id.clone();
+                    let mut updates = Vec::with_capacity(enemies.len());
+                    for enemy in enemies {
+                        updates.push(EnemyNew {
+                            id: enemy.id,
+                            enemy_type: enemy.enemy_type,
+                            world_id: world_id.clone(),
+                            x: enemy.x + 0.1,
+                            y: enemy.y,
+                            z: enemy.z + 0.1,
+                            rotation_y: 0.5,
+                            velocity_x: 1.0,
+                            velocity_y: 0.0,
+                            velocity_z: 1.0,
+                            animation_state: EnemyBehaviorKind::CHASE,
+                            health: enemy.health,
+                            max_health: enemy.max_health,
+                            attack_damage: enemy.attack_damage,
+                            attack_range: enemy.attack_range,
+                            attack_speed: enemy.attack_speed,
+                            last_attack_time: enemy.last_attack_time,
+                        });
+                    }
+                    black_box(&updates);
+                })
+            },
+        );
+
+        // Only 10% of enemies changed (typical: most idle enemies don't move)
+        group.bench_with_input(
+            BenchmarkId::new("10pct_changed", count),
+            &enemies,
+            |b, enemies| {
+                b.iter(|| {
+                    let world_id = enemies[0].world_id.clone();
+                    let mut updates = Vec::with_capacity(enemies.len() / 10);
+                    for (i, enemy) in enemies.iter().enumerate() {
+                        // Simulate skip-unchanged: only 10% actually write
+                        if i % 10 != 0 {
+                            continue;
+                        }
+                        updates.push(EnemyNew {
+                            id: enemy.id,
+                            enemy_type: enemy.enemy_type,
+                            world_id: world_id.clone(),
+                            x: enemy.x + 0.1,
+                            y: enemy.y,
+                            z: enemy.z + 0.1,
+                            rotation_y: 0.5,
+                            velocity_x: 1.0,
+                            velocity_y: 0.0,
+                            velocity_z: 1.0,
+                            animation_state: EnemyBehaviorKind::CHASE,
+                            health: enemy.health,
+                            max_health: enemy.max_health,
+                            attack_damage: enemy.attack_damage,
+                            attack_range: enemy.attack_range,
+                            attack_speed: enemy.attack_speed,
+                            last_attack_time: enemy.last_attack_time,
+                        });
+                    }
+                    black_box(&updates);
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_grouping,
     bench_spatial_grid,
     bench_ai_decisions,
     bench_build_update,
+    bench_world_id_skip_unchanged,
     bench_full_tick_simulation,
 );
 criterion_main!(benches);

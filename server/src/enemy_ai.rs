@@ -137,13 +137,16 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
 
     let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
 
-    for (world_id, enemies) in &enemies_by_world {
-        if ctx.db.world_pause().world_id().find(world_id).is_some() {
+    for (world_id_key, enemies) in &enemies_by_world {
+        if ctx.db.world_pause().world_id().find(world_id_key).is_some() {
             continue;
         }
-        let Some(players) = players_by_world.get(world_id) else {
+        let Some(players) = players_by_world.get(world_id_key) else {
             continue;
         };
+
+        // Clone world_id once per world, not per enemy
+        let world_id = world_id_key.clone();
 
         // S1: Spatial grid for enemy separation (O(N) instead of O(N²))
         let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
@@ -366,7 +369,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             ctx.db.enemy().id().update(Enemy {
                 id: enemy.id,
                 enemy_type: enemy.enemy_type,
-                world_id: enemy.world_id.clone(),
+                world_id: world_id.clone(),
                 x: update.new_x,
                 y: update.new_y,
                 z: update.new_z,
