@@ -423,7 +423,7 @@ fn animate_remote_players(
         if state.attack_sequence != anims.last_attack_sequence && state.attack_sequence > 0 {
             anims.last_attack_sequence = state.attack_sequence;
 
-            if let Some(attack_anim) = Animation::from_clip_name(&state.attack_animation) {
+            if let Some(attack_anim) = Animation::from_attack_id(state.attack_animation) {
                 if let Some(&index) = anims.animations.get(&attack_anim) {
                     anims.current_animation = Some(attack_anim);
                     anims.attack_playing_until = now + ATTACK_ANIMATION_DURATION;
@@ -441,7 +441,7 @@ fn animate_remote_players(
         }
 
         // Movement animation via shared AnimationState mapping
-        let anim_state = AnimationState::from_server_name(&state.animation_state);
+        let anim_state = AnimationState::from_server_id(state.animation_state);
         let (clip, speed, looping) = anim_state.playback();
 
         if anims.current_animation == Some(clip) {

@@ -119,9 +119,9 @@ pub enum Reducer {
         y: f32,
         z: f32,
         rotation_y: f32,
-        animation_state: String,
+        animation_state: u8,
         attack_sequence: u32,
-        attack_animation: String,
+        attack_animation: u8,
     },
 }
 

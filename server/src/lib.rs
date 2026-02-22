@@ -47,9 +47,9 @@ pub fn update_position(
     y: f32,
     z: f32,
     rotation_y: f32,
-    animation_state: String,
+    animation_state: u8,
     attack_sequence: u32,
-    attack_animation: String,
+    attack_animation: u8,
 ) {
     if let Some(player) = ctx.db.player().identity().find(ctx.sender) {
         ctx.db.player().identity().update(Player {

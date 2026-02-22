@@ -15,9 +15,9 @@ pub struct Player {
     pub rotation_y: f32,
 
     // Animation
-    pub animation_state: String,
+    pub animation_state: u8,
     pub attack_sequence: u32,
-    pub attack_animation: String,
+    pub attack_animation: u8,
 
     // Health
     pub health: f32,

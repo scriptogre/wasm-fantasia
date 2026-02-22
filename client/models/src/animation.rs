@@ -78,4 +78,26 @@ impl Animation {
     pub fn from_clip_name(name: &str) -> Option<Self> {
         Self::ALL.iter().find(|a| a.clip_name() == name).copied()
     }
+
+    /// Serialize an attack animation to a u8 ID for the server wire format.
+    pub fn attack_id(self) -> u8 {
+        use game_core::combat::attack_anim as A;
+        match self {
+            Self::PunchJab => A::PUNCH_JAB,
+            Self::PunchCross => A::PUNCH_CROSS,
+            Self::MeleeHook => A::MELEE_HOOK,
+            _ => A::NONE,
+        }
+    }
+
+    /// Deserialize from a u8 attack animation ID.
+    pub fn from_attack_id(id: u8) -> Option<Self> {
+        use game_core::combat::attack_anim as A;
+        match id {
+            A::PUNCH_JAB => Some(Self::PunchJab),
+            A::PUNCH_CROSS => Some(Self::PunchCross),
+            A::MELEE_HOOK => Some(Self::MeleeHook),
+            _ => None,
+        }
+    }
 }

@@ -99,6 +99,32 @@ impl EnemyBehaviorKind {
     }
 }
 
+/// Player animation state encoding for the server DB (u8 wire format).
+/// Mirrors `AnimationState` on the client — both sides use these constants.
+pub mod player_anim_state {
+    pub const IDLE: u8 = 0;
+    pub const WALK: u8 = 1;
+    pub const RUN: u8 = 2;
+    pub const CROUCH: u8 = 3;
+    pub const CROUCH_IDLE: u8 = 4;
+    pub const JUMP_START: u8 = 5;
+    pub const JUMP: u8 = 6;
+    pub const JUMP_LAND: u8 = 7;
+    pub const FALL: u8 = 8;
+    pub const ROLL: u8 = 9;
+    pub const LANDING_STUN: u8 = 10;
+    pub const KNOCK_BACK: u8 = 11;
+}
+
+/// Player attack animation encoding for the server DB (u8 wire format).
+/// 0 = no attack, 1–3 = specific attack clips.
+pub mod attack_anim {
+    pub const NONE: u8 = 0;
+    pub const PUNCH_JAB: u8 = 1;
+    pub const PUNCH_CROSS: u8 = 2;
+    pub const MELEE_HOOK: u8 = 3;
+}
+
 /// Enemy type encoding for the server DB.
 pub mod enemy_types {
     pub const BASIC: u8 = 0;

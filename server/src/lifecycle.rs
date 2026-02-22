@@ -24,9 +24,9 @@ pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_
             y: 1.0,
             z: 0.0,
             rotation_y: 0.0,
-            animation_state: "Idle".to_string(),
+            animation_state: 0,
             attack_sequence: 0,
-            attack_animation: String::new(),
+            attack_animation: 0,
             last_update: now,
             health: defaults::HEALTH,
             max_health: defaults::HEALTH,
@@ -92,7 +92,9 @@ pub fn on_disconnect(ctx: &spacetimedb::ReducerContext) {
 
 fn set_player_offline(ctx: &spacetimedb::ReducerContext) {
     if let Some(player) = ctx.db.player().identity().find(ctx.sender) {
+        // Take world_id before the update consumes player
         let world_id = player.world_id.clone();
+        let is_solo = world_id != "shared";
 
         ctx.db.player().identity().update(Player {
             online: false,
@@ -102,7 +104,7 @@ fn set_player_offline(ctx: &spacetimedb::ReducerContext) {
 
         // Clean up solo world data to prevent abandoned state accumulating.
         // "shared" is the multiplayer world — never delete its entities.
-        if world_id != "shared" {
+        if is_solo {
             let enemy_ids: Vec<u64> = ctx
                 .db
                 .enemy()

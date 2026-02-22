@@ -64,42 +64,44 @@ pub enum AnimationState {
 }
 
 impl AnimationState {
-    /// Serialize to a server animation name for broadcast to other clients.
+    /// Serialize to a u8 animation ID for broadcast to other clients.
     /// Speed parameters are dropped — remote players use default playback speeds.
-    pub fn server_name(&self) -> &'static str {
+    pub fn server_id(&self) -> u8 {
+        use game_core::combat::player_anim_state as S;
         match self {
-            Self::StandIdle => "Idle",
-            Self::Run(_) | Self::Climb(_) => "Walk",
-            Self::Sprint(_) => "Run",
-            Self::Crouch(_) => "Crouch",
-            Self::CrouchIdle => "CrouchIdle",
-            Self::JumpStart => "JumpStart",
-            Self::JumpLoop | Self::WallJump => "Jump",
-            Self::JumpLand => "JumpLand",
-            Self::Fall | Self::WallSlide => "Fall",
-            Self::Roll => "Roll",
-            Self::LandingStun => "LandingStun",
-            Self::KnockBack => "KnockBack",
-            Self::Attack => "Idle", // Attacks handled by attack_sequence/attack_animation
-            Self::GroundPound => "Fall", // Diving pose for remote players
+            Self::StandIdle => S::IDLE,
+            Self::Run(_) | Self::Climb(_) => S::WALK,
+            Self::Sprint(_) => S::RUN,
+            Self::Crouch(_) => S::CROUCH,
+            Self::CrouchIdle => S::CROUCH_IDLE,
+            Self::JumpStart => S::JUMP_START,
+            Self::JumpLoop | Self::WallJump => S::JUMP,
+            Self::JumpLand => S::JUMP_LAND,
+            Self::Fall | Self::WallSlide => S::FALL,
+            Self::Roll => S::ROLL,
+            Self::LandingStun => S::LANDING_STUN,
+            Self::KnockBack => S::KNOCK_BACK,
+            Self::Attack => S::IDLE, // Attacks handled by attack_sequence/attack_animation
+            Self::GroundPound => S::FALL, // Diving pose for remote players
         }
     }
 
-    /// Deserialize from a server animation name. Speed-parameterized variants
+    /// Deserialize from a u8 animation ID. Speed-parameterized variants
     /// get default display speeds since the exact value isn't transmitted.
-    pub fn from_server_name(name: &str) -> Self {
-        match name {
-            "Walk" => Self::Run(1.0),
-            "Run" => Self::Sprint(1.0),
-            "Crouch" => Self::Crouch(1.0),
-            "CrouchIdle" => Self::CrouchIdle,
-            "JumpStart" => Self::JumpStart,
-            "Jump" => Self::JumpLoop,
-            "JumpLand" => Self::JumpLand,
-            "Fall" => Self::Fall,
-            "Roll" => Self::Roll,
-            "LandingStun" => Self::LandingStun,
-            "KnockBack" => Self::KnockBack,
+    pub fn from_server_id(id: u8) -> Self {
+        use game_core::combat::player_anim_state as S;
+        match id {
+            S::WALK => Self::Run(1.0),
+            S::RUN => Self::Sprint(1.0),
+            S::CROUCH => Self::Crouch(1.0),
+            S::CROUCH_IDLE => Self::CrouchIdle,
+            S::JUMP_START => Self::JumpStart,
+            S::JUMP => Self::JumpLoop,
+            S::JUMP_LAND => Self::JumpLand,
+            S::FALL => Self::Fall,
+            S::ROLL => Self::Roll,
+            S::LANDING_STUN => Self::LandingStun,
+            S::KNOCK_BACK => Self::KnockBack,
             _ => Self::StandIdle,
         }
     }

@@ -11,9 +11,9 @@ pub(super) struct UpdatePositionArgs {
     pub y: f32,
     pub z: f32,
     pub rotation_y: f32,
-    pub animation_state: String,
+    pub animation_state: u8,
     pub attack_sequence: u32,
-    pub attack_animation: String,
+    pub attack_animation: u8,
 }
 
 impl From<UpdatePositionArgs> for super::Reducer {
@@ -52,9 +52,9 @@ pub trait update_position {
         y: f32,
         z: f32,
         rotation_y: f32,
-        animation_state: String,
+        animation_state: u8,
         attack_sequence: u32,
-        attack_animation: String,
+        attack_animation: u8,
     ) -> __sdk::Result<()>;
     /// Register a callback to run whenever we are notified of an invocation of the reducer `update_position`.
     ///
@@ -65,7 +65,7 @@ pub trait update_position {
     /// to cancel the callback.
     fn on_update_position(
         &self,
-        callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &String, &u32, &String)
+        callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &u8, &u32, &u8)
             + Send
             + 'static,
     ) -> UpdatePositionCallbackId;
@@ -81,9 +81,9 @@ impl update_position for super::RemoteReducers {
         y: f32,
         z: f32,
         rotation_y: f32,
-        animation_state: String,
+        animation_state: u8,
         attack_sequence: u32,
-        attack_animation: String,
+        attack_animation: u8,
     ) -> __sdk::Result<()> {
         self.imp.call_reducer(
             "update_position",
@@ -100,7 +100,7 @@ impl update_position for super::RemoteReducers {
     }
     fn on_update_position(
         &self,
-        mut callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &String, &u32, &String)
+        mut callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &u8, &u32, &u8)
             + Send
             + 'static,
     ) -> UpdatePositionCallbackId {

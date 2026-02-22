@@ -131,7 +131,7 @@ pub(super) fn send_local_position(
 
     let pos = transform.translation;
     let rotation_y = transform.rotation.to_euler(EulerRot::YXZ).0;
-    let animation_state = player.animation_state.server_name().to_string();
+    let animation_state = player.animation_state.server_id();
 
     let (attack_sequence, attack_animation) = if let Some(attack) = attack_state {
         let anim = if attack.is_crit {
@@ -141,9 +141,9 @@ pub(super) fn send_local_position(
         } else {
             Animation::PunchCross
         };
-        (attack.attack_count, anim.clip_name().to_string())
+        (attack.attack_count, anim.attack_id())
     } else {
-        (0, String::new())
+        (0, 0)
     };
 
     ping.last_send = Some(Instant::now());

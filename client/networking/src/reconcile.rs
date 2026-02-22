@@ -89,9 +89,9 @@ pub struct CombatEvent {
 /// Server-synced animation state for remote players.
 #[derive(Component, Clone, Debug, Default)]
 pub struct RemotePlayerState {
-    pub animation_state: String,
+    pub animation_state: u8,
     pub attack_sequence: u32,
-    pub attack_animation: String,
+    pub attack_animation: u8,
 }
 
 // =============================================================================
@@ -119,9 +119,9 @@ pub(super) struct PlayerSnapshot {
     pub y: f32,
     pub z: f32,
     pub rotation_y: f32,
-    pub animation_state: String,
+    pub animation_state: u8,
     pub attack_sequence: u32,
-    pub attack_animation: String,
+    pub attack_animation: u8,
     pub health: f32,
     pub max_health: f32,
 }
@@ -153,9 +153,9 @@ impl From<&ServerPlayer> for PlayerSnapshot {
             y: p.y,
             z: p.z,
             rotation_y: p.rotation_y,
-            animation_state: p.animation_state.clone(),
+            animation_state: p.animation_state,
             attack_sequence: p.attack_sequence,
-            attack_animation: p.attack_animation.clone(),
+            attack_animation: p.attack_animation,
             health: p.health,
             max_health: p.max_health,
         }
