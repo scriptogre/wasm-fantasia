@@ -1,11 +1,10 @@
 use super::*;
 use crate::asset_loading::Models;
 use crate::models::{ClearEnemies, SpawnEnemy};
-use crate::scene::GameLayer;
-use avian3d::prelude::{Collider, CollisionLayers, RigidBody, Sensor};
+use bevy::gltf::GltfMesh;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::pbr::ExtendedMaterial;
 use bevy::render::storage::ShaderStorageBuffer;
-use bevy::scene::SceneInstanceReady;
 use bevy_enhanced_input::prelude::Start;
 use bevy_open_vat::data::VatInstanceData;
 use bevy_open_vat::prelude::*;
@@ -22,6 +21,8 @@ pub fn plugin(app: &mut App) {
             (
                 initialize_vat_enemy_resources
                     .run_if(not(resource_exists::<VatEnemyState>).and(in_state(Screen::Gameplay))),
+                attach_vat_to_pending_enemies
+                    .run_if(resource_exists::<VatEnemyState>.and(in_state(Screen::Gameplay))),
                 animate_enemies
                     .in_set(PostPhysicsAppSystems::PlayAnimations)
                     .run_if(in_state(Screen::Gameplay)),
@@ -41,6 +42,9 @@ pub(super) struct VatEnemyState {
     /// Pre-allocated flash material — same VAT setup but white + emissive.
     /// Shared across all enemies to avoid per-hit material clones.
     pub flash_material: Handle<VatMaterial>,
+    /// The actual mesh handle extracted from the GLTF, so we can spawn
+    /// Mesh3d directly instead of going through SceneRoot.
+    mesh: Handle<Mesh>,
 }
 
 /// Links an enemy entity to the child mesh entity that holds the
@@ -48,10 +52,18 @@ pub(super) struct VatEnemyState {
 #[derive(Component)]
 pub(super) struct VatMeshLink(pub Entity);
 
+/// Marker for enemies that spawned before VatEnemyState was ready.
+/// The `attach_vat_to_pending_enemies` system picks these up.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct PendingVatSetup;
+
 fn initialize_vat_enemy_resources(
     models: Res<Models>,
     images: Res<Assets<Image>>,
     remap_infos: Res<Assets<RemapInfo>>,
+    gltf_assets: Res<Assets<Gltf>>,
+    gltf_meshes: Res<Assets<GltfMesh>>,
     mut vat_materials: ResMut<Assets<VatMaterial>>,
     mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
     mut commands: Commands,
@@ -62,7 +74,14 @@ fn initialize_vat_enemy_resources(
     let Some(image) = images.get(&models.enemy_vat_texture) else {
         return;
     };
+    let Some(gltf) = gltf_assets.get(&models.enemy_scene) else {
+        return;
+    };
+    let Some(gltf_mesh) = gltf_meshes.get(&gltf.meshes[0]) else {
+        return;
+    };
 
+    let mesh = gltf_mesh.primitives[0].mesh.clone();
     let y_resolution = image.texture_descriptor.size.height as f32;
 
     // Seed with one zeroed entry so the GPU buffer has non-zero arrayLength.
@@ -115,6 +134,7 @@ fn initialize_vat_enemy_resources(
     commands.insert_resource(VatEnemyState {
         material,
         flash_material,
+        mesh,
     });
 }
 
@@ -166,13 +186,17 @@ fn clear_all_enemies(
 }
 
 // =============================================================================
-// On<Add, Enemy> — attach VAT model to any Enemy entity
+// On<Add, Enemy> — attach VAT mesh directly (flat hierarchy)
 // =============================================================================
+
+/// Visual offset baked into the mesh child entity's transform.
+const MESH_OFFSET: Vec3 = Vec3::new(0.0, -0.85, 0.0);
+const MESH_SCALE: f32 = 1.25;
 
 fn on_enemy_added(
     on: On<Add, Enemy>,
+    vat_state: Option<Res<VatEnemyState>>,
     models: Res<Models>,
-    gltf_assets: Res<Assets<Gltf>>,
     mut commands: Commands,
 ) {
     let entity = on.entity;
@@ -183,118 +207,69 @@ fn on_enemy_added(
         .remove::<Mesh3d>()
         .remove::<MeshMaterial3d<StandardMaterial>>();
 
-    // Sensor collider: no physical contact forces, so surrounding enemies
-    // can't launch the player. Combat knockback is server-authoritative via
-    // Tnua shoves. The Collider is retained for spatial queries.
+    // No physics components — attack system uses manual distance checks,
+    // and server handles all movement/knockback. Avian3d was costing ~8ms
+    // for 5000 kinematic sensors.
     commands.entity(entity).insert((
         EnemyBehavior::default(),
         InheritedVisibility::default(),
-        Collider::capsule(0.5, 1.0),
-        RigidBody::Kinematic,
-        Sensor,
-        CollisionLayers::new(
-            GameLayer::Enemy,
-            [GameLayer::Player, GameLayer::Environment],
-        ),
     ));
 
-    let Some(gltf) = gltf_assets.get(&models.enemy_scene) else {
-        warn!("Enemy VAT GLB not loaded when enemy spawned");
-        return;
-    };
-
-    let scene = SceneRoot(gltf.scenes[0].clone());
-    commands.entity(entity).with_children(|parent| {
-        let mut child = parent.spawn((
-            Transform::from_xyz(0.0, -0.85, 0.0)
-                .with_scale(Vec3::splat(1.25))
-                .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
-            scene,
-        ));
-        child.observe(prepare_enemy_vat_scene);
-    });
+    if let Some(vat_state) = vat_state {
+        // VatEnemyState is ready — spawn mesh child directly (flat hierarchy)
+        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models);
+    } else {
+        // Assets not loaded yet — mark for later setup
+        commands.entity(entity).insert(PendingVatSetup);
+    }
 }
 
-// =============================================================================
-// Scene ready — swap material for VAT extended material
-// =============================================================================
-
-fn prepare_enemy_vat_scene(
-    on: On<SceneInstanceReady>,
-    vat_state: Option<Res<VatEnemyState>>,
+/// Catch-up system: attaches VAT mesh to enemies that were added before
+/// VatEnemyState was ready.
+fn attach_vat_to_pending_enemies(
+    pending: Query<Entity, With<PendingVatSetup>>,
+    vat_state: Res<VatEnemyState>,
     models: Res<Models>,
-    children_q: Query<&Children>,
-    mesh_entities: Query<Entity, With<Mesh3d>>,
-    parents: Query<&ChildOf>,
     mut commands: Commands,
 ) {
-    let Some(vat_state) = vat_state.as_ref() else {
-        warn!("VatEnemyState not ready when enemy scene loaded");
-        return;
-    };
-
-    let scene_entity = on.entity;
-
-    // Walk up to the Enemy entity (scene entity → enemy entity)
-    let enemy_entity = if let Ok(parent) = parents.get(scene_entity) {
-        parent.parent()
-    } else {
-        scene_entity
-    };
-
-    // Find mesh entities in the scene subtree and apply VAT material + controller
-    apply_vat_to_descendants(
-        scene_entity,
-        &children_q,
-        &mesh_entities,
-        &mut commands,
-        vat_state,
-        &models,
-        enemy_entity,
-    );
+    for entity in &pending {
+        commands.entity(entity).remove::<PendingVatSetup>();
+        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models);
+    }
 }
 
-fn apply_vat_to_descendants(
-    entity: Entity,
-    children_q: &Query<&Children>,
-    mesh_entities: &Query<Entity, With<Mesh3d>>,
+/// Spawns a single mesh child entity with VAT material + controller.
+/// No SceneRoot, no intermediate entities — just Enemy → Mesh.
+fn spawn_vat_mesh_child(
     commands: &mut Commands,
+    enemy_entity: Entity,
     vat_state: &VatEnemyState,
     models: &Models,
-    enemy_entity: Entity,
 ) {
-    if mesh_entities.get(entity).is_ok() {
-        commands
-            .entity(entity)
-            .remove::<MeshMaterial3d<StandardMaterial>>()
-            .insert((
-                MeshMaterial3d(vat_state.material.clone()),
-                VatAnimationController {
-                    remap_info: models.enemy_remap_info.clone(),
-                    current_clip: "Zombie_Idle_Loop".to_string(),
-                    speed: 1.0,
-                    is_playing: true,
-                    start_time: 0.0,
-                    offset: 0.0,
-                },
-            ));
+    let mesh_entity = commands
+        .spawn((
+            Transform::from_translation(MESH_OFFSET)
+                .with_scale(Vec3::splat(MESH_SCALE))
+                .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
+            Mesh3d(vat_state.mesh.clone()),
+            MeshMaterial3d(vat_state.material.clone()),
+            VatAnimationController {
+                remap_info: models.enemy_remap_info.clone(),
+                current_clip: "Zombie_Idle_Loop".to_string(),
+                speed: 1.0,
+                is_playing: true,
+                start_time: 0.0,
+                offset: 0.0,
+            },
+            NotShadowCaster,
+            NotShadowReceiver,
+        ))
+        .id();
 
-        commands.entity(enemy_entity).insert(VatMeshLink(entity));
-    }
-
-    if let Ok(children) = children_q.get(entity) {
-        for child in children.iter() {
-            apply_vat_to_descendants(
-                child,
-                children_q,
-                mesh_entities,
-                commands,
-                vat_state,
-                models,
-                enemy_entity,
-            );
-        }
-    }
+    commands
+        .entity(enemy_entity)
+        .add_children(&[mesh_entity])
+        .insert(VatMeshLink(mesh_entity));
 }
 
 // =============================================================================

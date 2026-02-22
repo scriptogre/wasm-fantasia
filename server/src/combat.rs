@@ -136,7 +136,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
                 );
 
                 // Convert displacement to impulse (multiply by enemy mass)
-                let enemy_mass = 50.0_f32;
+                let enemy_mass = defaults::ENEMY_MASS;
                 ctx.db.knockback_impulse().insert(KnockbackImpulse {
                     id: 0,
                     enemy_id: enemy.id,

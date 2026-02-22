@@ -162,6 +162,8 @@ fn tick_players(
     conn: Option<Res<SpacetimeDbConnection>>,
     tracker: Option<Res<PingTracker>>,
     mut texts: Query<&mut Text, With<PlayersText>>,
+    time: Res<Time>,
+    mut timer: Local<f32>,
 ) {
     let Ok(mut text) = texts.single_mut() else {
         return;
@@ -175,12 +177,25 @@ fn tick_players(
         return;
     }
 
+    // Throttle to twice per second — player count changes rarely
+    *timer += time.delta_secs();
+    if *timer < 0.5 {
+        return;
+    }
+    *timer = 0.0;
+
     let (online, total) = conn
         .as_ref()
         .map(|c| {
-            let players: Vec<_> = c.conn.db.player().iter().collect();
-            let online = players.iter().filter(|p| p.online).count();
-            (online, players.len())
+            let mut online = 0usize;
+            let mut total = 0usize;
+            for p in c.conn.db.player().iter() {
+                total += 1;
+                if p.online {
+                    online += 1;
+                }
+            }
+            (online, total)
         })
         .unwrap_or((0, 0));
 

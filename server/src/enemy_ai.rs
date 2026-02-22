@@ -122,14 +122,16 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             .push(e);
     }
 
-    // Collect knockback impulses by world
-    let mut impulses_by_world: HashMap<String, Vec<KnockbackImpulse>> = HashMap::new();
+    // S4: Index knockback impulses by enemy_id for O(1) lookup
+    let mut impulses_by_enemy: HashMap<u64, Vec<KnockbackImpulse>> = HashMap::new();
     for impulse in ctx.db.knockback_impulse().iter() {
-        impulses_by_world
-            .entry(impulse.world_id.clone())
+        impulses_by_enemy
+            .entry(impulse.enemy_id)
             .or_default()
             .push(impulse);
     }
+
+    let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
 
     for (world_id, enemies) in &enemies_by_world {
         if ctx.db.world_pause().world_id().find(world_id).is_some() {
@@ -164,34 +166,57 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             enemy_handles.push((handle, enemy));
         }
 
-        // Compute enemy-enemy separation velocities (XZ only).
-        // O(N²) but each iteration is just a distance check + push.
+        // S1: Spatial grid for enemy separation (O(N) instead of O(N²))
         let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
         let sep_radius_sq = sep_radius * sep_radius;
         let sep_strength = defaults::ENEMY_SEPARATION_STRENGTH;
+        let inv_cell = 1.0 / sep_radius;
+
+        let mut grid: HashMap<(i32, i32), Vec<usize>> =
+            HashMap::with_capacity(enemies.len());
+        for (idx, enemy) in enemies.iter().enumerate() {
+            let cx = (enemy.x * inv_cell).floor() as i32;
+            let cz = (enemy.z * inv_cell).floor() as i32;
+            grid.entry((cx, cz)).or_default().push(idx);
+        }
+
         let mut separation: Vec<(f32, f32)> = vec![(0.0, 0.0); enemies.len()];
-        for i in 0..enemies.len() {
-            for j in (i + 1)..enemies.len() {
-                let dx = enemies[i].x - enemies[j].x;
-                let dz = enemies[i].z - enemies[j].z;
-                let dist_sq = dx * dx + dz * dz;
-                if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
-                    let dist = dist_sq.sqrt();
-                    let overlap = 1.0 - dist / sep_radius;
-                    let push = overlap * sep_strength / dist;
-                    let px = dx * push;
-                    let pz = dz * push;
-                    separation[i].0 += px;
-                    separation[i].1 += pz;
-                    separation[j].0 -= px;
-                    separation[j].1 -= pz;
+        for (&(cx, cz), cell_indices) in &grid {
+            for &i in cell_indices {
+                for dcx in -1..=1 {
+                    for dcz in -1..=1 {
+                        if let Some(neighbor_indices) = grid.get(&(cx + dcx, cz + dcz)) {
+                            for &j in neighbor_indices {
+                                if j <= i {
+                                    continue;
+                                }
+                                let dx = enemies[i].x - enemies[j].x;
+                                let dz = enemies[i].z - enemies[j].z;
+                                let dist_sq = dx * dx + dz * dz;
+                                if dist_sq < sep_radius_sq && dist_sq > 1e-6 {
+                                    let dist = dist_sq.sqrt();
+                                    let overlap = 1.0 - dist / sep_radius;
+                                    let push = overlap * sep_strength / dist;
+                                    let px = dx * push;
+                                    let pz = dz * push;
+                                    separation[i].0 += px;
+                                    separation[i].1 += pz;
+                                    separation[j].0 -= px;
+                                    separation[j].1 -= pz;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // Apply AI-driven velocities, separation, and knockback impulses
+        // S3: Pre-compute nearest player + AI decision for each enemy (avoids
+        // recomputing after physics step). Also apply velocities + knockback.
+        let mut decisions: Vec<(combat::EnemyBehaviorKind, f32, (f32, f32))> =
+            Vec::with_capacity(enemies.len());
+
         for (idx, (handle, enemy)) in enemy_handles.iter().enumerate() {
-            // Find nearest player (XZ distance)
             let mut nearest_dist = f32::MAX;
             let mut nearest_pos = (0.0_f32, 0.0_f32);
             for p in players {
@@ -204,18 +229,14 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 }
             }
 
-            // Check attack cooldown
-            let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
             let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
             let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
+            decisions.push((decision, nearest_dist, nearest_pos));
 
-            // Apply knockback impulses for this enemy (before AI velocity so
-            // we can skip chase when being knocked back)
-            let has_knockback = impulses_by_world
-                .get(world_id)
-                .is_some_and(|impulses| impulses.iter().any(|i| i.enemy_id == enemy.id));
-            if let Some(impulses) = impulses_by_world.get(world_id) {
-                for impulse in impulses.iter().filter(|i| i.enemy_id == enemy.id) {
+            // Apply knockback impulses (S4: O(1) lookup by enemy_id)
+            let has_knockback = impulses_by_enemy.contains_key(&enemy.id);
+            if let Some(impulses) = impulses_by_enemy.get(&enemy.id) {
+                for impulse in impulses {
                     physics.apply_impulse(
                         *handle,
                         Vector::new(impulse.impulse_x, impulse.impulse_y, impulse.impulse_z),
@@ -251,24 +272,9 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         let _result = physics.step(dt);
 
         // Write back physics state to DB and update AI state
-        for (handle, enemy) in &enemy_handles {
+        for (idx, (handle, enemy)) in enemy_handles.iter().enumerate() {
             let body = physics.body(*handle);
-
-            // AI decision (recomputed — cheap)
-            let mut nearest_dist = f32::MAX;
-            let mut nearest_pos = (0.0_f32, 0.0_f32);
-            for p in players {
-                let dx = p.x - enemy.x;
-                let dz = p.z - enemy.z;
-                let dist = (dx * dx + dz * dz).sqrt();
-                if dist < nearest_dist {
-                    nearest_dist = dist;
-                    nearest_pos = (p.x, p.z);
-                }
-            }
-            let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
-            let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
-            let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
+            let (decision, nearest_dist, nearest_pos) = decisions[idx];
 
             let mut new_rotation_y = enemy.rotation_y;
             if decision != combat::EnemyBehaviorKind::Idle && nearest_dist > 0.01 {
@@ -285,6 +291,18 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
 
             let pos = body.position();
             let vel = body.linear_velocity();
+            let new_anim = decision.as_str();
+
+            // S2: Skip DB write if nothing meaningful changed
+            let pos_changed = (pos.x - enemy.x).abs() > 0.01
+                || (pos.y - enemy.y).abs() > 0.01
+                || (pos.z - enemy.z).abs() > 0.01;
+            let anim_changed = enemy.animation_state != new_anim;
+            let attack_changed = new_last_attack_time != enemy.last_attack_time;
+
+            if !pos_changed && !anim_changed && !attack_changed {
+                continue;
+            }
 
             ctx.db.enemy().id().update(Enemy {
                 id: enemy.id,
@@ -297,7 +315,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 velocity_x: vel.x,
                 velocity_y: vel.y,
                 velocity_z: vel.z,
-                animation_state: decision.as_str().to_string(),
+                animation_state: new_anim.to_string(),
                 health: enemy.health,
                 max_health: enemy.max_health,
                 attack_damage: enemy.attack_damage,

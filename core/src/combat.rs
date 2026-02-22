@@ -29,6 +29,10 @@ pub mod defaults {
     pub const ENEMY_SPAWN_RADIUS_MIN: f32 = 10.0;
     /// Spawn ring outer radius (meters from player).
     pub const ENEMY_SPAWN_RADIUS_MAX: f32 = 25.0;
+
+    /// Mass for enemy physics bodies (kg). Used for impulse-to-velocity
+    /// conversion in knockback. Shared between server physics and combat.
+    pub const ENEMY_MASS: f32 = 50.0;
 }
 
 /// Pure decision function for enemy AI state machine.

@@ -42,56 +42,74 @@ pub(super) fn update_server_diagnostics(
     conn: Res<SpacetimeDbConnection>,
     mut diag: ResMut<ServerDiagnostics>,
     player_health: Query<&Health, With<PlayerCombatant>>,
+    time: Res<Time>,
+    mut timer: Local<f32>,
 ) {
-    let our_id = conn.conn.try_identity();
     diag.connected = true;
 
-    // Players
-    let mut players: Vec<PlayerDiagnostic> = conn
-        .conn
-        .db
-        .player()
-        .iter()
-        .map(|p| PlayerDiagnostic {
-            name: p.name.clone().unwrap_or_else(|| "?".to_string()),
-            is_you: Some(p.identity) == our_id,
-            online: p.online,
-            health: p.health,
-            max_health: p.max_health,
-        })
-        .collect();
-    players.sort_by_key(|p| {
-        let you = if p.is_you { 0 } else { 1 };
-        let online = if p.online { 0 } else { 1 };
-        (online, you)
-    });
-    diag.players = players;
+    // Throttle expensive table scans to twice per second. The desync check
+    // (single player lookup) still runs every frame for responsiveness.
+    *timer += time.delta_secs();
+    if *timer >= 0.5 {
+        *timer = 0.0;
 
-    // Enemies
-    let enemies: Vec<_> = conn.conn.db.enemy().iter().collect();
-    diag.enemy_alive = enemies.iter().filter(|e| e.health > 0.0).count();
-    diag.enemy_dead = enemies.len() - diag.enemy_alive;
+        let our_id = conn.conn.try_identity();
 
-    // Recent combat events
-    let mut events: Vec<_> = conn.conn.db.combat_event().iter().collect();
-    events.sort_by_key(|e| e.id);
-    diag.recent_events = events
-        .iter()
-        .rev()
-        .take(3)
-        .rev()
-        .map(|e| EventDiagnostic {
-            damage: e.damage,
-            is_crit: e.is_crit,
-            x: e.x,
-            z: e.z,
-        })
-        .collect();
+        // Players (small table — collect is fine)
+        let mut players: Vec<PlayerDiagnostic> = conn
+            .conn
+            .db
+            .player()
+            .iter()
+            .map(|p| PlayerDiagnostic {
+                name: p.name.clone().unwrap_or_else(|| "?".to_string()),
+                is_you: Some(p.identity) == our_id,
+                online: p.online,
+                health: p.health,
+                max_health: p.max_health,
+            })
+            .collect();
+        players.sort_by_key(|p| {
+            let you = if p.is_you { 0 } else { 1 };
+            let online = if p.online { 0 } else { 1 };
+            (online, you)
+        });
+        diag.players = players;
 
-    // Desync check
+        // Enemies — count directly without allocating a Vec
+        let mut alive = 0usize;
+        let mut total = 0usize;
+        for e in conn.conn.db.enemy().iter() {
+            total += 1;
+            if e.health > 0.0 {
+                alive += 1;
+            }
+        }
+        diag.enemy_alive = alive;
+        diag.enemy_dead = total - alive;
+
+        // Recent combat events — track last 3 by max id without sorting all
+        let mut max_id = [0u64; 3];
+        let mut top3: [Option<EventDiagnostic>; 3] = [None, None, None];
+        for e in conn.conn.db.combat_event().iter() {
+            // Find the slot with the smallest id that this event can replace
+            if let Some(i) = (0..3).filter(|&i| e.id > max_id[i]).min_by_key(|&i| max_id[i]) {
+                max_id[i] = e.id;
+                top3[i] = Some(EventDiagnostic {
+                    damage: e.damage,
+                    is_crit: e.is_crit,
+                    x: e.x,
+                    z: e.z,
+                });
+            }
+        }
+        diag.recent_events = top3.into_iter().flatten().collect();
+    }
+
+    // Desync check — cheap single-player lookup, runs every frame
     diag.health_desync = None;
     if let Ok(local_hp) = player_health.single() {
-        if let Some(id) = our_id {
+        if let Some(id) = conn.conn.try_identity() {
             if let Some(sp) = conn.conn.db.player().identity().find(&id) {
                 let delta = (local_hp.current - sp.health).abs();
                 if delta > 0.1 {
