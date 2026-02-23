@@ -2,7 +2,7 @@ use crate::*;
 
 mod attack;
 mod damage;
-mod enemy;
+pub(crate) mod enemy;
 mod feedback;
 mod floaters;
 mod sound;

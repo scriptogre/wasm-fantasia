@@ -37,8 +37,8 @@ pub fn plugin(app: &mut App) {
 /// Shared VAT rendering resources for all enemy instances, created once on
 /// first gameplay frame when all assets are loaded.
 #[derive(Resource)]
-pub(super) struct VatEnemyState {
-    material: Handle<VatMaterial>,
+pub(crate) struct VatEnemyState {
+    pub(crate) material: Handle<VatMaterial>,
     /// Pre-allocated flash material — same VAT setup but white + emissive.
     /// Shared across all enemies to avoid per-hit material clones.
     pub flash_material: Handle<VatMaterial>,
@@ -50,7 +50,7 @@ pub(super) struct VatEnemyState {
 /// Links an enemy entity to the child mesh entity that holds the
 /// `VatAnimationController`, so `animate_enemies` can update the clip.
 #[derive(Component)]
-pub(super) struct VatMeshLink(pub Entity);
+pub(crate) struct VatMeshLink(pub Entity);
 
 /// Marker for enemies that spawned before VatEnemyState was ready.
 /// The `attach_vat_to_pending_enemies` system picks these up.
