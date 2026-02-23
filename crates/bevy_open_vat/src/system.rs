@@ -10,57 +10,6 @@ use crate::{
     material::OpenVatExtension,
 };
 
-/// Updates the `VatAnimationController` components, advancing their timers based on delta time and playback speed.
-/// Handles looping logic (Once vs Loop).
-pub fn update_anim_controller(
-    time: Res<Time>,
-    remap_infos: Res<Assets<RemapInfo>>,
-    mut query: Query<&mut VatAnimationController>,
-) {
-    let dt = time.delta_secs();
-
-    for mut controller in query.iter_mut() {
-        if !controller.is_playing {
-            continue;
-        }
-
-        let Some(remap_info) = remap_infos.get(&controller.remap_info) else {
-            warn!("RemapInfo asset not found for VatAnimationController");
-            continue;
-        };
-        let Some(clip) = remap_info.animations.get(&controller.current_clip) else {
-            warn!(
-                "Animation clip '{}' not found in RemapInfo",
-                controller.current_clip
-            );
-            continue;
-        };
-
-        controller.start_time += dt * controller.speed;
-
-        let duration = clip.duration().unwrap_or(1.0);
-
-        match clip.looping {
-            false => {
-                if controller.start_time >= duration {
-                    controller.start_time = duration;
-                    controller.is_playing = false;
-                } else if controller.start_time < 0.0 {
-                    controller.start_time = 0.0;
-                    controller.is_playing = false;
-                }
-            }
-            true => {
-                if controller.start_time >= duration {
-                    controller.start_time %= duration;
-                } else if controller.start_time < 0.0 {
-                    controller.start_time = duration + (controller.start_time % duration);
-                }
-            }
-        }
-    }
-}
-
 /// Synchronizes the CPU-side animation state with the GPU via a storage buffer.
 /// Rebuilds every frame for playing animations (start_time advances each frame).
 pub fn update_instance_data(

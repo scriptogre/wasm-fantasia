@@ -12,6 +12,13 @@ use bevy_open_vat::prelude::*;
 /// bevy_open_vat's material type with StandardMaterial base.
 type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
 
+/// Squared XZ distance beyond which enemies are culled (fog_end + 5)².
+/// Enemies past the fog end are fully obscured, so hiding them is free.
+#[cfg(target_arch = "wasm32")]
+const CULL_DISTANCE_SQ: f32 = 3600.0; // (55 + 5)²
+#[cfg(not(target_arch = "wasm32"))]
+const CULL_DISTANCE_SQ: f32 = 24025.0; // (150 + 5)²
+
 pub fn plugin(app: &mut App) {
     app.add_observer(spawn_enemy_in_front)
         .add_observer(clear_all_enemies)
@@ -27,6 +34,10 @@ pub fn plugin(app: &mut App) {
                     .in_set(PostPhysicsAppSystems::PlayAnimations)
                     .run_if(in_state(Screen::Gameplay)),
             ),
+        )
+        .add_systems(
+            PostUpdate,
+            cull_enemies_beyond_fog.run_if(in_state(Screen::Gameplay)),
         );
 }
 
@@ -110,6 +121,8 @@ fn initialize_vat_enemy_resources(
             frame_count: remap_info.os_remap.frames,
             max_pos: remap_info.os_remap.max.into(),
             y_resolution,
+            range: (Vec3::from(remap_info.os_remap.max) - Vec3::from(remap_info.os_remap.min)),
+            inv_y_resolution: 1.0 / y_resolution,
             instance: buffer.clone(),
         },
     });
@@ -127,6 +140,8 @@ fn initialize_vat_enemy_resources(
             frame_count: remap_info.os_remap.frames,
             max_pos: remap_info.os_remap.max.into(),
             y_resolution,
+            range: (Vec3::from(remap_info.os_remap.max) - Vec3::from(remap_info.os_remap.min)),
+            inv_y_resolution: 1.0 / y_resolution,
             instance: buffer.clone(),
         },
     });
@@ -295,6 +310,35 @@ fn animate_enemies(
         if controller.current_clip != clip_name {
             controller.current_clip = clip_name.to_string();
             controller.start_time = time.elapsed_secs();
+        }
+    }
+}
+
+// =============================================================================
+// Distance culling — hide enemies fully obscured by fog
+// =============================================================================
+
+fn cull_enemies_beyond_fog(
+    camera: Query<&Transform, With<SceneCamera>>,
+    mut enemies: Query<(&Transform, &mut Visibility), With<Enemy>>,
+) {
+    let Ok(cam) = camera.single() else {
+        return;
+    };
+    let cam_xz = Vec2::new(cam.translation.x, cam.translation.z);
+
+    for (transform, mut visibility) in &mut enemies {
+        let enemy_xz = Vec2::new(transform.translation.x, transform.translation.z);
+        let dist_sq = cam_xz.distance_squared(enemy_xz);
+
+        let desired = if dist_sq > CULL_DISTANCE_SQ {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+
+        if *visibility != desired {
+            *visibility = desired;
         }
     }
 }

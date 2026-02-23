@@ -1,7 +1,6 @@
 #import bevy_pbr::mesh_functions;
 #import bevy_pbr::mesh_functions::get_world_from_local;
 #import bevy_pbr::mesh_functions::mesh_position_local_to_world;
-#import bevy_pbr::mesh_functions::mesh_normal_local_to_world;
 #import bevy_pbr::view_transformations::position_world_to_clip
 #import bevy_pbr::prepass_io::{Vertex, VertexOutput};
 #import bevy_render::globals::Globals
@@ -14,6 +13,8 @@ struct OpenVatParams {
     frame_count: u32,
     max_pos: vec3<f32>,
     y_resolution: f32,
+    range: vec3<f32>,
+    inv_y_resolution: f32,
 };
 
 struct VatInstanceData {
@@ -38,55 +39,27 @@ fn get_vat_data_safe(tag: u32) -> VatInstanceData {
     return instance_data[safe_tag];
 }
 
-fn apply_vat(frame_index: f32, v_pos: vec3<f32>, uv_vat: vec2<f32>) -> mat2x3<f32> {
+// Prepass only needs position for depth — skip normal texture fetch entirely.
+fn apply_vat_position(frame_index: f32, v_pos: vec3<f32>, uv_vat: vec2<f32>) -> vec3<f32> {
     let frame_cnt = f32(ext.frame_count);
     let safe_frame = frame_index % frame_cnt;
 
-    let current_frame = floor(safe_frame);
-    let next_frame = (current_frame + 1.0) % frame_cnt;
-    let blend = fract(safe_frame);
+    // Snap to nearest frame — avoids a second texture fetch and mix().
+    let nearest_frame = round(safe_frame) % frame_cnt;
 
-    let frame_step = 1.0 / ext.y_resolution;
-    let uv_curr = uv_vat + vec2<f32>(0.0, current_frame * frame_step);
-    let uv_next = uv_vat + vec2<f32>(0.0, next_frame * frame_step);
+    let frame_step = ext.inv_y_resolution;
+    let uv = uv_vat + vec2<f32>(0.0, nearest_frame * frame_step);
 
-    let pos_curr = textureSampleLevel(vat_texture, vat_sampler, uv_curr, 0).rgb;
-    let pos_next = textureSampleLevel(vat_texture, vat_sampler, uv_next, 0).rgb;
-    let pos_mixed = mix(pos_curr, pos_next, blend);
-
-    let range = ext.max_pos - ext.min_pos;
-    let obj_pos = ext.min_pos + pos_mixed * range;
+    let pos = textureSampleLevel(vat_texture, vat_sampler, uv, 0).rgb;
 
     // [Coordinate System Conversion]
     // Blender (Z-up Right-handed) -> Bevy (Y-up Right-handed)
-    // Blender: Forward: -Y, Up: +Z, Right: +X
-    // Bevy:    Forward: -Z, Up: +Y, Right: +X
-    //
-    // Mapping Logic:
-    // Bevy.x = Blender.x
-    // Bevy.y = Blender.z
-    // Bevy.z = -Blender.y
-    //
-    let final_pos = vec3<f32>(
-        obj_pos.x,
-        ext.min_pos.z + pos_mixed.z * range.z,
-        -(ext.min_pos.y + pos_mixed.y * range.y)
+    // Bevy.x = Blender.x, Bevy.y = Blender.z, Bevy.z = -Blender.y
+    return v_pos + vec3<f32>(
+        ext.min_pos.x + pos.x * ext.range.x,
+        ext.min_pos.z + pos.z * ext.range.z,
+        -(ext.min_pos.y + pos.y * ext.range.y)
     );
-
-    let norm_curr_tex = textureSampleLevel(vat_texture, vat_sampler, uv_curr + vec2<f32>(0.0, 0.5), 0).rgb;
-    let norm_next_tex = textureSampleLevel(vat_texture, vat_sampler, uv_next + vec2<f32>(0.0, 0.5), 0).rgb;
-
-    var n_curr = norm_curr_tex * 2.0 - 1.0;
-    var n_next = norm_next_tex * 2.0 - 1.0;
-
-    // Apply the same coordinate conversion to normal vectors
-    // (Swap Y <-> Z and invert Y for the new Z)
-    n_curr = vec3<f32>(n_curr.x, n_curr.z, -n_curr.y);
-    n_next = vec3<f32>(n_next.x, n_next.z, -n_next.y);
-
-    let final_norm = normalize(mix(n_curr, n_next, blend));
-
-    return mat2x3<f32>(v_pos + final_pos, final_norm);
 }
 
 // --- Vertex Shader ---
@@ -104,31 +77,22 @@ fn main(vertex: Vertex) -> VertexOutput {
     let relative_frame = progress * f32(my_data.frame_count);
     let absolute_frame = f32(my_data.start_frame) + relative_frame;
 
-    let vat_result = apply_vat(absolute_frame, vertex.position, vertex.uv_b);
-    let new_position = vat_result[0];
-    let new_normal = vat_result[1];
+    let new_position = apply_vat_position(absolute_frame, vertex.position, vertex.uv_b);
 
     let world_from_local = get_world_from_local(vertex.instance_index);
 
     // Local -> World (Position)
     out.world_position = mesh_position_local_to_world(world_from_local, vec4<f32>(new_position, 1.0));
-    
+
     // World -> Clip
     out.position = position_world_to_clip(out.world_position.xyz);
-    
+
 #ifdef VERTEX_UVS_A
     out.uv = vertex.uv;
 #endif
 
 #ifdef VERTEX_UVS_B
     out.uv_b = vertex.uv_b;
-#endif 
-
-#ifdef NORMAL_PREPASS_OR_DEFERRED_PREPASS
-#ifdef VERTEX_NORMALS
-    // Local -> World (Normal)
-    out.world_normal = mesh_normal_local_to_world(new_normal, vertex.instance_index);
-#endif
 #endif
 
     return out;

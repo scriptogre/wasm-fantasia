@@ -29,6 +29,12 @@ pub struct OpenVatExtension {
     /// The Y resolution of the texture (used for UV calculation).
     #[uniform(102, visibility(vertex))]
     pub y_resolution: f32,
+    /// Precomputed `max_pos - min_pos` to avoid per-vertex subtraction.
+    #[uniform(102, visibility(vertex))]
+    pub range: Vec3,
+    /// Precomputed `1.0 / y_resolution` to avoid per-vertex division.
+    #[uniform(102, visibility(vertex))]
+    pub inv_y_resolution: f32,
 
     /// Buffer storing per-instance animation data (e.g., current time).
     #[storage(103, visibility(vertex), read_only)]

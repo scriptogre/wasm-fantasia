@@ -21,6 +21,8 @@ struct OpenVatParams {
     frame_count: u32,
     max_pos: vec3<f32>,
     y_resolution: f32,
+    range: vec3<f32>,
+    inv_y_resolution: f32,
 };
 
 struct VatInstanceData {
@@ -48,51 +50,28 @@ fn apply_vat(frame_index: f32, v_pos: vec3<f32>, uv_vat: vec2<f32>) -> mat2x3<f3
     let frame_cnt = f32(ext.frame_count);
     let safe_frame = frame_index % frame_cnt;
 
-    let current_frame = floor(safe_frame);
-    let next_frame = (current_frame + 1.0) % frame_cnt;
-    let blend = fract(safe_frame);
+    // Snap to nearest frame — avoids a second texture fetch and mix().
+    let nearest_frame = round(safe_frame) % frame_cnt;
 
-    let frame_step = 1.0 / ext.y_resolution;
-    let uv_curr = uv_vat + vec2<f32>(0.0, current_frame * frame_step);
-    let uv_next = uv_vat + vec2<f32>(0.0, next_frame * frame_step);
+    let frame_step = ext.inv_y_resolution;
+    let uv = uv_vat + vec2<f32>(0.0, nearest_frame * frame_step);
 
-    let pos_curr = textureSampleLevel(vat_texture, vat_sampler, uv_curr, 0).rgb;
-    let pos_next = textureSampleLevel(vat_texture, vat_sampler, uv_next, 0).rgb;
-    let pos_mixed = mix(pos_curr, pos_next, blend);
-
-    let range = ext.max_pos - ext.min_pos;
-    let obj_pos = ext.min_pos + pos_mixed * range;
+    let pos = textureSampleLevel(vat_texture, vat_sampler, uv, 0).rgb;
 
     // [Coordinate System Conversion]
     // Blender (Z-up Right-handed) -> Bevy (Y-up Right-handed)
-    // Blender: Forward: -Y, Up: +Z, Right: +X
-    // Bevy:    Forward: -Z, Up: +Y, Right: +X
-    //
-    // Mapping Logic:
-    // Bevy.x = Blender.x
-    // Bevy.y = Blender.z
-    // Bevy.z = -Blender.y
-    // 
+    // Bevy.x = Blender.x, Bevy.y = Blender.z, Bevy.z = -Blender.y
     let final_pos = vec3<f32>(
-        obj_pos.x,
-        ext.min_pos.z + pos_mixed.z * range.z,
-        -(ext.min_pos.y + pos_mixed.y * range.y)
+        ext.min_pos.x + pos.x * ext.range.x,
+        ext.min_pos.z + pos.z * ext.range.z,
+        -(ext.min_pos.y + pos.y * ext.range.y)
     );
 
-    let norm_curr_tex = textureSampleLevel(vat_texture, vat_sampler, uv_curr + vec2<f32>(0.0, 0.5), 0).rgb;
-    let norm_next_tex = textureSampleLevel(vat_texture, vat_sampler, uv_next + vec2<f32>(0.0, 0.5), 0).rgb;
+    let norm_tex = textureSampleLevel(vat_texture, vat_sampler, uv + vec2<f32>(0.0, 0.5), 0).rgb;
+    var n = norm_tex * 2.0 - 1.0;
+    n = vec3<f32>(n.x, n.z, -n.y);
 
-    var n_curr = norm_curr_tex * 2.0 - 1.0;
-    var n_next = norm_next_tex * 2.0 - 1.0;
-    
-    // Apply the same coordinate conversion to normal vectors
-    // (Swap Y <-> Z and invert Y for the new Z)
-    n_curr = vec3<f32>(n_curr.x, n_curr.z, -n_curr.y);
-    n_next = vec3<f32>(n_next.x, n_next.z, -n_next.y);
-
-    let final_norm = normalize(mix(n_curr, n_next, blend));
-
-    return mat2x3<f32>(v_pos + final_pos, final_norm);
+    return mat2x3<f32>(v_pos + final_pos, n);
 }
 
 // --- Vertex Shader ---
