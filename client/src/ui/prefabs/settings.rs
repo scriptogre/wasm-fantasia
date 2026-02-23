@@ -72,6 +72,7 @@ fn update_tab_content(
         &Children,
     )>,
     mut text_color_q: Query<&mut TextColor>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut commands: Commands,
 ) -> Result {
     for children in &tab_bar {
@@ -136,7 +137,13 @@ fn update_tab_content(
                         commands.spawn(audio_grid()).insert(ChildOf(e));
                     }
                     UiTab::Video => {
-                        commands.spawn(video_grid(&session)).insert(ChildOf(e));
+                        let vsync_on = windows
+                            .single()
+                            .map(|w| matches!(w.present_mode, PresentMode::AutoVsync))
+                            .unwrap_or(true);
+                        commands
+                            .spawn(video_grid(&session, vsync_on))
+                            .insert(ChildOf(e));
                     }
                 }
             }
@@ -289,6 +296,9 @@ fn switch_to_tab(tab: UiTab) -> impl Fn(On<Pointer<Click>>, ResMut<ActiveTab>) +
 fn click_toggle_vsync(
     _: On<Pointer<Click>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    buttons: Query<Entity, With<VsyncLabel>>,
+    children_q: Query<&Children>,
+    mut text_q: Query<&mut Text>,
 ) -> Result {
     for mut window in windows.iter_mut() {
         if matches!(window.present_mode, PresentMode::AutoVsync) {
@@ -297,6 +307,15 @@ fn click_toggle_vsync(
             window.present_mode = PresentMode::AutoVsync;
         }
         info!(" window present_mode changed to: {:?}", window.present_mode);
+
+        let label = if matches!(window.present_mode, PresentMode::AutoVsync) {
+            "on"
+        } else {
+            "off"
+        };
+        for entity in &buttons {
+            update_button_text(entity, label, &children_q, &mut text_q);
+        }
     }
 
     Ok(())
@@ -463,7 +482,8 @@ fn bottom_row() -> impl Bundle {
     )
 }
 
-fn video_grid(state: &Session) -> impl Bundle {
+fn video_grid(state: &Session, vsync_on: bool) -> impl Bundle {
+    let vsync_label = if vsync_on { "on" } else { "off" };
     let screen_shake_label = if state.screen_shake { "on" } else { "off" };
 
     #[cfg(feature = "dev")]
@@ -487,7 +507,7 @@ fn video_grid(state: &Session) -> impl Bundle {
             label("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
             label("VSync"),
-            (btn("on", click_toggle_vsync), VsyncLabel),
+            (btn(vsync_label, click_toggle_vsync), VsyncLabel),
             label("Screen Shake"),
             (
                 btn(screen_shake_label, click_toggle_screen_shake),
@@ -499,7 +519,7 @@ fn video_grid(state: &Session) -> impl Bundle {
             label("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
             label("VSync"),
-            (btn("on", click_toggle_vsync), VsyncLabel),
+            (btn(vsync_label, click_toggle_vsync), VsyncLabel),
             label("Screen Shake"),
             (
                 btn(screen_shake_label, click_toggle_screen_shake),

@@ -104,9 +104,8 @@ fn setup_animus_scene(
             ..default()
         },
         CascadeShadowConfigBuilder {
-            num_cascades: 2,
+            num_cascades: 1,
             maximum_distance: 30.0,
-            first_cascade_far_bound: 8.0,
             ..default()
         }
         .build(),
