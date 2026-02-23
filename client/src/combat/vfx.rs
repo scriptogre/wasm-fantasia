@@ -9,7 +9,7 @@ use bevy_hanabi::prelude::{
 };
 use bevy_open_vat::prelude::OpenVatExtension;
 
-use super::enemy::VatMeshLink;
+use crate::rendering::VatMeshLink;
 use crate::combat::{AttackIntent, HitLanded, MeshHeight, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::Session;
 
@@ -55,7 +55,7 @@ fn on_hit_flash(
     on: On<HitLanded>,
     vat_links: Query<&VatMeshLink>,
     vat_meshes: Query<(&MeshMaterial3d<VatMaterial>, Option<&HitFlash>)>,
-    vat_state: Option<Res<super::enemy::VatEnemyState>>,
+    vat_state: Option<Res<crate::rendering::VatEnemyState>>,
     mut commands: Commands,
 ) {
     let event = on.event();
@@ -71,25 +71,28 @@ fn on_hit_flash(
     let Ok(vat_link) = vat_links.get(event.target) else {
         return;
     };
-    let mesh_entity = vat_link.0;
-    let Ok((mat_handle, existing_flash)) = vat_meshes.get(mesh_entity) else {
-        return;
-    };
-    if existing_flash.is_some() {
-        return;
+
+    // Apply flash to all LOD mesh children
+    for &mesh_entity in &vat_link.0 {
+        let Ok((mat_handle, existing_flash)) = vat_meshes.get(mesh_entity) else {
+            continue;
+        };
+        if existing_flash.is_some() {
+            continue;
+        }
+
+        let shared_handle = mat_handle.0.clone();
+
+        // Use pre-allocated flash material — no per-hit material clone.
+        commands.entity(mesh_entity).try_insert((
+            MeshMaterial3d(vat_state.flash_material.clone()),
+            HitFlash {
+                timer: 0.0,
+                duration: event.feedback.flash_duration,
+                shared_material: shared_handle,
+            },
+        ));
     }
-
-    let shared_handle = mat_handle.0.clone();
-
-    // Use pre-allocated flash material — no per-hit material clone.
-    commands.entity(mesh_entity).try_insert((
-        MeshMaterial3d(vat_state.flash_material.clone()),
-        HitFlash {
-            timer: 0.0,
-            duration: event.feedback.flash_duration,
-            shared_material: shared_handle,
-        },
-    ));
 }
 
 fn tick_hit_flash(

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_open_vat::prelude::OpenVatExtension;
 
 use crate::combat::EnemyBehavior;
-use crate::combat::enemy::{VatEnemyState, VatMeshLink};
+use crate::rendering::{VatEnemyState, VatMeshLink};
 use crate::ui::colors;
 
 type VatMaterial = ExtendedMaterial<StandardMaterial, OpenVatExtension>;
@@ -82,7 +82,7 @@ impl ProfilePhase for EnemiesHidden {
         {
             let mut query = world.query_filtered::<&VatMeshLink, With<EnemyBehavior>>();
             for link in query.iter(world) {
-                links.push(link.0);
+                links.extend(&link.0);
             }
         }
         for mesh_entity in links {
@@ -97,7 +97,7 @@ impl ProfilePhase for EnemiesHidden {
         {
             let mut query = world.query_filtered::<&VatMeshLink, With<EnemyBehavior>>();
             for link in query.iter(world) {
-                links.push(link.0);
+                links.extend(&link.0);
             }
         }
         for mesh_entity in links {
@@ -121,7 +121,7 @@ impl ProfilePhase for UnlitEnemies {
         {
             let mut query = world.query_filtered::<&VatMeshLink, With<EnemyBehavior>>();
             for link in query.iter(world) {
-                links.push(link.0);
+                links.extend(&link.0);
             }
         }
         for mesh_entity in links {
@@ -136,7 +136,7 @@ impl ProfilePhase for UnlitEnemies {
         {
             let mut query = world.query_filtered::<&VatMeshLink, With<EnemyBehavior>>();
             for link in query.iter(world) {
-                links.push(link.0);
+                links.extend(&link.0);
             }
         }
         for mesh_entity in links {

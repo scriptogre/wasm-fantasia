@@ -17,6 +17,7 @@ pub use game_client_models as models;
 pub use game_client_networking as networking;
 pub mod player;
 pub mod postfx;
+pub mod rendering;
 pub mod profiling;
 pub mod rule_presets;
 pub mod rules;
