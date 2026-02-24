@@ -2,7 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bevy::asset::load_internal_binary_asset;
-#[cfg(target_arch = "wasm32")]
 use bevy::render::settings::{RenderCreation, WgpuSettings};
 use bevy::{app::App, asset::AssetMetaCheck, log, prelude::*};
 use bevy_fix_cursor_unlock_web::prelude::*;
@@ -67,7 +66,14 @@ fn main() {
         ..default()
     };
     #[cfg(not(target_arch = "wasm32"))]
-    let render = bevy::render::RenderPlugin::default();
+    let render = bevy::render::RenderPlugin {
+        render_creation: RenderCreation::Automatic(WgpuSettings {
+            features: bevy::render::settings::WgpuFeatures::TIMESTAMP_QUERY
+                | bevy::render::settings::WgpuFeatures::TIMESTAMP_QUERY_INSIDE_ENCODERS,
+            ..default()
+        }),
+        ..default()
+    };
 
     app.insert_resource(ClearColor(ui::colors::VOID));
     app.add_plugins(
