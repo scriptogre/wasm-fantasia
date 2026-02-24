@@ -4281,6 +4281,7 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "web-time",
+ "wgpu",
  "winit",
 ]
 

@@ -82,6 +82,7 @@ bevy_yarnspinner_example_dialogue_view = "^0.7"
 
 # misc
 # itertools = "0.14.0"
+wgpu = { version = "27", default-features = false }
 ron = "^0.10"
 rand = "^0.9"
 serde = "1"

@@ -11,6 +11,7 @@ pub mod audio;
 pub mod camera;
 pub mod combat;
 pub mod game;
+pub mod gpu_pass_profiler;
 pub mod gpu_profiler;
 pub use game_client_models as models;
 pub use game_client_networking as networking;
@@ -99,6 +100,7 @@ fn main() {
         ui::plugin,
         game::plugin,
         gpu_profiler::plugin,
+        gpu_pass_profiler::plugin,
     ));
 
     app.add_plugins(networking::NetworkingPlugin);
