@@ -259,18 +259,23 @@ pub fn plugin(app: &mut App) {
         TimestampLabel::AfterPostProcess,
     );
 
-    // GPU preprocess span: before EarlyGpuPreprocess → after LateGpuPreprocess
-    core3d.add_node_edge(
-        TimestampLabel::BeforeGpuPreprocess,
-        NodePbr::EarlyGpuPreprocess,
-    );
-    core3d.add_node_edge(
-        NodePbr::LateGpuPreprocess,
-        TimestampLabel::AfterGpuPreprocess,
-    );
+    // GPU preprocess span: conditional — these nodes only exist with GPU-driven rendering
+    let has_gpu_preprocess =
+        core3d.get_node_state(NodePbr::EarlyGpuPreprocess).is_ok();
+    if has_gpu_preprocess {
+        core3d.add_node_edge(
+            TimestampLabel::BeforeGpuPreprocess,
+            NodePbr::EarlyGpuPreprocess,
+        );
+        core3d.add_node_edge(
+            NodePbr::LateGpuPreprocess,
+            TimestampLabel::AfterGpuPreprocess,
+        );
+        core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforeGpuPreprocess);
+        core3d.add_node_edge(TimestampLabel::AfterGpuPreprocess, Node3d::StartMainPass);
+    }
 
     // Full frame: FrameStart before everything, FrameEnd after Upscaling
-    core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforeGpuPreprocess);
     core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforeShadow);
     core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforePrepass);
     core3d.add_node_edge(Node3d::Upscaling, TimestampLabel::FrameEnd);
@@ -278,7 +283,6 @@ pub fn plugin(app: &mut App) {
     // Ordering edges to prevent ambiguity
     core3d.add_node_edge(TimestampLabel::AfterShadow, Node3d::StartMainPass);
     core3d.add_node_edge(TimestampLabel::AfterPrepass, Node3d::StartMainPass);
-    core3d.add_node_edge(TimestampLabel::AfterGpuPreprocess, Node3d::StartMainPass);
     core3d.add_node_edge(
         TimestampLabel::AfterMainPass,
         Node3d::StartMainPassPostProcessing,
