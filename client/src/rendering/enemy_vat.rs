@@ -51,6 +51,11 @@ pub(crate) struct VatEnemyState {
     pub flash_material: Handle<VatMaterial>,
     /// LOD mesh handles: [lod0 (full), lod1 (simplified)].
     meshes: Vec<Handle<Mesh>>,
+    /// UV_B attribute extracted from LOD0 mesh — maps vertex_id to VAT texture column.
+    /// Uploaded once to GPU for the compute shader.
+    pub(crate) vertex_uvs: Handle<ShaderStorageBuffer>,
+    /// Number of vertices in the mesh (needed by compute dispatch and vertex shader).
+    pub(crate) vertex_count: u32,
 }
 
 /// Links an enemy entity to the child mesh entities (one per LOD) that hold
@@ -87,6 +92,28 @@ pub(crate) fn initialize_vat_enemy_resources(
     let mesh_lod0 = gltf_mesh.primitives[0].mesh.clone();
     let mesh_lod1 = generate_lod_mesh(&mesh_lod0, &mut meshes);
     let y_resolution = image.texture_descriptor.size.height as f32;
+
+    // Extract UV_B for compute pre-skinning
+    let source_mesh = meshes.get(&mesh_lod0).expect("LOD0 mesh must exist");
+    let vertex_count = source_mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .map(|attr| match attr {
+            bevy::mesh::VertexAttributeValues::Float32x3(v) => v.len() as u32,
+            _ => 0,
+        })
+        .unwrap_or(0);
+
+    let uv_b_data: Vec<[f32; 2]> = source_mesh
+        .attribute(Mesh::ATTRIBUTE_UV_1)
+        .and_then(|attr| match attr {
+            bevy::mesh::VertexAttributeValues::Float32x2(v) => Some(v.clone()),
+            _ => None,
+        })
+        .expect("mesh must have UV_B attribute for VAT");
+
+    let mut uv_buffer = ShaderStorageBuffer::default();
+    uv_buffer.set_data(uv_b_data);
+    let vertex_uvs = buffers.add(uv_buffer);
 
     // Seed with one zeroed entry so the GPU buffer has non-zero arrayLength.
     // bevy_open_vat's update_instance_data system overwrites this every frame.
@@ -143,6 +170,8 @@ pub(crate) fn initialize_vat_enemy_resources(
         material,
         flash_material,
         meshes: vec![mesh_lod0, mesh_lod1],
+        vertex_uvs,
+        vertex_count,
     });
 }
 
