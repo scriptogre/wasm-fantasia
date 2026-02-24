@@ -12,7 +12,7 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 use game_core::combat::{
-    CombatInput, HitTarget, defaults, resolve_attack, resolve_combat, AttackInput,
+    AttackInput, CombatInput, HitTarget, defaults, resolve_attack, resolve_combat,
 };
 use game_core::presets;
 use game_core::rules::{Action, Stat, Stats, execute_rules};
@@ -81,7 +81,9 @@ fn bench_stat_lookup(c: &mut Criterion) {
 
     // For reference: what Custom(String) used to cost (alloc each time)
     group.bench_function("custom_string_alloc_each_time", |b| {
-        let stats_with_custom = stats.clone().with(Stat::Custom("SomeOtherStat".into()), 1.0);
+        let stats_with_custom = stats
+            .clone()
+            .with(Stat::Custom("SomeOtherStat".into()), 1.0);
         b.iter(|| {
             black_box(stats_with_custom.get(&Stat::Custom("SomeOtherStat".into())));
         })
@@ -151,20 +153,24 @@ fn bench_resolve_combat(c: &mut Criterion) {
 
     for count in [1, 10, 50, 100, 500] {
         let targets = make_targets(count);
-        group.bench_with_input(BenchmarkId::from_parameter(count), &targets, |b, targets| {
-            b.iter(|| {
-                black_box(resolve_combat(&CombatInput {
-                    origin,
-                    forward,
-                    base_range: defaults::ATTACK_RANGE,
-                    half_arc_cos,
-                    attacker_stats: &stats,
-                    rules: &rules,
-                    rng_seed: 12345,
-                    targets,
-                }));
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::from_parameter(count),
+            &targets,
+            |b, targets| {
+                b.iter(|| {
+                    black_box(resolve_combat(&CombatInput {
+                        origin,
+                        forward,
+                        base_range: defaults::ATTACK_RANGE,
+                        half_arc_cos,
+                        attacker_stats: &stats,
+                        rules: &rules,
+                        rng_seed: 12345,
+                        targets,
+                    }));
+                })
+            },
+        );
     }
 
     group.finish();
@@ -265,13 +271,9 @@ fn bench_stats_clone(c: &mut Criterion) {
 
     let stats_full = default_attacker_stats(5.0);
 
-    group.bench_function("2_entries", |b| {
-        b.iter(|| black_box(stats_small.clone()))
-    });
+    group.bench_function("2_entries", |b| b.iter(|| black_box(stats_small.clone())));
 
-    group.bench_function("8_entries", |b| {
-        b.iter(|| black_box(stats_full.clone()))
-    });
+    group.bench_function("8_entries", |b| b.iter(|| black_box(stats_full.clone())));
 
     group.finish();
 }

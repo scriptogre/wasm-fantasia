@@ -90,7 +90,7 @@ fn clear_all_enemies(
 }
 
 // =============================================================================
-// On<Add, Enemy> — attach VAT mesh directly (flat hierarchy)
+// On<Add, Enemy> — attach VAT mesh as children
 // =============================================================================
 
 fn on_enemy_added(
@@ -110,13 +110,11 @@ fn on_enemy_added(
     // No physics components — attack system uses manual distance checks,
     // and server handles all movement/knockback. Avian3d was costing ~8ms
     // for 5000 kinematic sensors.
-    commands.entity(entity).insert((
-        EnemyBehavior::default(),
-        InheritedVisibility::default(),
-    ));
+    commands
+        .entity(entity)
+        .insert((EnemyBehavior::default(), InheritedVisibility::default()));
 
     if let Some(vat_state) = vat_state {
-        // VatEnemyState is ready — spawn mesh child directly (flat hierarchy)
         spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models);
     } else {
         // Assets not loaded yet — mark for later setup

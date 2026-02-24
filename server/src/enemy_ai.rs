@@ -133,7 +133,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
 
     for (&world_id, enemies) in &enemies_by_world {
-        if ctx.db.world_pause().world_id().find(&world_id).is_some() {
+        if ctx.db.world_pause().world_id().find(world_id).is_some() {
             continue;
         }
         let Some(players) = players_by_world.get(&world_id) else {
@@ -264,8 +264,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             }
         } else {
             // Fallback: HashMap grid for extremely sparse distributions
-            let mut grid: HashMap<(i32, i32), Vec<usize>> =
-                HashMap::with_capacity(enemies.len());
+            let mut grid: HashMap<(i32, i32), Vec<usize>> = HashMap::with_capacity(enemies.len());
             for (idx, &(cx, cz)) in cell_coords.iter().enumerate() {
                 grid.entry((cx, cz)).or_default().push(idx);
             }
@@ -405,11 +404,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 let handle = physics.add_body(RigidBodyBundle {
                     body_type: RigidBodyType::Dynamic,
                     position: Vector::new(enemy.x, enemy.y, enemy.z),
-                    linear_velocity: Vector::new(
-                        update.new_vx,
-                        enemy.velocity_y,
-                        update.new_vz,
-                    ),
+                    linear_velocity: Vector::new(update.new_vx, enemy.velocity_y, update.new_vz),
                     mass: defaults::ENEMY_MASS,
                     ..Default::default()
                 });

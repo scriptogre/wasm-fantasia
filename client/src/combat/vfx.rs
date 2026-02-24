@@ -9,9 +9,9 @@ use bevy_hanabi::prelude::{
 };
 use bevy_open_vat::prelude::OpenVatExtension;
 
-use crate::rendering::VatMeshLink;
 use crate::combat::{AttackIntent, HitLanded, MeshHeight, VFX_ARC_DEGREES, VFX_RANGE};
 use crate::models::Session;
+use crate::rendering::VatMeshLink;
 
 use crate::player::control::{Footstep, GroundPoundImpact, JumpLaunched, LandingImpact};
 

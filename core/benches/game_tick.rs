@@ -11,7 +11,7 @@
 //! Run: cargo bench -p game-core --bench game_tick
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use game_core::combat::{defaults, enemy_ai_decision, EnemyBehaviorKind};
+use game_core::combat::{EnemyBehaviorKind, defaults, enemy_ai_decision};
 use std::collections::HashMap;
 
 /// Half-neighbor offsets for symmetric pair visitation.
@@ -619,88 +619,83 @@ fn bench_full_tick_simulation(c: &mut Criterion) {
         );
 
         // New path
-        group.bench_with_input(
-            BenchmarkId::new("new_u8", count),
-            &count,
-            |b, &count| {
-                let enemies = make_enemies_new(count, 1);
-                let players = make_players(1, 1);
-                let now = 1_000_000_000i64;
-                let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
-                let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
-                let inv_cell = 1.0 / sep_radius;
+        group.bench_with_input(BenchmarkId::new("new_u8", count), &count, |b, &count| {
+            let enemies = make_enemies_new(count, 1);
+            let players = make_players(1, 1);
+            let now = 1_000_000_000i64;
+            let cooldown_micros = (defaults::ENEMY_ATTACK_COOLDOWN * 1_000_000.0) as i64;
+            let sep_radius = defaults::ENEMY_SEPARATION_RADIUS;
+            let inv_cell = 1.0 / sep_radius;
 
-                b.iter(|| {
-                    // 1. Group by world_id (new: u32 key — zero-cost copy)
-                    let mut enemies_by_world: HashMap<u32, Vec<&EnemyNew>> = HashMap::new();
-                    for e in &enemies {
-                        enemies_by_world.entry(e.world_id).or_default().push(e);
-                    }
-                    let mut players_by_world: HashMap<u32, Vec<&Player>> = HashMap::new();
-                    for p in &players {
-                        players_by_world.entry(p.world_id).or_default().push(p);
-                    }
+            b.iter(|| {
+                // 1. Group by world_id (new: u32 key — zero-cost copy)
+                let mut enemies_by_world: HashMap<u32, Vec<&EnemyNew>> = HashMap::new();
+                for e in &enemies {
+                    enemies_by_world.entry(e.world_id).or_default().push(e);
+                }
+                let mut players_by_world: HashMap<u32, Vec<&Player>> = HashMap::new();
+                for p in &players {
+                    players_by_world.entry(p.world_id).or_default().push(p);
+                }
 
-                    for (world_id, enemies) in &enemies_by_world {
-                        let Some(players) = players_by_world.get(world_id) else {
-                            continue;
-                        };
+                for (world_id, enemies) in &enemies_by_world {
+                    let Some(players) = players_by_world.get(world_id) else {
+                        continue;
+                    };
 
-                        // 2. Spatial grid (flat counting-sort)
-                        // Convert &[&EnemyNew] to temporary slice for flat_grid_separation
-                        let enemy_slice: Vec<EnemyNew> =
-                            enemies.iter().map(|e| (*e).clone()).collect();
-                        let _separation = flat_grid_separation(
-                            &enemy_slice,
-                            inv_cell,
-                            sep_radius * sep_radius,
-                            defaults::ENEMY_SEPARATION_STRENGTH,
-                        );
+                    // 2. Spatial grid (flat counting-sort)
+                    // Convert &[&EnemyNew] to temporary slice for flat_grid_separation
+                    let enemy_slice: Vec<EnemyNew> = enemies.iter().map(|e| (*e).clone()).collect();
+                    let _separation = flat_grid_separation(
+                        &enemy_slice,
+                        inv_cell,
+                        sep_radius * sep_radius,
+                        defaults::ENEMY_SEPARATION_STRENGTH,
+                    );
 
-                        // 3. AI decisions
-                        let mut decisions = Vec::with_capacity(enemies.len());
-                        for enemy in enemies {
-                            let mut nearest_dist = f32::MAX;
-                            for p in players {
-                                let dx = p.x - enemy.x;
-                                let dz = p.z - enemy.z;
-                                let dist = (dx * dx + dz * dz).sqrt();
-                                if dist < nearest_dist {
-                                    nearest_dist = dist;
-                                }
+                    // 3. AI decisions
+                    let mut decisions = Vec::with_capacity(enemies.len());
+                    for enemy in enemies {
+                        let mut nearest_dist = f32::MAX;
+                        for p in players {
+                            let dx = p.x - enemy.x;
+                            let dz = p.z - enemy.z;
+                            let dist = (dx * dx + dz * dz).sqrt();
+                            if dist < nearest_dist {
+                                nearest_dist = dist;
                             }
-                            let ready = (now - enemy.last_attack_time) >= cooldown_micros;
-                            decisions.push(enemy_ai_decision(nearest_dist, ready));
                         }
-
-                        // 4. Build update structs (new: u8/u32 copy, no String alloc)
-                        let mut updates = Vec::with_capacity(enemies.len());
-                        for (i, enemy) in enemies.iter().enumerate() {
-                            updates.push(EnemyNew {
-                                id: enemy.id,
-                                enemy_type: enemy.enemy_type,
-                                world_id: enemy.world_id,
-                                x: enemy.x,
-                                y: enemy.y,
-                                z: enemy.z,
-                                rotation_y: enemy.rotation_y,
-                                velocity_x: 0.0,
-                                velocity_y: 0.0,
-                                velocity_z: 0.0,
-                                animation_state: decisions[i].as_u8(),
-                                health: enemy.health,
-                                max_health: enemy.max_health,
-                                attack_damage: enemy.attack_damage,
-                                attack_range: enemy.attack_range,
-                                attack_speed: enemy.attack_speed,
-                                last_attack_time: enemy.last_attack_time,
-                            });
-                        }
-                        black_box(&updates);
+                        let ready = (now - enemy.last_attack_time) >= cooldown_micros;
+                        decisions.push(enemy_ai_decision(nearest_dist, ready));
                     }
-                })
-            },
-        );
+
+                    // 4. Build update structs (new: u8/u32 copy, no String alloc)
+                    let mut updates = Vec::with_capacity(enemies.len());
+                    for (i, enemy) in enemies.iter().enumerate() {
+                        updates.push(EnemyNew {
+                            id: enemy.id,
+                            enemy_type: enemy.enemy_type,
+                            world_id: enemy.world_id,
+                            x: enemy.x,
+                            y: enemy.y,
+                            z: enemy.z,
+                            rotation_y: enemy.rotation_y,
+                            velocity_x: 0.0,
+                            velocity_y: 0.0,
+                            velocity_z: 0.0,
+                            animation_state: decisions[i].as_u8(),
+                            health: enemy.health,
+                            max_health: enemy.max_health,
+                            attack_damage: enemy.attack_damage,
+                            attack_range: enemy.attack_range,
+                            attack_speed: enemy.attack_speed,
+                            last_attack_time: enemy.last_attack_time,
+                        });
+                    }
+                    black_box(&updates);
+                }
+            })
+        });
     }
 
     group.finish();

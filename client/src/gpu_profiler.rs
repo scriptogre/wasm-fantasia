@@ -40,21 +40,27 @@ trait ProfilePhase: Send + Sync + 'static {
 /// Throwaway first phase — lets the GPU thermally settle before real measurements.
 struct Warmup;
 impl ProfilePhase for Warmup {
-    fn name(&self) -> &'static str { "Warmup" }
+    fn name(&self) -> &'static str {
+        "Warmup"
+    }
     fn apply(&self, _world: &mut World) {}
     fn revert(&self, _world: &mut World) {}
 }
 
 struct Baseline;
 impl ProfilePhase for Baseline {
-    fn name(&self) -> &'static str { "Baseline" }
+    fn name(&self) -> &'static str {
+        "Baseline"
+    }
     fn apply(&self, _world: &mut World) {}
     fn revert(&self, _world: &mut World) {}
 }
 
 struct ShadowsOff;
 impl ProfilePhase for ShadowsOff {
-    fn name(&self) -> &'static str { "Shadows Off" }
+    fn name(&self) -> &'static str {
+        "Shadows Off"
+    }
 
     fn apply(&self, world: &mut World) {
         let mut query = world.query::<&mut DirectionalLight>();
@@ -73,7 +79,9 @@ impl ProfilePhase for ShadowsOff {
 
 struct EnemiesHidden;
 impl ProfilePhase for EnemiesHidden {
-    fn name(&self) -> &'static str { "Enemies Hidden" }
+    fn name(&self) -> &'static str {
+        "Enemies Hidden"
+    }
 
     fn apply(&self, world: &mut World) {
         // Hide mesh children (not parent Enemy entities) to avoid
@@ -114,7 +122,9 @@ struct UnlitEnemies {
 }
 
 impl ProfilePhase for UnlitEnemies {
-    fn name(&self) -> &'static str { "Unlit Enemies" }
+    fn name(&self) -> &'static str {
+        "Unlit Enemies"
+    }
 
     fn apply(&self, world: &mut World) {
         let mut links: Vec<Entity> = Vec::new();
@@ -277,7 +287,8 @@ fn toggle_profiler(
 
         info!(
             "GPU profiler started — {} phases, ~{}s total (F10 to cancel)...",
-            num_phases - 1, total_secs,
+            num_phases - 1,
+            total_secs,
         );
     });
 }
@@ -355,8 +366,7 @@ fn tick_profiler(
     };
     let phases_left = state.phases.len() - state.current_idx - 1;
     let per_phase = WARMUP_DURATION + RECORD_DURATION;
-    let total_remaining =
-        remaining_this_phase + per_phase * phases_left as u32;
+    let total_remaining = remaining_this_phase + per_phase * phases_left as u32;
 
     for mut text in &mut overlay {
         text.0 = format!(
@@ -422,7 +432,6 @@ fn log_summary(results: &[PhaseResult]) {
         find("Enemies Hidden"),
         find("Unlit Enemies"),
     ) {
-
         let shadow_cost = baseline - shadows_off;
         let total_enemy_cost = baseline - enemies_hidden;
         let pbr_frag_cost = baseline - unlit_enemies;
@@ -457,7 +466,6 @@ fn log_summary(results: &[PhaseResult]) {
             vertex_prepass_cost,
             pct(vertex_prepass_cost),
         ));
-
     }
 
     info!("{report}");

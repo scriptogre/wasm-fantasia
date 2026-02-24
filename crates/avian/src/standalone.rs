@@ -502,8 +502,7 @@ impl PhysicsWorld {
                         let j_t = (-tangent_speed / inv_mass_sum).max(-j_n * friction);
                         let friction_impulse = tangent * j_t;
 
-                        self.bodies[body_d_idx].linear_velocity -=
-                            friction_impulse * inv_mass_d;
+                        self.bodies[body_d_idx].linear_velocity -= friction_impulse * inv_mass_d;
                     }
                 }
 

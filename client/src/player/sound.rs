@@ -64,8 +64,8 @@ fn on_foot_contact(
         .unwrap_or(0.0);
 
     // 0.0 = no sprint layer, 1.0 = full sprint layer volume
-    let sprint_blend = ((actual_speed - sprint_threshold) / (sprint_speed - sprint_threshold))
-        .clamp(0.0, 1.0);
+    let sprint_blend =
+        ((actual_speed - sprint_threshold) / (sprint_speed - sprint_threshold)).clamp(0.0, 1.0);
 
     // Always play jog step for consistent surface texture
     let jog_handle = sources.jog_steps.pick(&mut rng);

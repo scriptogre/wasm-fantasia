@@ -488,18 +488,12 @@ const SPRINT_RAMP_SPEED: f32 = 6.0;
 /// How fast sprint speed ramps back down when releasing sprint.
 const SPRINT_DERAMP_SPEED: f32 = 12.0;
 
-fn sprint_start(
-    on: On<Start<Sprint>>,
-    mut commands: Commands,
-) {
+fn sprint_start(on: On<Start<Sprint>>, mut commands: Commands) {
     // Don't set player.speed instantly — the ramp_sprint_speed system handles the gradual buildup.
     commands.entity(on.context).try_insert(Sprinting);
 }
 
-fn sprint_end(
-    on: On<Complete<Sprint>>,
-    mut commands: Commands,
-) {
+fn sprint_end(on: On<Complete<Sprint>>, mut commands: Commands) {
     // Speed ramps back down in ramp_sprint_speed system.
     commands.entity(on.context).try_remove::<Sprinting>();
 }
@@ -517,7 +511,11 @@ fn ramp_sprint_speed(
 
     for (mut player, is_sprinting) in player_query.iter_mut() {
         let target = if is_sprinting { max_sprint } else { base_speed };
-        let ramp = if is_sprinting { SPRINT_RAMP_SPEED } else { SPRINT_DERAMP_SPEED };
+        let ramp = if is_sprinting {
+            SPRINT_RAMP_SPEED
+        } else {
+            SPRINT_DERAMP_SPEED
+        };
 
         if (player.speed - target).abs() < 0.01 {
             player.speed = target;

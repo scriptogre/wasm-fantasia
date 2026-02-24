@@ -35,7 +35,7 @@ pub fn pause_world(ctx: &spacetimedb::ReducerContext) {
 #[spacetimedb::reducer]
 pub fn resume_world(ctx: &spacetimedb::ReducerContext) {
     if let Some(player) = ctx.db.player().identity().find(ctx.sender) {
-        ctx.db.world_pause().world_id().delete(&player.world_id);
+        ctx.db.world_pause().world_id().delete(player.world_id);
     }
 }
 

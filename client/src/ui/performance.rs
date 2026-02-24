@@ -1,7 +1,9 @@
 use super::*;
 use crate::networking::PingTracker;
 use crate::networking::diagnostics::ServerDiagnostics;
-use bevy::diagnostic::{DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin};
+use bevy::diagnostic::{
+    DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
+};
 use bevy::input::common_conditions::input_just_pressed;
 use std::time::Duration;
 use web_time::Instant;

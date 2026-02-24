@@ -139,8 +139,14 @@ impl FromWorld for AudioSources {
         let a = world.resource::<AssetServer>();
 
         let steps = Self::STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
-        let jog_steps = Self::JOG_STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
-        let sprint_steps = Self::SPRINT_STEPS.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
+        let jog_steps = Self::JOG_STEPS
+            .iter()
+            .map(|p| a.load(*p))
+            .collect::<Vec<_>>();
+        let sprint_steps = Self::SPRINT_STEPS
+            .iter()
+            .map(|p| a.load(*p))
+            .collect::<Vec<_>>();
         let punches = Self::PUNCHES.iter().map(|p| a.load(*p)).collect::<Vec<_>>();
         let gameplay: Handle<AudioSample> = a.load(Self::GAMEPLAY);
 

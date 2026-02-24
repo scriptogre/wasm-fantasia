@@ -82,7 +82,6 @@ bevy_yarnspinner_example_dialogue_view = "^0.7"
 
 # misc
 # itertools = "0.14.0"
-image = "^0.25.6"
 ron = "^0.10"
 rand = "^0.9"
 serde = "1"
@@ -93,7 +92,6 @@ winit = { version = "^0.30", default-features = false }
 # Compile low-severity logs out of release builds for performance.
 # The `trace` feature overrides these limits so Tracy can see all spans.
 tracing = { version = "^0.1", features = ["max_level_debug", "release_max_level_warn"] }
-easy-ext = "1.0.2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 home = "0.5"

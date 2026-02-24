@@ -27,9 +27,8 @@ pub(crate) fn simplify_indices(
             if seen.insert(key) {
                 let pa = positions[a as usize];
                 let pb = positions[b as usize];
-                let dist_sq = (pa[0] - pb[0]).powi(2)
-                    + (pa[1] - pb[1]).powi(2)
-                    + (pa[2] - pb[2]).powi(2);
+                let dist_sq =
+                    (pa[0] - pb[0]).powi(2) + (pa[1] - pb[1]).powi(2) + (pa[2] - pb[2]).powi(2);
                 edges.push((dist_sq, a, b));
             }
         }

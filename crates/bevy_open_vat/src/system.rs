@@ -12,6 +12,7 @@ use crate::{
 
 /// Synchronizes the CPU-side animation state with the GPU via a storage buffer.
 /// Rebuilds every frame for playing animations (start_time advances each frame).
+#[allow(clippy::too_many_arguments)]
 pub fn update_instance_data(
     mut commands: Commands,
     changed_query: Query<Entity, Changed<VatAnimationController>>,
@@ -100,24 +101,20 @@ pub fn update_instance_data(
         let mut seen: HashSet<AssetId<ExtendedMaterial<StandardMaterial, OpenVatExtension>>> =
             HashSet::new();
         for mat_handle in mat_query.iter() {
-            if seen.insert(mat_handle.0.id()) {
-                if let Some(mat) = materials.get_mut(&mat_handle.0) {
-                    if let Some(buffer) = buffers.get_mut(&mat.extension.instance) {
-                        buffer.set_data(gpu_data_vec.clone());
-                    }
-                }
+            if seen.insert(mat_handle.0.id())
+                && let Some(mat) = materials.get_mut(&mat_handle.0)
+                && let Some(buffer) = buffers.get_mut(&mat.extension.instance)
+            {
+                buffer.set_data(gpu_data_vec.clone());
             }
         }
-    } else {
+    } else if let Some(mat_handle) = mat_query.iter().next() {
         // Steady state: write buffer data only (no material change).
-        for mat_handle in mat_query.iter() {
-            if let Some(mat) = materials.get(&mat_handle.0) {
-                if let Some(buffer) = buffers.get_mut(&mat.extension.instance) {
-                    buffer.set_data(gpu_data_vec);
-                }
-            }
-            // All materials share the same buffer — one write is enough.
-            break;
+        // All materials share the same buffer — one write is enough.
+        if let Some(mat) = materials.get(&mat_handle.0)
+            && let Some(buffer) = buffers.get_mut(&mat.extension.instance)
+        {
+            buffer.set_data(gpu_data_vec);
         }
     }
 }

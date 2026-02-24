@@ -93,7 +93,10 @@ pub(super) fn update_server_diagnostics(
         let mut top3: [Option<EventDiagnostic>; 3] = [None, None, None];
         for e in conn.conn.db.combat_event().iter() {
             // Find the slot with the smallest id that this event can replace
-            if let Some(i) = (0..3).filter(|&i| e.id > max_id[i]).min_by_key(|&i| max_id[i]) {
+            if let Some(i) = (0..3)
+                .filter(|&i| e.id > max_id[i])
+                .min_by_key(|&i| max_id[i])
+            {
                 max_id[i] = e.id;
                 top3[i] = Some(EventDiagnostic {
                     damage: e.damage,

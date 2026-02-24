@@ -149,11 +149,10 @@ pub(crate) fn initialize_vat_enemy_resources(
 /// Generates a simplified LOD mesh via edge-collapse simplification (pure Rust).
 /// Keeps the full vertex buffer (preserving VAT UV mappings) but reduces
 /// index count to ~25% by collapsing shortest edges first.
-fn generate_lod_mesh(
-    source_handle: &Handle<Mesh>,
-    meshes: &mut Assets<Mesh>,
-) -> Handle<Mesh> {
-    let source = meshes.get(source_handle).expect("LOD source mesh must exist");
+fn generate_lod_mesh(source_handle: &Handle<Mesh>, meshes: &mut Assets<Mesh>) -> Handle<Mesh> {
+    let source = meshes
+        .get(source_handle)
+        .expect("LOD source mesh must exist");
 
     let positions: &[[f32; 3]] = source
         .attribute(Mesh::ATTRIBUTE_POSITION)
