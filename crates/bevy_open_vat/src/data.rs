@@ -2,11 +2,15 @@ use bevy::{prelude::*, render::render_resource::ShaderType};
 
 use crate::asset::RemapInfo;
 
+/// Clip IDs are indices into `RemapInfo.animations` (sorted by key name).
+/// Users define clip names at asset load time; the ID is the position in sorted order.
+pub type ClipId = u8;
+
 /// Component to control the playback of a VAT animation on an entity.
 #[derive(Debug, Clone, Component, Reflect)]
 pub struct VatAnimationController {
     pub remap_info: Handle<RemapInfo>,
-    pub current_clip: String,
+    pub current_clip: ClipId,
     /// Reference time for animation start (Global time).
     pub start_time: f32,
     /// Accumulated time offset (used for handling pause/resume/looping).
@@ -20,7 +24,7 @@ impl Default for VatAnimationController {
     fn default() -> Self {
         Self {
             remap_info: Handle::default(),
-            current_clip: String::default(),
+            current_clip: 0,
             start_time: 0.0,
             offset: 0.0,
             speed: 1.0,

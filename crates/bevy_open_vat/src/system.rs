@@ -62,7 +62,7 @@ pub fn update_instance_data(
             commands.entity(entity).insert(MeshTag(index as u32));
             continue;
         };
-        let Some(clip) = remap_info.animations.get(&controller.current_clip) else {
+        let Some(clip) = remap_info.clip(controller.current_clip) else {
             gpu_data_vec.push(VatInstanceData::default());
             commands.entity(entity).insert(MeshTag(index as u32));
             continue;

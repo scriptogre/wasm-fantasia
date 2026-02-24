@@ -6,7 +6,7 @@ pub mod system;
 
 pub mod prelude {
     pub use crate::asset::{OsRemap, RemapInfo, VatAnimationClip};
-    pub use crate::data::VatAnimationController;
+    pub use crate::data::{ClipId, VatAnimationController};
     pub use crate::material::OpenVatExtension;
     pub use crate::plugin::OpenVatPlugin;
 }

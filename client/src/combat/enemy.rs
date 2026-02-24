@@ -6,6 +6,7 @@ use crate::rendering::{
 };
 use bevy_enhanced_input::prelude::Start;
 use bevy_open_vat::prelude::*;
+use bevy_open_vat::asset::RemapInfo;
 
 /// Squared XZ distance beyond which enemies are culled (fog_end + 5)².
 /// Enemies past the fog end are fully obscured, so hiding them is free.
@@ -143,6 +144,7 @@ fn attach_vat_to_pending_enemies(
 fn animate_enemies(
     enemies: Query<(&EnemyBehavior, &VatMeshLink), Changed<EnemyBehavior>>,
     mut controllers: Query<&mut VatAnimationController>,
+    remap_infos: Res<Assets<RemapInfo>>,
     time: Res<Time>,
 ) {
     for (behavior, vat_link) in &enemies {
@@ -155,8 +157,14 @@ fn animate_enemies(
         let now = time.elapsed_secs();
         for &mesh_entity in &vat_link.0 {
             if let Ok(mut controller) = controllers.get_mut(mesh_entity) {
-                if controller.current_clip != clip_name {
-                    controller.current_clip = clip_name.to_string();
+                let Some(remap_info) = remap_infos.get(&controller.remap_info) else {
+                    continue;
+                };
+                let Some(clip_id) = remap_info.clip_id(clip_name) else {
+                    continue;
+                };
+                if controller.current_clip != clip_id {
+                    controller.current_clip = clip_id;
                     controller.start_time = now;
                 }
             }

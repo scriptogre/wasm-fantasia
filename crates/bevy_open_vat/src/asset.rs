@@ -8,6 +8,8 @@ use bevy::{
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::data::ClipId;
+
 /// Structure representing the position remapping data from the JSON file.
 /// Used to decompress the normalized VAT texture values back into world space positions.
 #[derive(Debug, Clone, Copy, Deserialize, Reflect)]
@@ -53,6 +55,24 @@ pub struct RemapInfo {
     #[serde(rename = "os-remap")]
     pub os_remap: OsRemap,
     pub animations: HashMap<String, VatAnimationClip>,
+}
+
+impl RemapInfo {
+    /// Look up a clip ID by name. Returns None if the name isn't found.
+    /// The ID is the sorted index — sorted to ensure deterministic IDs
+    /// regardless of JSON key order.
+    pub fn clip_id(&self, name: &str) -> Option<ClipId> {
+        let mut names: Vec<&String> = self.animations.keys().collect();
+        names.sort();
+        names.iter().position(|n| n.as_str() == name).map(|i| i as ClipId)
+    }
+
+    /// Get clip data by ID.
+    pub fn clip(&self, id: ClipId) -> Option<&VatAnimationClip> {
+        let mut names: Vec<&String> = self.animations.keys().collect();
+        names.sort();
+        names.get(id as usize).and_then(|n| self.animations.get(*n))
+    }
 }
 
 /// Asset loader for `RemapInfo` files (JSON).

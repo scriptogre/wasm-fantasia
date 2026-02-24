@@ -197,7 +197,7 @@ pub(crate) fn spawn_vat_mesh_child(
 
     let controller = VatAnimationController {
         remap_info: models.enemy_remap_info.clone(),
-        current_clip: "Zombie_Idle_Loop".to_string(),
+        current_clip: 0, // Will be set by animate_enemies when behavior changes
         speed: 1.0,
         is_playing: true,
         start_time: 0.0,
