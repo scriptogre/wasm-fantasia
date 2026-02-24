@@ -16,9 +16,7 @@ use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::render_graph::{
     Node as RenderNode, NodeRunError, RenderGraphContext, RenderLabel,
 };
-use bevy::render::render_resource::{
-    BufferDescriptor, BufferUsages, MapMode, PollType,
-};
+use bevy::render::render_resource::{BufferDescriptor, BufferUsages, MapMode, PollType};
 use bevy::render::renderer::{RenderContext, RenderDevice, RenderQueue};
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 
@@ -26,10 +24,19 @@ use crate::ui::colors;
 
 // ── Constants ───────────────────────────────────────────────────────────
 
-const NUM_TIMESTAMP_SLOTS: u32 = 8;
+/// 6 spans × 2 timestamps each = 12 slots.
+const NUM_TIMESTAMP_SLOTS: u32 = 12;
+const NUM_SPANS: usize = 6;
 const RECORD_SECONDS: f32 = 10.0;
 
-const SPAN_NAMES: [&str; 4] = ["shadow", "prepass", "main_pass", "post_processing"];
+const SPAN_NAMES: [&str; NUM_SPANS] = [
+    "shadow",
+    "prepass",
+    "main_pass",
+    "post_processing",
+    "gpu_preprocess",
+    "full_frame",
+];
 
 // ── Render labels ───────────────────────────────────────────────────────
 
@@ -43,6 +50,10 @@ enum TimestampLabel {
     AfterMainPass,
     BeforePostProcess,
     AfterPostProcess,
+    BeforeGpuPreprocess,
+    AfterGpuPreprocess,
+    FrameStart,
+    FrameEnd,
     Resolve,
 }
 
@@ -144,7 +155,7 @@ struct GpuPassProfilerControl {
 
 #[derive(Resource)]
 struct GpuPassRecording {
-    samples: Vec<[f32; 4]>,
+    samples: Vec<[f32; NUM_SPANS]>,
     elapsed: f32,
     frame_count: u32,
 }
@@ -202,27 +213,43 @@ pub fn plugin(app: &mut App) {
         .get_sub_graph_mut(Core3d)
         .expect("Core3d sub-graph must exist");
 
-    // Add all timestamp nodes
+    // Add all timestamp nodes (slot indices match SPAN_NAMES order × 2)
+    // shadow: slots 0,1
     core3d.add_node(TimestampLabel::BeforeShadow, TimestampNode::new(0));
     core3d.add_node(TimestampLabel::AfterShadow, TimestampNode::new(1));
+    // prepass: slots 2,3
     core3d.add_node(TimestampLabel::BeforePrepass, TimestampNode::new(2));
     core3d.add_node(TimestampLabel::AfterPrepass, TimestampNode::new(3));
+    // main_pass: slots 4,5
     core3d.add_node(TimestampLabel::BeforeMainPass, TimestampNode::new(4));
     core3d.add_node(TimestampLabel::AfterMainPass, TimestampNode::new(5));
+    // post_processing: slots 6,7
     core3d.add_node(TimestampLabel::BeforePostProcess, TimestampNode::new(6));
     core3d.add_node(TimestampLabel::AfterPostProcess, TimestampNode::new(7));
+    // gpu_preprocess: slots 8,9
+    core3d.add_node(TimestampLabel::BeforeGpuPreprocess, TimestampNode::new(8));
+    core3d.add_node(TimestampLabel::AfterGpuPreprocess, TimestampNode::new(9));
+    // full_frame: slots 10,11
+    core3d.add_node(TimestampLabel::FrameStart, TimestampNode::new(10));
+    core3d.add_node(TimestampLabel::FrameEnd, TimestampNode::new(11));
+    // resolve
     core3d.add_node(TimestampLabel::Resolve, TimestampResolveNode);
 
-    // Wire before/after nodes around their respective passes
+    // ── Edge wiring ──
+
+    // Shadow span: before EarlyShadowPass → after LateShadowPass
     core3d.add_node_edge(TimestampLabel::BeforeShadow, NodePbr::EarlyShadowPass);
     core3d.add_node_edge(NodePbr::LateShadowPass, TimestampLabel::AfterShadow);
 
+    // Prepass span: before EarlyPrepass → after EndPrepasses
     core3d.add_node_edge(TimestampLabel::BeforePrepass, Node3d::EarlyPrepass);
     core3d.add_node_edge(Node3d::EndPrepasses, TimestampLabel::AfterPrepass);
 
+    // Main pass span: before StartMainPass → after EndMainPass
     core3d.add_node_edge(TimestampLabel::BeforeMainPass, Node3d::StartMainPass);
     core3d.add_node_edge(Node3d::EndMainPass, TimestampLabel::AfterMainPass);
 
+    // Post-processing span
     core3d.add_node_edge(
         TimestampLabel::BeforePostProcess,
         Node3d::StartMainPassPostProcessing,
@@ -232,14 +259,34 @@ pub fn plugin(app: &mut App) {
         TimestampLabel::AfterPostProcess,
     );
 
+    // GPU preprocess span: before EarlyGpuPreprocess → after LateGpuPreprocess
+    core3d.add_node_edge(
+        TimestampLabel::BeforeGpuPreprocess,
+        NodePbr::EarlyGpuPreprocess,
+    );
+    core3d.add_node_edge(
+        NodePbr::LateGpuPreprocess,
+        TimestampLabel::AfterGpuPreprocess,
+    );
+
+    // Full frame: FrameStart before everything, FrameEnd after Upscaling
+    core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforeGpuPreprocess);
+    core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforeShadow);
+    core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforePrepass);
+    core3d.add_node_edge(Node3d::Upscaling, TimestampLabel::FrameEnd);
+
     // Ordering edges to prevent ambiguity
     core3d.add_node_edge(TimestampLabel::AfterShadow, Node3d::StartMainPass);
     core3d.add_node_edge(TimestampLabel::AfterPrepass, Node3d::StartMainPass);
+    core3d.add_node_edge(TimestampLabel::AfterGpuPreprocess, Node3d::StartMainPass);
     core3d.add_node_edge(
         TimestampLabel::AfterMainPass,
         Node3d::StartMainPassPostProcessing,
     );
-    core3d.add_node_edge(TimestampLabel::AfterPostProcess, TimestampLabel::Resolve);
+    core3d.add_node_edge(TimestampLabel::AfterPostProcess, Node3d::Upscaling);
+
+    // Resolve must be last
+    core3d.add_node_edge(TimestampLabel::FrameEnd, TimestampLabel::Resolve);
 }
 
 // ── GPU init (render world, runs once) ──────────────────────────────────
@@ -309,7 +356,6 @@ fn sync_profiler_control(
 ) {
     let active = control.is_some_and(|c| c.active);
     if !active && state.active {
-        // Reset frame index for clean restart next time
         state.frame_index = 0;
     }
     state.active = active;
@@ -325,7 +371,6 @@ fn readback_timestamps(render_device: Res<RenderDevice>, mut state: ResMut<GpuTi
     let frame = state.frame_index;
     state.frame_index += 1;
 
-    // Need at least 2 frames of latency before reading back
     if frame < 2 {
         return;
     }
@@ -350,9 +395,9 @@ fn readback_timestamps(render_device: Res<RenderDevice>, mut state: ResMut<GpuTi
 
         if bytes.len() >= (NUM_TIMESTAMP_SLOTS as usize) * size_of::<u64>() {
             let period = state.timestamp_period;
-            let mut span_ms = Vec::with_capacity(4);
+            let mut span_ms = Vec::with_capacity(NUM_SPANS);
 
-            for i in 0..4usize {
+            for i in 0..NUM_SPANS {
                 let start_offset = i * 2 * size_of::<u64>();
                 let end_offset = (i * 2 + 1) * size_of::<u64>();
                 let start =
@@ -445,10 +490,10 @@ fn tick_pass_profiler(
     if let Some(ref channel) = channel {
         if let Ok(rx) = channel.0.lock() {
             while let Ok(span_ms) = rx.try_recv() {
-                if span_ms.len() == 4 {
-                    recording
-                        .samples
-                        .push([span_ms[0], span_ms[1], span_ms[2], span_ms[3]]);
+                if span_ms.len() == NUM_SPANS {
+                    let mut arr = [0.0f32; NUM_SPANS];
+                    arr.copy_from_slice(&span_ms);
+                    recording.samples.push(arr);
                 }
             }
         }
@@ -483,7 +528,7 @@ fn tick_pass_profiler(
 
 // ── Report ──────────────────────────────────────────────────────────────
 
-fn log_pass_report(samples: &[[f32; 4]], frame_count: u32, elapsed: f32) {
+fn log_pass_report(samples: &[[f32; NUM_SPANS]], frame_count: u32, elapsed: f32) {
     let gpu_sample_count = samples.len();
     if gpu_sample_count == 0 {
         info!("GPU pass profiler: no GPU samples collected. Timestamp queries may not be supported.");
@@ -499,10 +544,9 @@ fn log_pass_report(samples: &[[f32; 4]], frame_count: u32, elapsed: f32) {
         "Pass", "Avg ms", "p50", "p95", "% of frame"
     ));
 
-    let mut total_per_frame: Vec<f32> = Vec::with_capacity(gpu_sample_count);
+    // Compute stats for each span
     let mut span_stats: Vec<(f32, f32, f32)> = Vec::new();
-
-    for span_idx in 0..4 {
+    for span_idx in 0..NUM_SPANS {
         let mut values: Vec<f32> = samples.iter().map(|s| s[span_idx]).collect();
         values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -515,20 +559,14 @@ fn log_pass_report(samples: &[[f32; 4]], frame_count: u32, elapsed: f32) {
         span_stats.push((avg, p50, p95));
     }
 
-    for sample in samples {
-        total_per_frame.push(sample.iter().sum());
-    }
-    total_per_frame.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    // full_frame is the last span — use it as the denominator for percentages
+    let full_frame_avg = span_stats[NUM_SPANS - 1].0;
 
-    let total_avg: f32 = total_per_frame.iter().sum::<f32>() / total_per_frame.len() as f32;
-    let total_count = total_per_frame.len();
-    let total_p50 = total_per_frame[total_count / 2];
-    let total_p95 = total_per_frame[(total_count * 95 / 100).min(total_count - 1)];
-
-    for (i, name) in SPAN_NAMES.iter().enumerate() {
+    // Print individual pass spans (first 4)
+    for (i, name) in SPAN_NAMES[..4].iter().enumerate() {
         let (avg, p50, p95) = span_stats[i];
-        let pct = if total_avg > 0.0 {
-            avg / total_avg * 100.0
+        let pct = if full_frame_avg > 0.0 {
+            avg / full_frame_avg * 100.0
         } else {
             0.0
         };
@@ -538,9 +576,37 @@ fn log_pass_report(samples: &[[f32; 4]], frame_count: u32, elapsed: f32) {
         ));
     }
 
+    // Print gpu_preprocess
+    {
+        let (avg, p50, p95) = span_stats[4];
+        let pct = if full_frame_avg > 0.0 {
+            avg / full_frame_avg * 100.0
+        } else {
+            0.0
+        };
+        report.push_str(&format!(
+            "{:<28} {:>8.1} {:>8.1} {:>8.1} {:>10.1}%\n",
+            "gpu_preprocess", avg, p50, p95, pct,
+        ));
+    }
+
+    // Separator + totals
+    let pass_sum_avg: f32 = (0..4).map(|i| span_stats[i].0).sum();
+    report.push_str(&format!(
+        "{:<28} {:>8.1}\n",
+        "Sum of 4 passes", pass_sum_avg,
+    ));
+
+    let (avg, p50, p95) = span_stats[NUM_SPANS - 1];
     report.push_str(&format!(
         "{:<28} {:>8.1} {:>8.1} {:>8.1}\n",
-        "Total GPU measured", total_avg, total_p50, total_p95,
+        "Full GPU frame", avg, p50, p95,
+    ));
+
+    let unaccounted = avg - pass_sum_avg;
+    report.push_str(&format!(
+        "{:<28} {:>8.1}\n",
+        "Unaccounted GPU time", unaccounted,
     ));
 
     let frame_avg_ms = elapsed * 1000.0 / frame_count as f32;
