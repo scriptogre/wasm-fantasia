@@ -5,7 +5,6 @@ use bevy::mesh::Indices;
 use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
 use bevy::render::storage::ShaderStorageBuffer;
-use bevy_open_vat::data::VatInstanceData;
 use bevy_open_vat::prelude::*;
 
 use crate::asset_loading::Models;
@@ -41,6 +40,10 @@ const LOD_VISIBILITY_RANGES: &[VisibilityRange] = &[
     },
 ];
 
+/// Maximum number of unique active animation frames the compute shader can handle.
+/// 64 frames × 8323 vertices × 32 bytes = ~17MB GPU buffer.
+const MAX_ACTIVE_FRAMES: u32 = 64;
+
 /// Shared VAT rendering resources for all enemy instances, created once on
 /// first gameplay frame when all assets are loaded.
 #[derive(Resource)]
@@ -51,11 +54,6 @@ pub(crate) struct VatEnemyState {
     pub flash_material: Handle<VatMaterial>,
     /// LOD mesh handles: [lod0 (full), lod1 (simplified)].
     meshes: Vec<Handle<Mesh>>,
-    /// UV_B attribute extracted from LOD0 mesh — maps vertex_id to VAT texture column.
-    /// Uploaded once to GPU for the compute shader.
-    pub(crate) vertex_uvs: Handle<ShaderStorageBuffer>,
-    /// Number of vertices in the mesh (needed by compute dispatch and vertex shader).
-    pub(crate) vertex_count: u32,
 }
 
 /// Links an enemy entity to the child mesh entities (one per LOD) that hold
@@ -64,7 +62,7 @@ pub(crate) struct VatEnemyState {
 pub(crate) struct VatMeshLink(pub Vec<Entity>);
 
 /// Initializes shared VAT rendering resources for enemies: materials, meshes,
-/// LOD generation. Run once when all assets are loaded.
+/// LOD generation, and compute pre-skinning buffers. Run once when all assets are loaded.
 pub(crate) fn initialize_vat_enemy_resources(
     models: Res<Models>,
     images: Res<Assets<Image>>,
@@ -91,7 +89,7 @@ pub(crate) fn initialize_vat_enemy_resources(
 
     let mesh_lod0 = gltf_mesh.primitives[0].mesh.clone();
     let mesh_lod1 = generate_lod_mesh(&mesh_lod0, &mut meshes);
-    let y_resolution = image.texture_descriptor.size.height as f32;
+    let tex_height = image.texture_descriptor.size.height;
 
     // Extract UV_B for compute pre-skinning
     let source_mesh = meshes.get(&mesh_lod0).expect("LOD0 mesh must exist");
@@ -115,35 +113,39 @@ pub(crate) fn initialize_vat_enemy_resources(
     uv_buffer.set_data(uv_b_data);
     let vertex_uvs = buffers.add(uv_buffer);
 
-    // Seed with one zeroed entry so the GPU buffer has non-zero arrayLength.
-    // bevy_open_vat's update_instance_data system overwrites this every frame.
-    let mut buffer = ShaderStorageBuffer::default();
-    buffer.set_data(vec![VatInstanceData::default()]);
-    let buffer = buffers.add(buffer);
+    // Create GPU buffers for compute pre-skinning pipeline
+    // Pre-skinned buffer: holds position+normal per (frame_slot × vertex)
+    // 32 bytes per entry (vec4 position + vec4 normal)
+    let pre_skinned_size = MAX_ACTIVE_FRAMES as usize * vertex_count as usize;
+    let pre_skinned_zeros: Vec<[f32; 8]> = vec![[0.0; 8]; pre_skinned_size];
+    let mut pre_skinned_buf = ShaderStorageBuffer::default();
+    pre_skinned_buf.set_data(pre_skinned_zeros);
+    let pre_skinned_buffer = buffers.add(pre_skinned_buf);
+
+    // Frame table buffer: one u32 per unique active frame (max MAX_ACTIVE_FRAMES)
+    let mut frame_table_buf = ShaderStorageBuffer::default();
+    frame_table_buf.set_data(vec![0u32]);
+    let frame_table_buffer = buffers.add(frame_table_buf);
+
+    // Instance lookup buffer: one u32 per entity (mesh_tag → frame slot)
+    let mut instance_lookup_buf = ShaderStorageBuffer::default();
+    instance_lookup_buf.set_data(vec![0u32]);
+    let instance_lookup_buffer = buffers.add(instance_lookup_buf);
+
+    let min_pos: Vec3 = remap_info.os_remap.min.into();
+    let max_pos: Vec3 = remap_info.os_remap.max.into();
+    let range = max_pos - min_pos;
 
     let material = vat_materials.add(ExtendedMaterial {
         base: StandardMaterial {
             base_color: Color::srgb(0.816, 0.125, 0.125),
-            // Force forward rendering. The project uses deferred rendering by
-            // default, but bevy_open_vat overrides vertex_shader() (forward) and
-            // prepass_vertex_shader() (prepass). In deferred mode, opaque meshes
-            // render through the G-buffer prepass — which DOES use the prepass
-            // vertex shader. However, bevy_open_vat's prepass shader has its own
-            // Vertex struct that can conflict with deferred-specific shader_defs
-            // (NORMAL_PREPASS_OR_DEFERRED_PREPASS). Forward rendering avoids this
-            // issue entirely.
             opaque_render_method: bevy::pbr::OpaqueRendererMethod::Forward,
             ..default()
         },
         extension: OpenVatExtension {
-            vat_texture: models.enemy_vat_texture.clone(),
-            min_pos: remap_info.os_remap.min.into(),
-            frame_count: remap_info.os_remap.frames,
-            max_pos: remap_info.os_remap.max.into(),
-            y_resolution,
-            range: (Vec3::from(remap_info.os_remap.max) - Vec3::from(remap_info.os_remap.min)),
-            inv_y_resolution: 1.0 / y_resolution,
-            instance: buffer.clone(),
+            pre_skinned: pre_skinned_buffer.clone(),
+            instance_lookup: instance_lookup_buffer.clone(),
+            vertex_count: UVec4::new(vertex_count, 0, 0, 0),
         },
     });
 
@@ -155,14 +157,9 @@ pub(crate) fn initialize_vat_enemy_resources(
             ..default()
         },
         extension: OpenVatExtension {
-            vat_texture: models.enemy_vat_texture.clone(),
-            min_pos: remap_info.os_remap.min.into(),
-            frame_count: remap_info.os_remap.frames,
-            max_pos: remap_info.os_remap.max.into(),
-            y_resolution,
-            range: (Vec3::from(remap_info.os_remap.max) - Vec3::from(remap_info.os_remap.min)),
-            inv_y_resolution: 1.0 / y_resolution,
-            instance: buffer.clone(),
+            pre_skinned: pre_skinned_buffer.clone(),
+            instance_lookup: instance_lookup_buffer.clone(),
+            vertex_count: UVec4::new(vertex_count, 0, 0, 0),
         },
     });
 
@@ -170,8 +167,20 @@ pub(crate) fn initialize_vat_enemy_resources(
         material,
         flash_material,
         meshes: vec![mesh_lod0, mesh_lod1],
+    });
+
+    commands.insert_resource(VatComputeResources {
+        vat_texture: models.enemy_vat_texture.clone(),
         vertex_uvs,
+        frame_table_buffer,
+        instance_lookup_buffer,
+        pre_skinned_buffer,
         vertex_count,
+        min_pos,
+        max_pos,
+        range,
+        tex_height,
+        frame_count: remap_info.os_remap.frames,
     });
 }
 
