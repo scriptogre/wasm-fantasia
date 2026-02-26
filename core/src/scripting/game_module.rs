@@ -1,14 +1,19 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 
+use rune::runtime::Vm;
 use rune::{ContextError, Module};
 
 use super::commands::{Command, CommandBuffer};
+use super::registry::ScriptRegistry;
 use super::types::{Combatant, Hit};
 
 thread_local! {
     static COMMAND_BUFFER: RefCell<CommandBuffer> = RefCell::new(CommandBuffer::new());
     static RNG_ROLL: RefCell<f32> = RefCell::new(0.0);
     static AVAILABLE_TARGETS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
+    static ENTITY_BEHAVIORS: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    static SCRIPT_REGISTRY: RefCell<Option<Rc<ScriptRegistry>>> = RefCell::new(None);
 }
 
 /// Set the RNG roll value before calling a script.
@@ -19,6 +24,21 @@ pub fn set_rng_roll(roll: f32) {
 /// Set the available targets before calling an ability script.
 pub fn set_available_targets(targets: Vec<Combatant>) {
     AVAILABLE_TARGETS.with(|t| *t.borrow_mut() = targets);
+}
+
+/// Set the list of behavior script names attached to the current entity.
+pub fn set_entity_behaviors(behaviors: Vec<String>) {
+    ENTITY_BEHAVIORS.with(|b| *b.borrow_mut() = behaviors);
+}
+
+/// Set the script registry for `fire_hook` to use during ability execution.
+pub fn set_script_registry(registry: Rc<ScriptRegistry>) {
+    SCRIPT_REGISTRY.with(|r| *r.borrow_mut() = Some(registry));
+}
+
+/// Clear the script registry after ability execution.
+pub fn clear_script_registry() {
+    SCRIPT_REGISTRY.with(|r| *r.borrow_mut() = None);
 }
 
 /// Drain all commands emitted by the last script call.
@@ -62,6 +82,9 @@ pub fn build_game_module() -> Result<Module, ContextError> {
     // Target query functions (for ability scripts)
     m.function("targets_in_cone", targets_in_cone).build()?;
     m.function("targets_in_radius", targets_in_radius).build()?;
+
+    // Hook chaining
+    m.function("fire_hook", fire_hook).build()?;
 
     Ok(m)
 }
@@ -177,6 +200,52 @@ fn min_f32(a: f32, b: f32) -> f32 {
 
 fn max_f32(a: f32, b: f32) -> f32 {
     a.max(b)
+}
+
+/// Chain a hook through all entity behaviors that implement it.
+///
+/// Called from Rune as `fire_hook("on_pre_hit", source, target, hit)`.
+/// For each behavior script attached to the entity that has the named function,
+/// calls it with (source, target, hit) and threads the Hit through.
+fn fire_hook(hook_name: &str, source: &Combatant, target: &Combatant, hit: Hit) -> Hit {
+    let behaviors = ENTITY_BEHAVIORS.with(|b| b.borrow().clone());
+
+    let registry = SCRIPT_REGISTRY.with(|r| r.borrow().clone());
+    let Some(registry) = registry else {
+        return hit;
+    };
+
+    let mut current_hit = hit;
+
+    for behavior_name in &behaviors {
+        let Some(engine) = registry.get(behavior_name) else {
+            continue;
+        };
+        if !engine.has_function(hook_name) {
+            continue;
+        }
+
+        // Create a fresh VM and call the hook. The COMMAND_BUFFER and RNG_ROLL
+        // thread-locals are shared, so commands from behavior scripts accumulate
+        // alongside the ability script's commands.
+        let mut vm = Vm::new(engine.runtime.clone(), engine.unit.clone());
+        match vm.call(
+            [hook_name],
+            (source.clone(), target.clone(), current_hit.clone()),
+        ) {
+            Ok(output) => {
+                if let Ok(new_hit) = rune::from_value::<Hit>(output) {
+                    current_hit = new_hit;
+                }
+            }
+            Err(_) => {
+                // If a behavior hook fails, skip it and continue with the current hit.
+                continue;
+            }
+        }
+    }
+
+    current_hit
 }
 
 fn targets_in_cone(
