@@ -22,6 +22,7 @@ pub mod rule_presets;
 pub mod rules;
 pub mod scene;
 pub mod screens;
+pub mod scripting;
 pub mod ui;
 
 use asset_loading::{AudioSources, Models, ResourceHandles};
@@ -97,6 +98,7 @@ fn main() {
         audio::plugin,
         asset_loading::plugin,
         ui::plugin,
+        scripting::plugin,
         game::plugin,
         gpu_pass_profiler::plugin,
     ));

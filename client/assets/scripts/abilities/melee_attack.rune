@@ -7,7 +7,17 @@ pub fn on_ability_start(source) {
     let targets = targets_in_cone(source, source.attack_range, source.attack_arc);
 
     for target in targets {
-        damage(target, source.attack_damage);
-        knockback(target, source.knockback_force);
+        let hit = Hit { damage: source.attack_damage, knockback: source.knockback_force, is_crit: false };
+
+        hit = fire_hook("on_pre_hit", source, target, hit);
+
+        damage(target, hit.damage);
+        knockback(target, hit.knockback);
+
+        hit = fire_hook("on_hit", source, target, hit);
+
+        if hit.is_crit {
+            vfx("crit_particles", target);
+        }
     }
 }

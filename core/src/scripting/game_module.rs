@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use rune::runtime::Vm;
 use rune::{ContextError, Module};
@@ -14,7 +14,7 @@ thread_local! {
     static AVAILABLE_TARGETS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
     static AVAILABLE_PLAYERS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
     static ENTITY_BEHAVIORS: RefCell<Vec<String>> = RefCell::new(Vec::new());
-    static SCRIPT_REGISTRY: RefCell<Option<Rc<ScriptRegistry>>> = RefCell::new(None);
+    static SCRIPT_REGISTRY: RefCell<Option<Arc<ScriptRegistry>>> = RefCell::new(None);
 }
 
 /// Set the RNG roll value before calling a script.
@@ -38,7 +38,7 @@ pub fn set_entity_behaviors(behaviors: Vec<String>) {
 }
 
 /// Set the script registry for `fire_hook` to use during ability execution.
-pub fn set_script_registry(registry: Rc<ScriptRegistry>) {
+pub fn set_script_registry(registry: Arc<ScriptRegistry>) {
     SCRIPT_REGISTRY.with(|r| *r.borrow_mut() = Some(registry));
 }
 

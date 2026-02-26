@@ -9,8 +9,14 @@ pub fn on_ability_start(source) {
     let base_damage = source.attack_damage * 4.0;
 
     for target in targets {
-        damage(target, base_damage);
-        knockback(target, 20.0);
+        let hit = Hit { damage: base_damage, knockback: 20.0, is_crit: false };
+
+        hit = fire_hook("on_pre_hit", source, target, hit);
+
+        damage(target, hit.damage);
+        knockback(target, hit.knockback);
+
+        hit = fire_hook("on_hit", source, target, hit);
     }
 
     screen_shake(1.5);

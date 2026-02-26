@@ -3,7 +3,6 @@ pub mod game_module;
 pub mod registry;
 pub mod types;
 
-use std::rc::Rc;
 use std::sync::Arc;
 
 use rune::runtime::{Unit, Vm};
@@ -98,7 +97,7 @@ impl ScriptEngine {
         source: Combatant,
         targets: Vec<Combatant>,
         rng_roll: f32,
-        registry: Rc<ScriptRegistry>,
+        registry: Arc<ScriptRegistry>,
         behaviors: Vec<String>,
     ) -> Result<Vec<Command>, rune::support::Error> {
         let _ = take_commands();
@@ -163,7 +162,7 @@ impl ScriptEngine {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use super::*;
 
@@ -828,7 +827,7 @@ mod tests {
         registry
             .register("stacking".to_string(), STACKING_SCRIPT)
             .expect("stacking should compile");
-        let registry = Rc::new(registry);
+        let registry = Arc::new(registry);
 
         let engine =
             ScriptEngine::new(MELEE_ATTACK_WITH_HOOKS).expect("melee attack with hooks should compile");
@@ -934,7 +933,7 @@ mod tests {
             .register("stacking".to_string(), STACKING_SCRIPT)
             .expect("stacking should compile");
         // Only stacking — no crit. fire_hook("on_pre_hit") should skip stacking (no on_pre_hit).
-        let registry = Rc::new(registry);
+        let registry = Arc::new(registry);
 
         let engine =
             ScriptEngine::new(MELEE_ATTACK_WITH_HOOKS).expect("melee attack with hooks should compile");
@@ -995,7 +994,7 @@ mod tests {
     #[test]
     fn fire_hook_with_no_behaviors_passes_hit_through() {
         // No behaviors attached — fire_hook should return hit unchanged
-        let registry = Rc::new(ScriptRegistry::new());
+        let registry = Arc::new(ScriptRegistry::new());
         let engine =
             ScriptEngine::new(MELEE_ATTACK_WITH_HOOKS).expect("script should compile");
 
@@ -1031,7 +1030,7 @@ mod tests {
         registry
             .register("crit".to_string(), CRIT_SCRIPT)
             .expect("crit should compile");
-        let registry = Rc::new(registry);
+        let registry = Arc::new(registry);
 
         let engine =
             ScriptEngine::new(GROUND_POUND_WITH_HOOKS).expect("ground pound with hooks should compile");

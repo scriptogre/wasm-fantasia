@@ -3,6 +3,7 @@ use crate::models::player::{JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
 use crate::rule_presets;
 use crate::rules::{Stat, Stats};
 use crate::scene::GameLayer;
+use crate::scripting::{ActiveAbility, EntityBehaviors};
 use crate::*;
 use avian3d::prelude::*;
 use bevy::scene::SceneInstanceReady;
@@ -189,6 +190,9 @@ pub fn spawn_player(
                 .with(Stat::AttackArc, defaults::ATTACK_ARC)
                 .with(Stat::CritChance, defaults::CRIT_CHANCE)
                 .with(Stat::CritMultiplier, defaults::CRIT_MULTIPLIER),
+            // Rune scripting: behavior hooks + active ability (replaces old rules system)
+            EntityBehaviors(vec!["crit".into(), "stacking".into()]),
+            ActiveAbility("melee_attack".into()),
             rule_presets::rules_bundle(game_core::presets::default_player_rules()),
         ))
         // spawn character mesh as child to adjust mesh position relative to the player origin
