@@ -12,6 +12,7 @@ thread_local! {
     static COMMAND_BUFFER: RefCell<CommandBuffer> = RefCell::new(CommandBuffer::new());
     static RNG_ROLL: RefCell<f32> = RefCell::new(0.0);
     static AVAILABLE_TARGETS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
+    static AVAILABLE_PLAYERS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
     static ENTITY_BEHAVIORS: RefCell<Vec<String>> = RefCell::new(Vec::new());
     static SCRIPT_REGISTRY: RefCell<Option<Rc<ScriptRegistry>>> = RefCell::new(None);
 }
@@ -24,6 +25,11 @@ pub fn set_rng_roll(roll: f32) {
 /// Set the available targets before calling an ability script.
 pub fn set_available_targets(targets: Vec<Combatant>) {
     AVAILABLE_TARGETS.with(|t| *t.borrow_mut() = targets);
+}
+
+/// Set the available players before calling a tick script.
+pub fn set_available_players(players: Vec<Combatant>) {
+    AVAILABLE_PLAYERS.with(|p| *p.borrow_mut() = players);
 }
 
 /// Set the list of behavior script names attached to the current entity.
@@ -82,6 +88,9 @@ pub fn build_game_module() -> Result<Module, ContextError> {
     // Target query functions (for ability scripts)
     m.function("targets_in_cone", targets_in_cone).build()?;
     m.function("targets_in_radius", targets_in_radius).build()?;
+
+    // AI query functions
+    m.function("nearest_player", nearest_player).build()?;
 
     // Hook chaining
     m.function("fire_hook", fire_hook).build()?;
@@ -246,6 +255,28 @@ fn fire_hook(hook_name: &str, source: &Combatant, target: &Combatant, hit: Hit) 
     }
 
     current_hit
+}
+
+fn nearest_player(pos_x: f32, pos_z: f32) -> Option<Combatant> {
+    AVAILABLE_PLAYERS.with(|players| {
+        let players = players.borrow();
+        let mut closest: Option<(f32, &Combatant)> = None;
+        for p in players.iter() {
+            let dx = pos_x - p.pos_x;
+            let dz = pos_z - p.pos_z;
+            let dist_sq = dx * dx + dz * dz;
+            match closest {
+                Some((best_dist_sq, _)) if dist_sq < best_dist_sq => {
+                    closest = Some((dist_sq, p));
+                }
+                None => {
+                    closest = Some((dist_sq, p));
+                }
+                _ => {}
+            }
+        }
+        closest.map(|(_, c)| c.clone())
+    })
 }
 
 fn targets_in_cone(

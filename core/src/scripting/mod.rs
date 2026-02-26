@@ -11,8 +11,8 @@ use rune::{Context, Diagnostics, Source, Sources};
 
 pub use commands::{Command, CommandBuffer};
 pub use game_module::{
-    clear_script_registry, set_available_targets, set_entity_behaviors, set_rng_roll,
-    set_script_registry, take_commands,
+    clear_script_registry, set_available_players, set_available_targets, set_entity_behaviors,
+    set_rng_roll, set_script_registry, take_commands,
 };
 pub use registry::ScriptRegistry;
 pub use types::{Combatant, Hit};
@@ -111,6 +111,28 @@ impl ScriptEngine {
         vm.call([function], (source,))?;
 
         clear_script_registry();
+        Ok(take_commands())
+    }
+
+    /// Call a tick function for AI scripts: `fn on_tick(entity, dt)`.
+    ///
+    /// Sets the RNG roll and available players, calls the function, and returns
+    /// any commands emitted during execution.
+    pub fn call_tick(
+        &self,
+        function: &str,
+        entity: Combatant,
+        players: Vec<Combatant>,
+        dt: f32,
+        rng_roll: f32,
+    ) -> Result<Vec<Command>, rune::support::Error> {
+        let _ = take_commands();
+        set_rng_roll(rng_roll);
+        game_module::set_available_players(players);
+
+        let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
+        vm.call([function], (entity, dt))?;
+
         Ok(take_commands())
     }
 
@@ -1047,6 +1069,147 @@ mod tests {
             matches!(cmds[4], Command::ApplyKnockback { target_id: 2, force } if (force - 40.0).abs() < f32::EPSILON),
             "ground pound crit knockback should be 40, got {:?}",
             cmds[4]
+        );
+    }
+
+    // --- Zombie AI tests ---
+
+    const ZOMBIE_AI_SCRIPT: &str = r#"
+        use game::*;
+
+        pub fn on_tick(self_entity, dt) {
+            let player = nearest_player(self_entity.pos_x, self_entity.pos_z);
+
+            if player.is_none() {
+                set_behavior(self_entity, "idle");
+                return;
+            }
+
+            let player = player.unwrap();
+            let dist = distance_2d(self_entity, player);
+
+            if dist <= self_entity.attack_range && self_entity.cooldown_ready {
+                set_behavior(self_entity, "attack");
+                damage(player, self_entity.attack_damage);
+            } else if dist <= 15.0 {
+                set_behavior(self_entity, "chase");
+                move_toward(self_entity, player.pos_x, player.pos_z, self_entity.speed);
+            } else {
+                set_behavior(self_entity, "idle");
+            }
+        }
+    "#;
+
+    fn zombie_combatant(id: u64, x: f32, z: f32) -> Combatant {
+        Combatant {
+            id,
+            pos_x: x,
+            pos_y: 0.0,
+            pos_z: z,
+            dir_x: 1.0,
+            dir_z: 0.0,
+            health: 100.0,
+            max_health: 100.0,
+            attack_damage: 10.0,
+            crit_chance: 0.0,
+            crit_multiplier: 1.5,
+            knockback_force: 5.0,
+            attack_range: 2.0,
+            attack_arc: 90.0,
+            attack_speed: 1.0,
+            fury_stacks: 0,
+            attack_speed_bonus: 0.0,
+            cooldown_ready: true,
+            speed: 5.0,
+        }
+    }
+
+    #[test]
+    fn zombie_ai_chases_nearby_player() {
+        let engine = ScriptEngine::new(ZOMBIE_AI_SCRIPT).expect("zombie AI should compile");
+
+        let zombie = zombie_combatant(1, 0.0, 0.0);
+        let player = zombie_combatant(100, 10.0, 0.0); // distance=10, within chase range (<=15)
+
+        let cmds = engine
+            .call_tick("on_tick", zombie, vec![player], 0.016, 0.5)
+            .expect("tick should succeed");
+
+        assert_eq!(cmds.len(), 2, "expected 2 commands (SetBehavior + MoveToward), got {cmds:?}");
+        assert!(
+            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "chase"),
+            "should set behavior to chase, got {:?}",
+            cmds[0]
+        );
+        assert!(
+            matches!(cmds[1], Command::MoveToward { entity_id: 1, target_x, target_z, speed }
+                if (target_x - 10.0).abs() < f32::EPSILON
+                && target_z.abs() < f32::EPSILON
+                && (speed - 5.0).abs() < f32::EPSILON),
+            "should move toward player, got {:?}",
+            cmds[1]
+        );
+    }
+
+    #[test]
+    fn zombie_ai_attacks_in_range() {
+        let engine = ScriptEngine::new(ZOMBIE_AI_SCRIPT).expect("zombie AI should compile");
+
+        let zombie = zombie_combatant(1, 0.0, 0.0); // attack_range=2.0, cooldown_ready=true
+        let player = zombie_combatant(100, 1.5, 0.0); // distance=1.5 <= attack_range
+
+        let cmds = engine
+            .call_tick("on_tick", zombie, vec![player], 0.016, 0.5)
+            .expect("tick should succeed");
+
+        assert_eq!(cmds.len(), 2, "expected 2 commands (SetBehavior + DealDamage), got {cmds:?}");
+        assert!(
+            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "attack"),
+            "should set behavior to attack, got {:?}",
+            cmds[0]
+        );
+        assert!(
+            matches!(cmds[1], Command::DealDamage { target_id: 100, amount }
+                if (amount - 10.0).abs() < f32::EPSILON),
+            "should deal damage to player, got {:?}",
+            cmds[1]
+        );
+    }
+
+    #[test]
+    fn zombie_ai_idles_when_no_player() {
+        let engine = ScriptEngine::new(ZOMBIE_AI_SCRIPT).expect("zombie AI should compile");
+
+        let zombie = zombie_combatant(1, 0.0, 0.0);
+
+        let cmds = engine
+            .call_tick("on_tick", zombie, vec![], 0.016, 0.5)
+            .expect("tick should succeed");
+
+        assert_eq!(cmds.len(), 1, "expected 1 command (SetBehavior idle), got {cmds:?}");
+        assert!(
+            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "idle"),
+            "should set behavior to idle, got {:?}",
+            cmds[0]
+        );
+    }
+
+    #[test]
+    fn zombie_ai_idles_when_far() {
+        let engine = ScriptEngine::new(ZOMBIE_AI_SCRIPT).expect("zombie AI should compile");
+
+        let zombie = zombie_combatant(1, 0.0, 0.0);
+        let player = zombie_combatant(100, 20.0, 0.0); // distance=20 > 15.0
+
+        let cmds = engine
+            .call_tick("on_tick", zombie, vec![player], 0.016, 0.5)
+            .expect("tick should succeed");
+
+        assert_eq!(cmds.len(), 1, "expected 1 command (SetBehavior idle), got {cmds:?}");
+        assert!(
+            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "idle"),
+            "should set behavior to idle when player is far, got {:?}",
+            cmds[0]
         );
     }
 }
