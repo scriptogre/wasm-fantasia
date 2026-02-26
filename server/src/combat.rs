@@ -1,14 +1,18 @@
-use game_core::combat::{
-    self, defaults, effect_types, knockback_displacement, resolve_combat, CombatInput, HitTarget,
-};
-use game_core::presets::{self, EntityRules};
-use game_core::rules::{Stat, Stats};
+use game_core::combat::{self, defaults, effect_types, landing_aoe};
+use game_core::scripting::{Combatant, Command};
 use spacetimedb::Table;
 
 use crate::schema::*;
+use crate::scripting;
 
-thread_local! {
-    static PLAYER_RULES: EntityRules = presets::default_player_rules();
+/// Simple RNG from a seed — produces a float in [0, 1).
+fn rng_from_seed(seed: u64) -> f32 {
+    // xorshift64 for a quick pseudo-random value
+    let mut s = seed;
+    s ^= s << 13;
+    s ^= s >> 7;
+    s ^= s << 17;
+    (s % 10_000) as f32 / 10_000.0
 }
 
 /// Server-authoritative attack resolution.
@@ -63,19 +67,30 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         1.0
     };
 
-    let half_arc_cos = (attacker.attack_arc / 2.0_f32).to_radians().cos();
     let fwd = glam::Vec2::new(-attacker.rotation_y.sin(), -attacker.rotation_y.cos());
-    let origin = glam::Vec2::new(attacker.x, attacker.z);
 
-    let attacker_stats = Stats::new()
-        .with(Stat::AttackDamage, attacker.attack_damage)
-        .with(Stat::CritChance, attacker.crit_chance)
-        .with(Stat::CritMultiplier, attacker.crit_multiplier)
-        .with(Stat::Knockback, attacker.knockback_force)
-        .with(Stat::AttackRange, attacker.attack_range)
-        .with(Stat::AttackArc, attacker.attack_arc)
-        .with(Stat::Stacks, stacks)
-        .with(Stat::AttackSpeed, effective_speed);
+    // Build source combatant for scripting
+    let source = Combatant {
+        id: 0, // player source ID
+        pos_x: attacker.x,
+        pos_y: attacker.y,
+        pos_z: attacker.z,
+        dir_x: fwd.x,
+        dir_z: fwd.y,
+        health: attacker.health,
+        max_health: attacker.max_health,
+        attack_damage: attacker.attack_damage,
+        crit_chance: attacker.crit_chance,
+        crit_multiplier: attacker.crit_multiplier,
+        knockback_force: attacker.knockback_force,
+        attack_range: attacker.attack_range,
+        attack_arc: attacker.attack_arc,
+        attack_speed: effective_speed,
+        fury_stacks: stacks as i64,
+        attack_speed_bonus: 0.0,
+        cooldown_ready: true,
+        speed: 0.0,
+    };
 
     // Build target list from enemies in the same world
     let enemy_targets: Vec<Enemy> = ctx
@@ -85,97 +100,67 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .filter(|e| e.health > 0.0 && e.world_id == attacker.world_id)
         .collect();
 
-    // O(1) position lookup for combat events (avoids O(N) linear search per hit)
+    let targets: Vec<Combatant> = enemy_targets
+        .iter()
+        .map(|e| Combatant {
+            id: e.id,
+            pos_x: e.x,
+            pos_y: e.y,
+            pos_z: e.z,
+            dir_x: 0.0,
+            dir_z: 1.0,
+            health: e.health,
+            max_health: e.max_health,
+            attack_damage: e.attack_damage,
+            crit_chance: 0.0,
+            crit_multiplier: 1.0,
+            knockback_force: 0.0,
+            attack_range: e.attack_range,
+            attack_arc: 360.0,
+            attack_speed: e.attack_speed,
+            fury_stacks: 0,
+            attack_speed_bonus: 0.0,
+            cooldown_ready: false,
+            speed: 0.0,
+        })
+        .collect();
+
+    // O(1) position lookup for combat events
     let enemy_pos_index: std::collections::HashMap<u64, (f32, f32, f32)> = enemy_targets
         .iter()
         .map(|e| (e.id, (e.x, e.y, e.z)))
         .collect();
 
-    let hit_targets: Vec<HitTarget> = enemy_targets
-        .iter()
-        .map(|e| HitTarget {
-            id: e.id,
-            pos: glam::Vec2::new(e.x, e.z),
-            health: e.health,
-        })
-        .collect();
-
-    let output = PLAYER_RULES.with(|rules| {
-        resolve_combat(&CombatInput {
-            origin,
-            forward: fwd,
-            base_range: attacker.attack_range,
-            half_arc_cos,
-            attacker_stats: &attacker_stats,
-            rules,
-            rng_seed: now as u64,
-            targets: &hit_targets,
-        })
-    });
+    let rng_roll = rng_from_seed(now as u64);
+    let commands = scripting::run_melee_attack(source, targets, rng_roll);
 
     let world_id = attacker.world_id;
-    for hit in &output.hits {
-        let (hit_x, hit_y, hit_z) = enemy_pos_index
-            .get(&hit.target_id)
-            .copied()
-            .unwrap_or((attacker.x, attacker.y, attacker.z));
+    let mut hit_any = false;
+    let mut new_stacks = stacks;
+    let mut new_speed_bonus = 0.0_f32;
+    let mut buff_applied = false;
 
-        ctx.db.combat_event().insert(CombatEvent {
-            id: 0,
-            x: hit_x,
-            y: hit_y,
-            z: hit_z,
-            damage: hit.damage,
-            is_crit: hit.is_crit,
-            world_id,
-            timestamp: now,
-        });
-
-        if let Some(enemy) = ctx.db.enemy().id().find(hit.target_id) {
-            if hit.died {
-                ctx.db.enemy().delete(enemy);
-            } else {
-                // Physics-based knockback: insert an impulse for the next game_tick
-                let radial = glam::Vec2::new(enemy.x - attacker.x, enemy.z - attacker.z);
-                let radial_dir = radial.normalize_or(fwd);
-                let disp = combat::knockback_displacement(
-                    radial_dir,
-                    fwd,
-                    hit.knockback,
-                    hit.push,
-                    hit.launch,
-                );
-
-                // Convert displacement to impulse (multiply by enemy mass)
-                let enemy_mass = defaults::ENEMY_MASS;
-                ctx.db.knockback_impulse().insert(KnockbackImpulse {
-                    id: 0,
-                    enemy_id: enemy.id,
-                    world_id,
-                    impulse_x: disp.x * enemy_mass,
-                    impulse_y: disp.y * enemy_mass,
-                    impulse_z: disp.z * enemy_mass,
-                });
-
-                ctx.db.enemy().id().update(Enemy {
-                    health: hit.new_health,
-                    ..enemy
-                });
-            }
-        }
-    }
-
-    // Update attacker state
-    let new_stacks = output.attacker_stats.get(&Stat::Stacks);
-    let new_speed = output.attacker_stats.get(&Stat::AttackSpeed);
+    process_combat_commands(
+        ctx,
+        &commands,
+        &attacker,
+        world_id,
+        &enemy_pos_index,
+        &fwd,
+        now,
+        &mut hit_any,
+        &mut new_stacks,
+        &mut new_speed_bonus,
+        &mut buff_applied,
+    );
 
     // Persist stacking buff to active_effect
-    if new_stacks > 0.0 || stacking_effect.is_some() {
+    if new_stacks != stacks || buff_applied || stacking_effect.is_some() {
         if let Some(effect) = stacking_effect {
             if new_stacks > 0.0 {
                 ctx.db.active_effect().id().update(ActiveEffect {
                     magnitude: new_stacks,
-                    timestamp: if output.hit_any { now } else { last_hit_time },
+                    timestamp: if hit_any { now } else { last_hit_time },
                     ..effect
                 });
             } else {
@@ -193,9 +178,17 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         }
     }
 
+    let new_attack_speed = if new_speed_bonus > 0.0 {
+        1.0 + new_speed_bonus
+    } else if stacks <= 0.0 {
+        1.0
+    } else {
+        attacker.attack_speed
+    };
+
     ctx.db.player().identity().update(Player {
         last_attack_time: now,
-        attack_speed: new_speed,
+        attack_speed: new_attack_speed,
         last_update: now,
         ..attacker
     });
@@ -233,8 +226,6 @@ pub fn ground_pound_hit(ctx: &spacetimedb::ReducerContext, x: f32, y: f32, z: f3
 /// Server-authoritative landing AOE. Client sends velocity + impact position.
 #[spacetimedb::reducer]
 pub fn landing_aoe_hit(ctx: &spacetimedb::ReducerContext, velocity_y: f32, x: f32, y: f32, z: f32) {
-    use combat::landing_aoe;
-
     let Some(attacker) = ctx.db.player().identity().find(ctx.sender) else {
         return;
     };
@@ -269,8 +260,8 @@ fn aoe_hit(
     impact_y: f32,
     impact_z: f32,
     radius: f32,
-    kb: f32,
-    launch: f32,
+    _kb: f32,
+    _launch: f32,
     damage_multiplier: f32,
 ) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
@@ -280,12 +271,6 @@ fn aoe_hit(
     } else {
         defaults::ATTACK_DAMAGE
     };
-
-    let attacker_stats = Stats::new()
-        .with(Stat::AttackDamage, base_damage * damage_multiplier)
-        .with(Stat::CritChance, attacker.crit_chance)
-        .with(Stat::CritMultiplier, attacker.crit_multiplier)
-        .with(Stat::Knockback, kb);
 
     let vertical_reach = defaults::ATTACK_VERTICAL_REACH * 2.0;
 
@@ -309,70 +294,192 @@ fn aoe_hit(
         return;
     }
 
-    let hit_targets: Vec<HitTarget> = enemy_targets
+    // Build source combatant for ground pound — position at impact point
+    let source = Combatant {
+        id: 0,
+        pos_x: impact_x,
+        pos_y: impact_y,
+        pos_z: impact_z,
+        dir_x: 1.0,
+        dir_z: 0.0,
+        health: attacker.health,
+        max_health: attacker.max_health,
+        attack_damage: base_damage * damage_multiplier,
+        crit_chance: attacker.crit_chance,
+        crit_multiplier: attacker.crit_multiplier,
+        knockback_force: attacker.knockback_force,
+        attack_range: radius,
+        attack_arc: 360.0,
+        attack_speed: attacker.attack_speed,
+        fury_stacks: 0,
+        attack_speed_bonus: 0.0,
+        cooldown_ready: true,
+        speed: 0.0,
+    };
+
+    let targets: Vec<Combatant> = enemy_targets
         .iter()
-        .map(|e| HitTarget {
+        .map(|e| Combatant {
             id: e.id,
-            pos: glam::Vec2::new(e.x, e.z),
+            pos_x: e.x,
+            pos_y: e.y,
+            pos_z: e.z,
+            dir_x: 0.0,
+            dir_z: 1.0,
             health: e.health,
+            max_health: e.max_health,
+            attack_damage: e.attack_damage,
+            crit_chance: 0.0,
+            crit_multiplier: 1.0,
+            knockback_force: 0.0,
+            attack_range: e.attack_range,
+            attack_arc: 360.0,
+            attack_speed: e.attack_speed,
+            fury_stacks: 0,
+            attack_speed_bonus: 0.0,
+            cooldown_ready: false,
+            speed: 0.0,
         })
         .collect();
 
-    let origin_xz = glam::Vec2::new(impact_x, impact_z);
-    let forward_xz = glam::Vec2::new(1.0, 0.0); // direction irrelevant for 360° AOE
+    let enemy_pos_index: std::collections::HashMap<u64, (f32, f32, f32)> = enemy_targets
+        .iter()
+        .map(|e| (e.id, (e.x, e.y, e.z)))
+        .collect();
 
-    let output = PLAYER_RULES.with(|rules| {
-        resolve_combat(&CombatInput {
-            origin: origin_xz,
-            forward: forward_xz,
-            base_range: radius,
-            half_arc_cos: -1.0, // Full 360° AOE
-            attacker_stats: &attacker_stats,
-            rules,
-            rng_seed: now as u64,
-            targets: &hit_targets,
-        })
-    });
-
-    let enemy_mass = 50.0_f32;
+    let rng_roll = rng_from_seed(now as u64);
+    let commands = scripting::run_ground_pound(source, targets, rng_roll);
 
     let world_id = attacker.world_id;
-    for hit in &output.hits {
-        let Some(enemy) = ctx.db.enemy().id().find(hit.target_id) else {
-            continue;
-        };
+    let fwd = glam::Vec2::new(1.0, 0.0); // direction irrelevant for 360deg AOE
+    let mut hit_any = false;
+    let mut new_stacks = 0.0_f32;
+    let mut new_speed_bonus = 0.0_f32;
+    let mut buff_applied = false;
+
+    process_combat_commands(
+        ctx,
+        &commands,
+        attacker,
+        world_id,
+        &enemy_pos_index,
+        &fwd,
+        now,
+        &mut hit_any,
+        &mut new_stacks,
+        &mut new_speed_bonus,
+        &mut buff_applied,
+    );
+}
+
+// ── Command processing ───────────────────────────────────────────
+
+/// Process Rune script commands and apply them to SpacetimeDB tables.
+#[allow(clippy::too_many_arguments)]
+fn process_combat_commands(
+    ctx: &spacetimedb::ReducerContext,
+    commands: &[Command],
+    attacker: &Player,
+    world_id: u32,
+    enemy_pos_index: &std::collections::HashMap<u64, (f32, f32, f32)>,
+    fwd: &glam::Vec2,
+    now: i64,
+    hit_any: &mut bool,
+    new_stacks: &mut f32,
+    new_speed_bonus: &mut f32,
+    buff_applied: &mut bool,
+) {
+    // Accumulate damage per target so we can batch health updates
+    let mut damage_by_target: std::collections::HashMap<u64, (f32, bool)> =
+        std::collections::HashMap::new();
+    let mut knockback_by_target: std::collections::HashMap<u64, f32> =
+        std::collections::HashMap::new();
+
+    for cmd in commands {
+        match cmd {
+            Command::DealDamage { target_id, amount } => {
+                let entry = damage_by_target.entry(*target_id).or_insert((0.0, false));
+                entry.0 += amount;
+                *hit_any = true;
+            }
+            Command::ApplyKnockback { target_id, force } => {
+                let entry = knockback_by_target.entry(*target_id).or_insert(0.0);
+                *entry += force;
+            }
+            Command::SetStat {
+                entity_id: _,
+                stat,
+                value,
+            } => {
+                if stat == "fury_stacks" {
+                    *new_stacks = *value;
+                } else if stat == "attack_speed_bonus" {
+                    *new_speed_bonus = *value;
+                }
+            }
+            Command::AddBuff { .. } => {
+                *buff_applied = true;
+            }
+            Command::SpawnVfx { target_id, .. } => {
+                // Mark is_crit on the damage entry for this target (crit_particles)
+                if let Some(entry) = damage_by_target.get_mut(target_id) {
+                    entry.1 = true; // is_crit
+                }
+            }
+            // Animate, PlaySound, ScreenShake, HitStop — client-only effects, no-op on server
+            _ => {}
+        }
+    }
+
+    let enemy_mass = defaults::ENEMY_MASS;
+
+    // Apply damage and knockback to enemies
+    for (target_id, (total_damage, is_crit)) in &damage_by_target {
+        let (hit_x, hit_y, hit_z) = enemy_pos_index
+            .get(target_id)
+            .copied()
+            .unwrap_or((attacker.x, attacker.y, attacker.z));
 
         ctx.db.combat_event().insert(CombatEvent {
             id: 0,
-            x: enemy.x,
-            y: enemy.y,
-            z: enemy.z,
-            damage: hit.damage,
-            is_crit: hit.is_crit,
+            x: hit_x,
+            y: hit_y,
+            z: hit_z,
+            damage: *total_damage,
+            is_crit: *is_crit,
             world_id,
             timestamp: now,
         });
 
-        if hit.died {
-            ctx.db.enemy().delete(enemy);
-        } else {
-            let radial = glam::Vec2::new(enemy.x - impact_x, enemy.z - impact_z);
-            let radial_dir = radial.normalize_or(forward_xz);
-            let disp = knockback_displacement(radial_dir, radial_dir, kb, 0.0, launch);
+        if let Some(enemy) = ctx.db.enemy().id().find(*target_id) {
+            let new_health = (enemy.health - total_damage).max(0.0);
+            let died = new_health <= 0.0;
 
-            ctx.db.knockback_impulse().insert(KnockbackImpulse {
-                id: 0,
-                enemy_id: enemy.id,
-                world_id,
-                impulse_x: disp.x * enemy_mass,
-                impulse_y: disp.y * enemy_mass,
-                impulse_z: disp.z * enemy_mass,
-            });
+            if died {
+                ctx.db.enemy().delete(enemy);
+            } else {
+                // Apply knockback if present
+                if let Some(&kb_force) = knockback_by_target.get(target_id) {
+                    let radial = glam::Vec2::new(enemy.x - attacker.x, enemy.z - attacker.z);
+                    let radial_dir = radial.normalize_or(*fwd);
+                    let disp =
+                        combat::knockback_displacement(radial_dir, *fwd, kb_force, 0.0, 0.0);
 
-            ctx.db.enemy().id().update(Enemy {
-                health: hit.new_health,
-                ..enemy
-            });
+                    ctx.db.knockback_impulse().insert(KnockbackImpulse {
+                        id: 0,
+                        enemy_id: enemy.id,
+                        world_id,
+                        impulse_x: disp.x * enemy_mass,
+                        impulse_y: disp.y * enemy_mass,
+                        impulse_z: disp.z * enemy_mass,
+                    });
+                }
+
+                ctx.db.enemy().id().update(Enemy {
+                    health: new_health,
+                    ..enemy
+                });
+            }
         }
     }
 }

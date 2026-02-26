@@ -4,6 +4,7 @@ mod combat;
 mod enemy_ai;
 mod lifecycle;
 pub mod schema;
+mod scripting;
 
 pub use schema::*;
 
