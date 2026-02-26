@@ -1,0 +1,11 @@
+use game::*;
+
+pub fn on_hit(source, target, hit) {
+    let add = if hit.is_crit { 3 } else { 1 };
+    let stacks_i = source.fury_stacks + add;
+    let stacks = min(stacks_i as f64, 12.0);
+    set_stat(source, "fury_stacks", stacks);
+    set_stat(source, "attack_speed_bonus", stacks * 0.12);
+    buff(source, "fury", 2.5);
+    hit
+}

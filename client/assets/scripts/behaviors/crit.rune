@@ -1,0 +1,13 @@
+use game::*;
+
+pub fn on_pre_hit(source, target, hit) {
+    if chance(source.crit_chance) {
+        Hit {
+            damage: hit.damage * source.crit_multiplier,
+            knockback: hit.knockback * source.crit_multiplier,
+            is_crit: true,
+        }
+    } else {
+        hit
+    }
+}

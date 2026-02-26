@@ -284,4 +284,253 @@ mod tests {
         assert!((result.knockback - 3.0).abs() < f32::EPSILON);
         assert!(result.is_crit);
     }
+
+    // Helper to create a default combatant for tests.
+    fn test_combatant(id: u64) -> Combatant {
+        Combatant {
+            id,
+            pos_x: 0.0,
+            pos_y: 1.0,
+            pos_z: 0.0,
+            dir_x: 1.0,
+            dir_z: 0.0,
+            health: 100.0,
+            max_health: 100.0,
+            attack_damage: 10.0,
+            crit_chance: 0.2,
+            crit_multiplier: 2.0,
+            knockback_force: 5.0,
+            attack_range: 2.0,
+            attack_arc: 90.0,
+            attack_speed: 1.0,
+            fury_stacks: 0,
+            attack_speed_bonus: 0.0,
+            cooldown_ready: true,
+            speed: 5.0,
+        }
+    }
+
+    fn base_hit() -> Hit {
+        Hit {
+            damage: 20.0,
+            knockback: 4.0,
+            is_crit: false,
+        }
+    }
+
+    // --- Crit behavior tests ---
+
+    const CRIT_SCRIPT: &str = r#"
+        use game::*;
+
+        pub fn on_pre_hit(source, target, hit) {
+            if chance(source.crit_chance) {
+                Hit {
+                    damage: hit.damage * source.crit_multiplier,
+                    knockback: hit.knockback * source.crit_multiplier,
+                    is_crit: true,
+                }
+            } else {
+                hit
+            }
+        }
+    "#;
+
+    #[test]
+    fn crit_script_crits_on_low_roll() {
+        let mut engine = ScriptEngine::new(CRIT_SCRIPT).expect("crit script should compile");
+        let source = test_combatant(1); // crit_chance=0.2, crit_multiplier=2.0
+        let target = test_combatant(2);
+        let hit = base_hit(); // damage=20, knockback=4
+
+        // roll=0.1 < crit_chance=0.2 → crit
+        let (result, _cmds) = engine
+            .call_hit_hook("on_pre_hit", source, target, hit, 0.1)
+            .expect("hook should succeed");
+
+        assert!(result.is_crit, "should be a crit");
+        assert!(
+            (result.damage - 40.0).abs() < f32::EPSILON,
+            "damage should be 20 * 2.0 = 40, got {}",
+            result.damage
+        );
+        assert!(
+            (result.knockback - 8.0).abs() < f32::EPSILON,
+            "knockback should be 4 * 2.0 = 8, got {}",
+            result.knockback
+        );
+    }
+
+    #[test]
+    fn crit_script_no_crit_on_high_roll() {
+        let mut engine = ScriptEngine::new(CRIT_SCRIPT).expect("crit script should compile");
+        let source = test_combatant(1);
+        let target = test_combatant(2);
+        let hit = base_hit();
+
+        // roll=0.9 >= crit_chance=0.2 → no crit
+        let (result, _cmds) = engine
+            .call_hit_hook("on_pre_hit", source, target, hit, 0.9)
+            .expect("hook should succeed");
+
+        assert!(!result.is_crit, "should not be a crit");
+        assert!(
+            (result.damage - 20.0).abs() < f32::EPSILON,
+            "damage should be unchanged at 20, got {}",
+            result.damage
+        );
+        assert!(
+            (result.knockback - 4.0).abs() < f32::EPSILON,
+            "knockback should be unchanged at 4, got {}",
+            result.knockback
+        );
+    }
+
+    // --- Stacking behavior tests ---
+
+    const STACKING_SCRIPT: &str = r#"
+        use game::*;
+
+        pub fn on_hit(source, target, hit) {
+            let add = if hit.is_crit { 3 } else { 1 };
+            let stacks_i = source.fury_stacks + add;
+            let stacks = min(stacks_i as f64, 12.0);
+            set_stat(source, "fury_stacks", stacks);
+            set_stat(source, "attack_speed_bonus", stacks * 0.12);
+            buff(source, "fury", 2.5);
+            hit
+        }
+    "#;
+
+    #[test]
+    fn stacking_adds_one_on_normal_hit() {
+        let mut engine = ScriptEngine::new(STACKING_SCRIPT).expect("stacking script should compile");
+        let source = test_combatant(1); // fury_stacks=0
+        let target = test_combatant(2);
+        let hit = base_hit(); // is_crit=false
+
+        let (_result, cmds) = engine
+            .call_hit_hook("on_hit", source, target, hit, 0.5)
+            .expect("hook should succeed");
+
+        // Expect: SetStat(fury_stacks, 1.0), SetStat(attack_speed_bonus, 0.12), AddBuff(fury, 2.5)
+        assert_eq!(cmds.len(), 3, "expected 3 commands, got {cmds:?}");
+        assert!(
+            matches!(&cmds[0], Command::SetStat { entity_id: 1, stat, value }
+                if stat == "fury_stacks" && (*value - 1.0).abs() < f32::EPSILON),
+            "first command should set fury_stacks to 1, got {:?}",
+            cmds[0]
+        );
+        assert!(
+            matches!(&cmds[1], Command::SetStat { entity_id: 1, stat, value }
+                if stat == "attack_speed_bonus" && (*value - 0.12).abs() < 0.001),
+            "second command should set attack_speed_bonus to 0.12, got {:?}",
+            cmds[1]
+        );
+        assert!(
+            matches!(&cmds[2], Command::AddBuff { target_id: 1, name, duration }
+                if name == "fury" && (*duration - 2.5).abs() < f32::EPSILON),
+            "third command should be AddBuff fury 2.5, got {:?}",
+            cmds[2]
+        );
+    }
+
+    #[test]
+    fn stacking_adds_three_on_crit() {
+        let mut engine = ScriptEngine::new(STACKING_SCRIPT).expect("stacking script should compile");
+        let source = test_combatant(1); // fury_stacks=0
+        let target = test_combatant(2);
+        let hit = Hit {
+            damage: 20.0,
+            knockback: 4.0,
+            is_crit: true,
+        };
+
+        let (_result, cmds) = engine
+            .call_hit_hook("on_hit", source, target, hit, 0.5)
+            .expect("hook should succeed");
+
+        assert!(
+            matches!(&cmds[0], Command::SetStat { entity_id: 1, stat, value }
+                if stat == "fury_stacks" && (*value - 3.0).abs() < f32::EPSILON),
+            "fury_stacks should be 3 on crit, got {:?}",
+            cmds[0]
+        );
+    }
+
+    // --- Feedback behavior tests ---
+
+    const FEEDBACK_SCRIPT: &str = r#"
+        use game::*;
+
+        pub fn on_hit(source, target, hit) {
+            let intensity = if hit.is_crit { 1.0 } else { 0.5 };
+            vfx("hit_flash", target);
+            sound("impact", target.pos_x, target.pos_y, target.pos_z);
+            screen_shake(intensity);
+            hit_stop(if hit.is_crit { 0.08 } else { 0.04 });
+            hit
+        }
+    "#;
+
+    #[test]
+    fn feedback_emits_correct_commands() {
+        let mut engine = ScriptEngine::new(FEEDBACK_SCRIPT).expect("feedback script should compile");
+        let source = test_combatant(1);
+        let target = test_combatant(2);
+        let hit = base_hit(); // is_crit=false
+
+        let (_result, cmds) = engine
+            .call_hit_hook("on_hit", source, target, hit, 0.5)
+            .expect("hook should succeed");
+
+        assert_eq!(cmds.len(), 4, "expected 4 commands, got {cmds:?}");
+        assert!(matches!(&cmds[0], Command::SpawnVfx { name, target_id: 2 } if name == "hit_flash"));
+        assert!(matches!(&cmds[1], Command::PlaySound { name, .. } if name == "impact"));
+        assert!(matches!(&cmds[2], Command::ScreenShake { .. }));
+        assert!(matches!(&cmds[3], Command::HitStop { .. }));
+    }
+
+    #[test]
+    fn feedback_stronger_on_crit() {
+        let mut engine = ScriptEngine::new(FEEDBACK_SCRIPT).expect("feedback script should compile");
+        let source = test_combatant(1);
+        let target = test_combatant(2);
+
+        // Normal hit
+        let hit_normal = base_hit();
+        let (_, cmds_normal) = engine
+            .call_hit_hook("on_hit", source.clone(), target.clone(), hit_normal, 0.5)
+            .expect("hook should succeed");
+        assert!(
+            matches!(&cmds_normal[2], Command::ScreenShake { intensity } if (*intensity - 0.5).abs() < f32::EPSILON),
+            "normal hit screen_shake should be 0.5, got {:?}",
+            cmds_normal[2]
+        );
+        assert!(
+            matches!(&cmds_normal[3], Command::HitStop { duration } if (*duration - 0.04).abs() < f32::EPSILON),
+            "normal hit hit_stop should be 0.04, got {:?}",
+            cmds_normal[3]
+        );
+
+        // Crit hit
+        let hit_crit = Hit {
+            damage: 20.0,
+            knockback: 4.0,
+            is_crit: true,
+        };
+        let (_, cmds_crit) = engine
+            .call_hit_hook("on_hit", source, target, hit_crit, 0.5)
+            .expect("hook should succeed");
+        assert!(
+            matches!(&cmds_crit[2], Command::ScreenShake { intensity } if (*intensity - 1.0).abs() < f32::EPSILON),
+            "crit screen_shake should be 1.0, got {:?}",
+            cmds_crit[2]
+        );
+        assert!(
+            matches!(&cmds_crit[3], Command::HitStop { duration } if (*duration - 0.08).abs() < f32::EPSILON),
+            "crit hit_stop should be 0.08, got {:?}",
+            cmds_crit[3]
+        );
+    }
 }

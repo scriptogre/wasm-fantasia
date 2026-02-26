@@ -1,0 +1,10 @@
+use game::*;
+
+pub fn on_hit(source, target, hit) {
+    let intensity = if hit.is_crit { 1.0 } else { 0.5 };
+    vfx("hit_flash", target);
+    sound("impact", target.pos_x, target.pos_y, target.pos_z);
+    screen_shake(intensity);
+    hit_stop(if hit.is_crit { 0.08 } else { 0.04 });
+    hit
+}
