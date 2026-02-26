@@ -8,7 +8,7 @@ use rune::runtime::{Unit, Vm};
 use rune::{Context, Diagnostics, Source, Sources};
 
 pub use commands::{Command, CommandBuffer};
-pub use game_module::{set_rng_roll, take_commands};
+pub use game_module::{set_available_targets, set_rng_roll, take_commands};
 pub use types::{Combatant, Hit};
 
 use game_module::build_game_module;
@@ -58,6 +58,27 @@ impl ScriptEngine {
     pub fn has_function(&self, name: &str) -> bool {
         let vm = Vm::new(self.runtime.clone(), self.unit.clone());
         vm.lookup_function([name]).is_ok()
+    }
+
+    /// Call an ability function: `fn on_ability_start(source)`.
+    ///
+    /// Sets the RNG roll and available targets, calls the function, and returns
+    /// any commands emitted during execution.
+    pub fn call_ability(
+        &mut self,
+        function: &str,
+        source: Combatant,
+        targets: Vec<Combatant>,
+        rng_roll: f32,
+    ) -> Result<Vec<Command>, rune::support::Error> {
+        let _ = take_commands();
+        set_rng_roll(rng_roll);
+        game_module::set_available_targets(targets);
+
+        let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
+        vm.call([function], (source,))?;
+
+        Ok(take_commands())
     }
 
     /// Call a hit hook function: `fn hook(source, target, hit) -> Hit`.
@@ -532,5 +553,157 @@ mod tests {
             "crit hit_stop should be 0.08, got {:?}",
             cmds_crit[3]
         );
+    }
+
+    // --- Ability script tests ---
+
+    const MELEE_ATTACK_SCRIPT: &str = r#"
+        use game::*;
+
+        pub fn on_ability_start(source) {
+            animate(source, "attack");
+            sound("swoosh", source.pos_x, source.pos_y, source.pos_z);
+
+            let targets = targets_in_cone(source, source.attack_range, source.attack_arc);
+
+            for target in targets {
+                damage(target, source.attack_damage);
+                knockback(target, source.knockback_force);
+            }
+        }
+    "#;
+
+    #[test]
+    fn melee_attack_hits_targets_in_cone() {
+        let mut engine = ScriptEngine::new(MELEE_ATTACK_SCRIPT).expect("script should compile");
+
+        // Source at origin facing +Z (dir_z = 1.0)
+        let source = Combatant {
+            id: 1,
+            pos_x: 0.0,
+            pos_y: 0.0,
+            pos_z: 0.0,
+            dir_x: 0.0,
+            dir_z: 1.0,
+            health: 100.0,
+            max_health: 100.0,
+            attack_damage: 10.0,
+            crit_chance: 0.0,
+            crit_multiplier: 1.5,
+            knockback_force: 5.0,
+            attack_range: 3.0,
+            attack_arc: 90.0,
+            attack_speed: 1.0,
+            fury_stacks: 0,
+            attack_speed_bonus: 0.0,
+            cooldown_ready: true,
+            speed: 5.0,
+        };
+
+        // Target in front (+Z direction, within range and arc)
+        let target_front = Combatant {
+            id: 2,
+            pos_x: 0.0,
+            pos_z: 2.0,
+            ..source.clone()
+        };
+
+        // Target behind (-Z direction, outside arc)
+        let target_behind = Combatant {
+            id: 3,
+            pos_x: 0.0,
+            pos_z: -2.0,
+            ..source.clone()
+        };
+
+        let targets = vec![target_front, target_behind];
+        let cmds = engine
+            .call_ability("on_ability_start", source, targets, 0.5)
+            .expect("ability should succeed");
+
+        // Expected commands: Animate, Sound, DealDamage(target 2), ApplyKnockback(target 2)
+        assert_eq!(cmds.len(), 4, "expected 4 commands, got {cmds:?}");
+        assert!(matches!(&cmds[0], Command::Animate { entity_id: 1, animation } if animation == "attack"));
+        assert!(matches!(&cmds[1], Command::PlaySound { name, .. } if name == "swoosh"));
+        assert!(matches!(cmds[2], Command::DealDamage { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON));
+        assert!(matches!(cmds[3], Command::ApplyKnockback { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON));
+    }
+
+    const GROUND_POUND_SCRIPT: &str = r#"
+        use game::*;
+
+        pub fn on_ability_start(source) {
+            animate(source, "ground_pound");
+            sound("ground_pound", source.pos_x, source.pos_y, source.pos_z);
+            vfx("ground_pound_shockwave", source);
+
+            let targets = targets_in_radius(source.pos_x, source.pos_z, 6.0);
+            let base_damage = source.attack_damage * 4.0;
+
+            for target in targets {
+                damage(target, base_damage);
+                knockback(target, 20.0);
+            }
+
+            screen_shake(1.5);
+        }
+    "#;
+
+    #[test]
+    fn ground_pound_hits_targets_in_radius() {
+        let mut engine = ScriptEngine::new(GROUND_POUND_SCRIPT).expect("script should compile");
+
+        let source = Combatant {
+            id: 1,
+            pos_x: 0.0,
+            pos_y: 0.0,
+            pos_z: 0.0,
+            dir_x: 0.0,
+            dir_z: 1.0,
+            health: 100.0,
+            max_health: 100.0,
+            attack_damage: 10.0,
+            crit_chance: 0.0,
+            crit_multiplier: 1.5,
+            knockback_force: 5.0,
+            attack_range: 3.0,
+            attack_arc: 90.0,
+            attack_speed: 1.0,
+            fury_stacks: 0,
+            attack_speed_bonus: 0.0,
+            cooldown_ready: true,
+            speed: 5.0,
+        };
+
+        // Close target at distance 3.0 (within 6.0 radius)
+        let target_close = Combatant {
+            id: 2,
+            pos_x: 3.0,
+            pos_z: 0.0,
+            ..source.clone()
+        };
+
+        // Far target at distance 10.0 (outside 6.0 radius)
+        let target_far = Combatant {
+            id: 3,
+            pos_x: 10.0,
+            pos_z: 0.0,
+            ..source.clone()
+        };
+
+        let targets = vec![target_close, target_far];
+        let cmds = engine
+            .call_ability("on_ability_start", source, targets, 0.5)
+            .expect("ability should succeed");
+
+        // Expected: Animate, Sound, SpawnVfx, DealDamage(target 2), ApplyKnockback(target 2), ScreenShake
+        assert_eq!(cmds.len(), 6, "expected 6 commands, got {cmds:?}");
+        assert!(matches!(&cmds[0], Command::Animate { entity_id: 1, animation } if animation == "ground_pound"));
+        assert!(matches!(&cmds[1], Command::PlaySound { name, .. } if name == "ground_pound"));
+        assert!(matches!(&cmds[2], Command::SpawnVfx { name, target_id: 1 } if name == "ground_pound_shockwave"));
+        // Only the close target (id=2) should be hit: damage = 10.0 * 4.0 = 40.0
+        assert!(matches!(cmds[3], Command::DealDamage { target_id: 2, amount } if (amount - 40.0).abs() < f32::EPSILON));
+        assert!(matches!(cmds[4], Command::ApplyKnockback { target_id: 2, force } if (force - 20.0).abs() < f32::EPSILON));
+        assert!(matches!(cmds[5], Command::ScreenShake { intensity } if (intensity - 1.5).abs() < f32::EPSILON));
     }
 }

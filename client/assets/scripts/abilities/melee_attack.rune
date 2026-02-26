@@ -1,0 +1,13 @@
+use game::*;
+
+pub fn on_ability_start(source) {
+    animate(source, "attack");
+    sound("swoosh", source.pos_x, source.pos_y, source.pos_z);
+
+    let targets = targets_in_cone(source, source.attack_range, source.attack_arc);
+
+    for target in targets {
+        damage(target, source.attack_damage);
+        knockback(target, source.knockback_force);
+    }
+}
