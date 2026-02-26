@@ -18,8 +18,6 @@ pub mod player;
 pub mod postfx;
 pub mod profiling;
 pub mod rendering;
-pub mod rule_presets;
-pub mod rules;
 pub mod scene;
 pub mod screens;
 pub mod scripting;

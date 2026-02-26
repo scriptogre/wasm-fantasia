@@ -1,7 +1,7 @@
 use super::*;
 use crate::player::ControlScheme;
 use crate::player::control::{GroundPoundImpact, GroundPoundState, InputBuffer};
-use crate::rules::{Stat, Stats};
+use crate::models::combat::{Stat, Stats};
 use crate::scripting::{ActiveAbility, EntityBehaviors, ScriptRegistryRes};
 use bevy_enhanced_input::prelude::{Fire, Start};
 use bevy_tnua::prelude::TnuaController;

@@ -7,7 +7,7 @@ use bevy::transform::TransformSystems;
 use crate::combat::HitLanded;
 use crate::models::{Player, SceneCamera, Session};
 use crate::player::control::{JumpLaunched, LandingImpact};
-use crate::rules::{Stat, Stats};
+use crate::models::combat::{Stat, Stats};
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(HitStop::default())

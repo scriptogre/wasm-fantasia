@@ -248,38 +248,57 @@ pub struct LandingImpact {
     pub position: Vec3,
 }
 
-// ── Rules system types (moved from rules/mod.rs) ────────────────────
+// ── Stats system types ───────────────────────────────────────────────
 
 use serde::{Deserialize, Serialize};
-use std::ops::{Deref, DerefMut};
+use std::collections::HashMap;
 
-pub use game_core::rules::Stat;
+/// Stat keys for player/entity statistics.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Stat {
+    Health,
+    MaxHealth,
+    AttackDamage,
+    AbilityPower,
+    Armor,
+    MagicResist,
+    AttackSpeed,
+    MovementSpeed,
+    CritChance,
+    CritMultiplier,
+    IsAttacking,
+    AttackProgress,
+    ComboCount,
+    InWindup,
+    InRecovery,
+    Knockback,
+    AttackRange,
+    AttackArc,
+    Stacks,
+    StackDecay,
+    Custom(String),
+}
 
-/// Bevy Component wrapper around shared Stats.
+/// Bevy Component for entity stats — a simple `HashMap<Stat, f32>`.
 #[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Stats(pub game_core::rules::Stats);
+pub struct Stats(pub HashMap<Stat, f32>);
 
 impl Stats {
     pub fn new() -> Self {
-        Self(game_core::rules::Stats::new())
+        Self::default()
     }
 
     pub fn with(mut self, stat: Stat, value: f32) -> Self {
-        self.0 = self.0.with(stat, value);
+        self.0.insert(stat, value);
         self
     }
-}
 
-impl Deref for Stats {
-    type Target = game_core::rules::Stats;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    pub fn get(&self, stat: &Stat) -> f32 {
+        self.0.get(stat).copied().unwrap_or(0.0)
     }
-}
 
-impl DerefMut for Stats {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    pub fn set(&mut self, stat: Stat, value: f32) {
+        self.0.insert(stat, value);
     }
 }

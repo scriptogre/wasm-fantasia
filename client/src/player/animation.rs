@@ -3,7 +3,7 @@ use crate::combat::AttackState;
 use crate::models::Animation;
 use crate::models::player::{FootContact, JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
 use crate::player::control::{GroundPoundState, LandingStun, RollingState};
-use crate::rules::{Stat, Stats};
+use crate::models::combat::{Stat, Stats};
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 
 mod anim_knobs {

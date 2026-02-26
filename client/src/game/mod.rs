@@ -11,7 +11,6 @@ pub fn plugin(app: &mut App) {
         scene::plugin,
         player::plugin,
         combat::plugin,
-        crate::rules::plugin,
         postfx::plugin,
         music::plugin,
         combat_debug::plugin,

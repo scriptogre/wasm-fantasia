@@ -6,7 +6,7 @@ use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
 use crate::models::{Player as LocalPlayer, Screen, Session};
 use crate::networking::ServerDiagnostics;
-use crate::rules::{Stat, Stats};
+use crate::models::combat::{Stat, Stats};
 use crate::ui::{colors, size};
 
 const MAX_ENTRIES: usize = 10;
