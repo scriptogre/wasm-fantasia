@@ -1,5 +1,5 @@
+pub mod api;
 pub mod commands;
-pub mod game_module;
 pub mod registry;
 pub mod types;
 
@@ -8,15 +8,15 @@ use std::sync::Arc;
 use rune::runtime::{Unit, Vm};
 use rune::{Context, Diagnostics, Source, Sources};
 
-pub use commands::{Command, CommandBuffer};
-pub use game_module::{
+pub use api::{
     clear_script_registry, set_available_players, set_available_targets, set_entity_behaviors,
     set_rng_roll, set_script_registry, take_commands,
 };
+pub use commands::{Command, CommandBuffer};
 pub use registry::ScriptRegistry;
 pub use types::{Combatant, Hit};
 
-use game_module::build_game_module;
+use api::build_gameplay_module;
 
 /// A wrapper around the Rune scripting engine with the game module installed.
 ///
@@ -33,7 +33,7 @@ impl ScriptEngine {
     /// Returns an error if the script contains syntax or compilation errors.
     pub fn new(source: &str) -> Result<Self, rune::support::Error> {
         let mut context = Context::with_default_modules()?;
-        context.install(build_game_module()?)?;
+        context.install(build_gameplay_module()?)?;
 
         let runtime = Arc::new(context.runtime()?);
 
@@ -78,7 +78,7 @@ impl ScriptEngine {
     ) -> Result<Vec<Command>, rune::support::Error> {
         let _ = take_commands();
         set_rng_roll(rng_roll);
-        game_module::set_available_targets(targets);
+        api::set_available_targets(targets);
 
         let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
         vm.call([function], (source,))?;
@@ -127,7 +127,7 @@ impl ScriptEngine {
     ) -> Result<Vec<Command>, rune::support::Error> {
         let _ = take_commands();
         set_rng_roll(rng_roll);
-        game_module::set_available_players(players);
+        api::set_available_players(players);
 
         let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
         vm.call([function], (entity, dt))?;
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn compile_script_with_game_module() {
         let script = r#"
-            use game::*;
+            use gameplay::*;
 
             pub fn on_hit(source, target, hit) {
                 hit
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn script_emits_commands() {
         let script = r#"
-            use game::*;
+            use gameplay::*;
 
             pub fn on_hit(source, target, hit) {
                 damage(target, 50.0);
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn chance_uses_rng_roll() {
         let script = r#"
-            use game::*;
+            use gameplay::*;
 
             pub fn test_chance(source, target, hit) {
                 // With roll=0.3, chance(0.5) should be true (0.3 < 0.5)
@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn script_can_modify_hit() {
         let script = r#"
-            use game::*;
+            use gameplay::*;
 
             pub fn amplify(source, target, hit) {
                 Hit {
@@ -398,7 +398,7 @@ mod tests {
     // --- Crit behavior tests ---
 
     const CRIT_SCRIPT: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_pre_hit(source, target, hit) {
             if chance(source.crit_chance) {
@@ -466,7 +466,7 @@ mod tests {
     // --- Stacking behavior tests ---
 
     const STACKING_SCRIPT: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_hit(source, target, hit) {
             let add = if hit.is_crit { 3 } else { 1 };
@@ -538,7 +538,7 @@ mod tests {
     // --- Feedback behavior tests ---
 
     const FEEDBACK_SCRIPT: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_hit(source, target, hit) {
             let intensity = if hit.is_crit { 1.0 } else { 0.5 };
@@ -614,7 +614,7 @@ mod tests {
     // --- Ability script tests ---
 
     const MELEE_ATTACK_SCRIPT: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_ability_start(source) {
             animate(source, "attack");
@@ -686,7 +686,7 @@ mod tests {
     }
 
     const GROUND_POUND_SCRIPT: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_ability_start(source) {
             animate(source, "ground_pound");
@@ -766,7 +766,7 @@ mod tests {
     // --- fire_hook tests ---
 
     const MELEE_ATTACK_WITH_HOOKS: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_ability_start(source) {
             animate(source, "attack");
@@ -792,7 +792,7 @@ mod tests {
     "#;
 
     const GROUND_POUND_WITH_HOOKS: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_ability_start(source) {
             animate(source, "ground_pound");
@@ -1074,7 +1074,7 @@ mod tests {
     // --- Zombie AI tests ---
 
     const ZOMBIE_AI_SCRIPT: &str = r#"
-        use game::*;
+        use gameplay::*;
 
         pub fn on_tick(self_entity, dt) {
             let player = nearest_player(self_entity.pos_x, self_entity.pos_z);

@@ -103,9 +103,9 @@ pub fn clear_logs() {
     let _ = take_effects();
 }
 
-/// Build the `game` module that Rune scripts import via `use game::*;`.
-pub fn build_game_module() -> Result<Module, ContextError> {
-    let mut m = Module::with_crate("game")?;
+/// Build the `gameplay` module that Rune scripts import via `use gameplay::*;`.
+pub fn build_gameplay_module() -> Result<Module, ContextError> {
+    let mut m = Module::with_crate("gameplay")?;
 
     // Register types so Rune knows about Combatant and Hit.
     m.ty::<Combatant>()?;
@@ -368,8 +368,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn game_module_builds() {
-        build_game_module().expect("game module should build without error");
+    fn gameplay_module_builds() {
+        build_gameplay_module().expect("gameplay module should build without error");
     }
 
     #[test]
