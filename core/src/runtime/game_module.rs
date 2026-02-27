@@ -8,6 +8,30 @@ use super::commands::{Command, CommandBuffer};
 use super::registry::ScriptRegistry;
 use super::types::{Combatant, Hit};
 
+/// An intent records a state-changing action during script execution.
+#[derive(Debug, Clone)]
+pub enum Intent {
+    DamageDealt { target_id: u64, amount: f32 },
+    Healed { target_id: u64, amount: f32 },
+    KnockbackApplied { target_id: u64, force: f32 },
+    BuffAdded { target_id: u64, name: String, duration: f32 },
+    BuffRemoved { target_id: u64, name: String },
+    StatSet { entity_id: u64, stat: String, value: f32 },
+    Killed { target_id: u64 },
+    BehaviorSet { entity_id: u64, behavior: String },
+    MovedToward { entity_id: u64, target_x: f32, target_z: f32, speed: f32 },
+}
+
+/// A presentation effect. Client processes these; server ignores.
+#[derive(Debug, Clone)]
+pub enum Effect {
+    Vfx { name: String, target_id: u64 },
+    Sound { name: String, target_id: u64 },
+    ScreenShake { intensity: f32 },
+    HitStop { duration: f32 },
+    Animate { entity_id: u64, animation: String },
+}
+
 thread_local! {
     static COMMAND_BUFFER: RefCell<CommandBuffer> = RefCell::new(CommandBuffer::new());
     static RNG_ROLL: RefCell<f32> = RefCell::new(0.0);
@@ -15,6 +39,8 @@ thread_local! {
     static AVAILABLE_PLAYERS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
     static ENTITY_BEHAVIORS: RefCell<Vec<String>> = RefCell::new(Vec::new());
     static SCRIPT_REGISTRY: RefCell<Option<Arc<ScriptRegistry>>> = RefCell::new(None);
+    static INTENT_LOG: RefCell<Vec<Intent>> = RefCell::new(Vec::new());
+    static EFFECT_LOG: RefCell<Vec<Effect>> = RefCell::new(Vec::new());
 }
 
 /// Set the RNG roll value before calling a script.
@@ -54,6 +80,27 @@ pub fn take_commands() -> Vec<Command> {
 
 fn push_command(cmd: Command) {
     COMMAND_BUFFER.with(|buf| buf.borrow_mut().push(cmd));
+}
+
+pub fn push_intent(intent: Intent) {
+    INTENT_LOG.with(|log| log.borrow_mut().push(intent));
+}
+
+pub fn push_effect(effect: Effect) {
+    EFFECT_LOG.with(|log| log.borrow_mut().push(effect));
+}
+
+pub fn take_intents() -> Vec<Intent> {
+    INTENT_LOG.with(|log| std::mem::take(&mut *log.borrow_mut()))
+}
+
+pub fn take_effects() -> Vec<Effect> {
+    EFFECT_LOG.with(|log| std::mem::take(&mut *log.borrow_mut()))
+}
+
+pub fn clear_logs() {
+    let _ = take_intents();
+    let _ = take_effects();
 }
 
 /// Build the `game` module that Rune scripts import via `use game::*;`.
@@ -323,5 +370,32 @@ mod tests {
     #[test]
     fn game_module_builds() {
         build_game_module().expect("game module should build without error");
+    }
+
+    #[test]
+    fn intent_log_collects_intents() {
+        clear_logs();
+        push_intent(Intent::DamageDealt { target_id: 1, amount: 50.0 });
+        push_intent(Intent::Healed { target_id: 2, amount: 25.0 });
+        let intents = take_intents();
+        assert_eq!(intents.len(), 2);
+    }
+
+    #[test]
+    fn effect_log_collects_effects() {
+        clear_logs();
+        push_effect(Effect::Vfx { name: "slash".into(), target_id: 1 });
+        push_effect(Effect::Sound { name: "hit".into(), target_id: 1 });
+        let effects = take_effects();
+        assert_eq!(effects.len(), 2);
+    }
+
+    #[test]
+    fn clear_logs_empties_both() {
+        push_intent(Intent::Killed { target_id: 1 });
+        push_effect(Effect::ScreenShake { intensity: 0.5 });
+        clear_logs();
+        assert!(take_intents().is_empty());
+        assert!(take_effects().is_empty());
     }
 }
