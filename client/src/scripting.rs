@@ -31,21 +31,21 @@ fn build_registry() -> ScriptRegistry {
     registry
         .register(
             "crit".to_string(),
-            include_str!("../assets/scripts/behaviors/crit.rune"),
+            include_str!("../../core/gameplay/behaviors/crit.rune"),
         )
         .expect("crit.rune should compile");
 
     registry
         .register(
             "stacking".to_string(),
-            include_str!("../assets/scripts/behaviors/stacking.rune"),
+            include_str!("../../core/gameplay/behaviors/stacking.rune"),
         )
         .expect("stacking.rune should compile");
 
     registry
         .register(
             "feedback".to_string(),
-            include_str!("../assets/scripts/behaviors/feedback.rune"),
+            include_str!("../../core/gameplay/behaviors/feedback.rune"),
         )
         .expect("feedback.rune should compile");
 
@@ -53,14 +53,14 @@ fn build_registry() -> ScriptRegistry {
     registry
         .register(
             "melee_attack".to_string(),
-            include_str!("../assets/scripts/abilities/melee_attack.rune"),
+            include_str!("../../core/gameplay/abilities/melee_attack.rune"),
         )
         .expect("melee_attack.rune should compile");
 
     registry
         .register(
             "ground_pound".to_string(),
-            include_str!("../assets/scripts/abilities/ground_pound.rune"),
+            include_str!("../../core/gameplay/abilities/ground_pound.rune"),
         )
         .expect("ground_pound.rune should compile");
 
@@ -68,7 +68,7 @@ fn build_registry() -> ScriptRegistry {
     registry
         .register(
             "zombie_ai".to_string(),
-            include_str!("../assets/scripts/enemies/zombie_ai.rune"),
+            include_str!("../../core/gameplay/enemies/zombie_ai.rune"),
         )
         .expect("zombie_ai.rune should compile");
 
@@ -159,7 +159,7 @@ mod hot_reload {
 
     /// Register the [`ScriptWatcher`] resource and polling system.
     pub fn setup(app: &mut App) {
-        let script_dir = PathBuf::from("client/assets/scripts");
+        let script_dir = PathBuf::from("core/gameplay");
         let mut watcher = ScriptWatcher::new(script_dir.clone());
         // Seed initial timestamps so we don't reload on first tick.
         watcher.last_modified = snapshot_times(&script_dir);
@@ -203,7 +203,7 @@ mod hot_reload {
 pub fn plugin(app: &mut App) {
     #[cfg(feature = "dev")]
     {
-        let script_dir = std::path::PathBuf::from("client/assets/scripts");
+        let script_dir = std::path::PathBuf::from("core/gameplay");
         match hot_reload::build_registry_from_files(&script_dir) {
             Ok(reg) => {
                 app.insert_resource(ScriptRegistryRes(Arc::new(reg)));
