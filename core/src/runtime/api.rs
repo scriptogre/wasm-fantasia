@@ -32,13 +32,13 @@ pub enum Effect {
 }
 
 thread_local! {
-    static RNG_ROLL: RefCell<f32> = RefCell::new(0.0);
-    static AVAILABLE_TARGETS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
-    static AVAILABLE_PLAYERS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
-    static ENTITY_BEHAVIORS: RefCell<Vec<String>> = RefCell::new(Vec::new());
-    static SCRIPT_REGISTRY: RefCell<Option<Arc<ScriptRegistry>>> = RefCell::new(None);
-    static INTENT_LOG: RefCell<Vec<Intent>> = RefCell::new(Vec::new());
-    static EFFECT_LOG: RefCell<Vec<Effect>> = RefCell::new(Vec::new());
+    static RNG_ROLL: RefCell<f32> = const { RefCell::new(0.0) };
+    static AVAILABLE_TARGETS: RefCell<Vec<Combatant>> = const { RefCell::new(Vec::new()) };
+    static AVAILABLE_PLAYERS: RefCell<Vec<Combatant>> = const { RefCell::new(Vec::new()) };
+    static ENTITY_BEHAVIORS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    static SCRIPT_REGISTRY: RefCell<Option<Arc<ScriptRegistry>>> = const { RefCell::new(None) };
+    static INTENT_LOG: RefCell<Vec<Intent>> = const { RefCell::new(Vec::new()) };
+    static EFFECT_LOG: RefCell<Vec<Effect>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Set the RNG roll value before calling a script.
