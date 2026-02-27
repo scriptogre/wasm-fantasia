@@ -1,8 +1,8 @@
-use game::*;
+use gameplay::*;
 
 pub fn on_ability_start(source) {
     animate(source, "ground_pound");
-    sound("ground_pound", source.pos_x, source.pos_y, source.pos_z);
+    sound("ground_pound", source);
     vfx("ground_pound_shockwave", source);
 
     let targets = targets_in_radius(source.pos_x, source.pos_z, 6.0);
@@ -13,8 +13,8 @@ pub fn on_ability_start(source) {
 
         hit = fire_hook("on_pre_hit", source, target, hit);
 
-        damage(target, hit.damage);
-        knockback(target, hit.knockback);
+        apply_damage(target, hit.damage);
+        apply_knockback(target, hit.knockback);
 
         hit = fire_hook("on_hit", source, target, hit);
     }

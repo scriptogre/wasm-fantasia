@@ -1,4 +1,4 @@
-use game::*;
+use gameplay::*;
 
 pub fn on_tick(self_entity, dt) {
     let player = nearest_player(self_entity.pos_x, self_entity.pos_z);
@@ -13,7 +13,7 @@ pub fn on_tick(self_entity, dt) {
 
     if dist <= self_entity.attack_range && self_entity.cooldown_ready {
         set_behavior(self_entity, "attack");
-        damage(player, self_entity.attack_damage);
+        apply_damage(player, self_entity.attack_damage);
     } else if dist <= 15.0 {
         set_behavior(self_entity, "chase");
         move_toward(self_entity, player.pos_x, player.pos_z, self_entity.speed);

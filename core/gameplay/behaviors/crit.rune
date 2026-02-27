@@ -1,4 +1,4 @@
-use game::*;
+use gameplay::*;
 
 pub fn on_pre_hit(source, target, hit) {
     if chance(source.crit_chance) {

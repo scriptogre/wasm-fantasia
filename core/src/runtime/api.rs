@@ -4,7 +4,6 @@ use std::sync::Arc;
 use rune::runtime::Vm;
 use rune::{ContextError, Module};
 
-use super::commands::{Command, CommandBuffer};
 use super::registry::ScriptRegistry;
 use super::types::{Combatant, Hit};
 
@@ -33,7 +32,6 @@ pub enum Effect {
 }
 
 thread_local! {
-    static COMMAND_BUFFER: RefCell<CommandBuffer> = RefCell::new(CommandBuffer::new());
     static RNG_ROLL: RefCell<f32> = RefCell::new(0.0);
     static AVAILABLE_TARGETS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
     static AVAILABLE_PLAYERS: RefCell<Vec<Combatant>> = RefCell::new(Vec::new());
@@ -73,15 +71,6 @@ pub fn clear_script_registry() {
     SCRIPT_REGISTRY.with(|r| *r.borrow_mut() = None);
 }
 
-/// Drain all commands emitted by the last script call.
-pub fn take_commands() -> Vec<Command> {
-    COMMAND_BUFFER.with(|buf| buf.borrow_mut().drain())
-}
-
-fn push_command(cmd: Command) {
-    COMMAND_BUFFER.with(|buf| buf.borrow_mut().push(cmd));
-}
-
 pub fn push_intent(intent: Intent) {
     INTENT_LOG.with(|log| log.borrow_mut().push(intent));
 }
@@ -111,22 +100,18 @@ pub fn build_gameplay_module() -> Result<Module, ContextError> {
     m.ty::<Combatant>()?;
     m.ty::<Hit>()?;
 
-    // New state primitives (mutate + log intent)
+    // State primitives (mutate + log intent)
     m.function("apply_damage", apply_damage).build()?;
+    m.function("heal", heal).build()?;
     m.function("apply_knockback", apply_knockback).build()?;
     m.function("add_buff", add_buff).build()?;
-    m.function("kill", kill).build()?;
-
-    // Functions that keep the same Rune name but now also log intents/effects.
-    // They still push to COMMAND_BUFFER for backward compat (removed in Task 7).
-    m.function("damage", damage).build()?;
-    m.function("heal", heal).build()?;
-    m.function("knockback", knockback).build()?;
-    m.function("buff", buff).build()?;
     m.function("remove_buff", remove_buff).build()?;
     m.function("set_stat", set_stat).build()?;
+    m.function("kill", kill).build()?;
     m.function("set_behavior", set_behavior).build()?;
     m.function("move_toward", move_toward).build()?;
+
+    // Presentation effects (log to EFFECT_LOG only)
     m.function("vfx", vfx).build()?;
     m.function("sound", sound).build()?;
     m.function("screen_shake", screen_shake).build()?;
@@ -152,7 +137,7 @@ pub fn build_gameplay_module() -> Result<Module, ContextError> {
     Ok(m)
 }
 
-// --- New state primitives (intent-only, not registered under legacy names) ---
+// --- State primitives ---
 
 pub(crate) fn apply_damage_impl(target: &mut Combatant, amount: f32) -> f32 {
     let actual = amount.min(target.health).max(0.0);
@@ -178,6 +163,10 @@ pub(crate) fn heal_impl(target: &mut Combatant, amount: f32) -> f32 {
     actual
 }
 
+fn heal(mut target: rune::runtime::Mut<Combatant>, amount: f32) -> f32 {
+    heal_impl(&mut target, amount)
+}
+
 fn apply_knockback(target: &Combatant, force: f32) {
     push_intent(Intent::KnockbackApplied {
         target_id: target.id,
@@ -193,68 +182,7 @@ fn add_buff(target: &Combatant, name: &str, duration: f32) {
     });
 }
 
-fn kill(mut target: rune::runtime::Mut<Combatant>) {
-    target.health = 0.0;
-    push_intent(Intent::Killed {
-        target_id: target.id,
-    });
-}
-
-// --- Legacy-compatible functions (push to BOTH command buffer and intent/effect log) ---
-// These keep the old Rune names so existing scripts continue to work.
-// The command buffer push will be removed in Task 7 when scripts are updated.
-
-fn damage(target: &Combatant, amount: f32) {
-    push_command(Command::DealDamage {
-        target_id: target.id,
-        amount,
-    });
-    push_intent(Intent::DamageDealt {
-        target_id: target.id,
-        amount,
-    });
-}
-
-fn heal(target: &Combatant, amount: f32) {
-    push_command(Command::Heal {
-        target_id: target.id,
-        amount,
-    });
-    push_intent(Intent::Healed {
-        target_id: target.id,
-        amount,
-    });
-}
-
-fn knockback(target: &Combatant, force: f32) {
-    push_command(Command::ApplyKnockback {
-        target_id: target.id,
-        force,
-    });
-    push_intent(Intent::KnockbackApplied {
-        target_id: target.id,
-        force,
-    });
-}
-
-fn buff(target: &Combatant, name: &str, duration: f32) {
-    push_command(Command::AddBuff {
-        target_id: target.id,
-        name: name.to_string(),
-        duration,
-    });
-    push_intent(Intent::BuffAdded {
-        target_id: target.id,
-        name: name.to_string(),
-        duration,
-    });
-}
-
 fn remove_buff(target: &Combatant, name: &str) {
-    push_command(Command::RemoveBuff {
-        target_id: target.id,
-        name: name.to_string(),
-    });
     push_intent(Intent::BuffRemoved {
         target_id: target.id,
         name: name.to_string(),
@@ -262,11 +190,6 @@ fn remove_buff(target: &Combatant, name: &str) {
 }
 
 fn set_stat(entity: &Combatant, stat: &str, value: f32) {
-    push_command(Command::SetStat {
-        entity_id: entity.id,
-        stat: stat.to_string(),
-        value,
-    });
     push_intent(Intent::StatSet {
         entity_id: entity.id,
         stat: stat.to_string(),
@@ -274,11 +197,14 @@ fn set_stat(entity: &Combatant, stat: &str, value: f32) {
     });
 }
 
-fn set_behavior(entity: &Combatant, behavior: &str) {
-    push_command(Command::SetBehavior {
-        entity_id: entity.id,
-        behavior: behavior.to_string(),
+fn kill(mut target: rune::runtime::Mut<Combatant>) {
+    target.health = 0.0;
+    push_intent(Intent::Killed {
+        target_id: target.id,
     });
+}
+
+fn set_behavior(entity: &Combatant, behavior: &str) {
     push_intent(Intent::BehaviorSet {
         entity_id: entity.id,
         behavior: behavior.to_string(),
@@ -286,12 +212,6 @@ fn set_behavior(entity: &Combatant, behavior: &str) {
 }
 
 fn move_toward(entity: &Combatant, target_x: f32, target_z: f32, speed: f32) {
-    push_command(Command::MoveToward {
-        entity_id: entity.id,
-        target_x,
-        target_z,
-        speed,
-    });
     push_intent(Intent::MovedToward {
         entity_id: entity.id,
         target_x,
@@ -300,33 +220,23 @@ fn move_toward(entity: &Combatant, target_x: f32, target_z: f32, speed: f32) {
     });
 }
 
+// --- Presentation effects ---
+
 fn vfx(name: &str, target: &Combatant) {
-    push_command(Command::SpawnVfx {
-        name: name.to_string(),
-        target_id: target.id,
-    });
     push_effect(Effect::Vfx {
         name: name.to_string(),
         target_id: target.id,
     });
 }
 
-fn sound(name: &str, x: f32, y: f32, z: f32) {
-    push_command(Command::PlaySound {
+fn sound(name: &str, target: &Combatant) {
+    push_effect(Effect::Sound {
         name: name.to_string(),
-        pos_x: x,
-        pos_y: y,
-        pos_z: z,
+        target_id: target.id,
     });
-    // Note: legacy sound takes coords; new Effect::Sound uses target_id.
-    // We can't log a proper Effect::Sound here since we don't have a target_id.
 }
 
 fn animate(entity: &Combatant, animation: &str) {
-    push_command(Command::Animate {
-        entity_id: entity.id,
-        animation: animation.to_string(),
-    });
     push_effect(Effect::Animate {
         entity_id: entity.id,
         animation: animation.to_string(),
@@ -334,12 +244,10 @@ fn animate(entity: &Combatant, animation: &str) {
 }
 
 fn screen_shake(intensity: f32) {
-    push_command(Command::ScreenShake { intensity });
     push_effect(Effect::ScreenShake { intensity });
 }
 
 fn hit_stop(duration: f32) {
-    push_command(Command::HitStop { duration });
     push_effect(Effect::HitStop { duration });
 }
 
@@ -386,9 +294,9 @@ fn fire_hook(hook_name: &str, source: &Combatant, target: &Combatant, hit: Hit) 
             continue;
         }
 
-        // Create a fresh VM and call the hook. The COMMAND_BUFFER and RNG_ROLL
-        // thread-locals are shared, so commands from behavior scripts accumulate
-        // alongside the ability script's commands.
+        // Create a fresh VM and call the hook. The INTENT_LOG and EFFECT_LOG
+        // thread-locals are shared, so intents/effects from behavior scripts
+        // accumulate alongside the ability script's.
         let mut vm = Vm::new(engine.runtime.clone(), engine.unit.clone());
         match vm.call(
             [hook_name],

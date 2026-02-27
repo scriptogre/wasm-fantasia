@@ -1,5 +1,4 @@
 pub mod api;
-pub mod commands;
 pub mod registry;
 pub mod types;
 
@@ -9,10 +8,10 @@ use rune::runtime::{Unit, Vm};
 use rune::{Context, Diagnostics, Source, Sources};
 
 pub use api::{
-    clear_script_registry, set_available_players, set_available_targets, set_entity_behaviors,
-    set_rng_roll, set_script_registry, take_commands,
+    clear_logs, clear_script_registry, set_available_players, set_available_targets,
+    set_entity_behaviors, set_rng_roll, set_script_registry, take_effects, take_intents, Effect,
+    Intent,
 };
-pub use commands::{Command, CommandBuffer};
 pub use registry::ScriptRegistry;
 pub use types::{Combatant, Hit};
 
@@ -68,22 +67,22 @@ impl ScriptEngine {
     /// Call an ability function: `fn on_ability_start(source)`.
     ///
     /// Sets the RNG roll and available targets, calls the function, and returns
-    /// any commands emitted during execution.
+    /// any intents and effects emitted during execution.
     pub fn call_ability(
         &self,
         function: &str,
         source: Combatant,
         targets: Vec<Combatant>,
         rng_roll: f32,
-    ) -> Result<Vec<Command>, rune::support::Error> {
-        let _ = take_commands();
+    ) -> Result<(Vec<Intent>, Vec<Effect>), rune::support::Error> {
+        api::clear_logs();
         set_rng_roll(rng_roll);
         api::set_available_targets(targets);
 
         let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
         vm.call([function], (source,))?;
 
-        Ok(take_commands())
+        Ok((take_intents(), take_effects()))
     }
 
     /// Call an ability function with behavior hook chaining support.
@@ -99,8 +98,8 @@ impl ScriptEngine {
         rng_roll: f32,
         registry: Arc<ScriptRegistry>,
         behaviors: Vec<String>,
-    ) -> Result<Vec<Command>, rune::support::Error> {
-        let _ = take_commands();
+    ) -> Result<(Vec<Intent>, Vec<Effect>), rune::support::Error> {
+        api::clear_logs();
         set_rng_roll(rng_roll);
         set_available_targets(targets);
         set_entity_behaviors(behaviors);
@@ -109,14 +108,14 @@ impl ScriptEngine {
         let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
         vm.call([function], (source,))?;
 
-        clear_script_registry();
-        Ok(take_commands())
+        api::clear_script_registry();
+        Ok((take_intents(), take_effects()))
     }
 
     /// Call a tick function for AI scripts: `fn on_tick(entity, dt)`.
     ///
     /// Sets the RNG roll and available players, calls the function, and returns
-    /// any commands emitted during execution.
+    /// any intents and effects emitted during execution.
     pub fn call_tick(
         &self,
         function: &str,
@@ -124,21 +123,21 @@ impl ScriptEngine {
         players: Vec<Combatant>,
         dt: f32,
         rng_roll: f32,
-    ) -> Result<Vec<Command>, rune::support::Error> {
-        let _ = take_commands();
+    ) -> Result<(Vec<Intent>, Vec<Effect>), rune::support::Error> {
+        api::clear_logs();
         set_rng_roll(rng_roll);
         api::set_available_players(players);
 
         let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
         vm.call([function], (entity, dt))?;
 
-        Ok(take_commands())
+        Ok((take_intents(), take_effects()))
     }
 
     /// Call a hit hook function: `fn hook(source, target, hit) -> Hit`.
     ///
     /// Sets the RNG roll, calls the function, and returns the (possibly modified)
-    /// `Hit` along with any commands emitted during execution.
+    /// `Hit` along with any intents and effects emitted during execution.
     pub fn call_hit_hook(
         &self,
         function: &str,
@@ -146,17 +145,15 @@ impl ScriptEngine {
         target: Combatant,
         hit: Hit,
         rng_roll: f32,
-    ) -> Result<(Hit, Vec<Command>), rune::support::Error> {
-        // Clear any stale commands and set the RNG roll.
-        let _ = take_commands();
+    ) -> Result<(Hit, Vec<Intent>, Vec<Effect>), rune::support::Error> {
+        api::clear_logs();
         set_rng_roll(rng_roll);
 
         let mut vm = Vm::new(self.runtime.clone(), self.unit.clone());
         let output = vm.call([function], (source, target, hit))?;
         let modified_hit: Hit = rune::from_value(output)?;
-        let cmds = take_commands();
 
-        Ok((modified_hit, cmds))
+        Ok((modified_hit, take_intents(), take_effects()))
     }
 }
 
@@ -201,12 +198,12 @@ mod tests {
     }
 
     #[test]
-    fn script_emits_commands() {
+    fn script_emits_intents_and_effects() {
         let script = r#"
             use gameplay::*;
 
             pub fn on_hit(source, target, hit) {
-                damage(target, 50.0);
+                apply_damage(target, 50.0);
                 vfx("sparks", target);
                 hit
             }
@@ -244,13 +241,14 @@ mod tests {
             is_crit: false,
         };
 
-        let (_hit, cmds) = engine
+        let (_hit, intents, effects) = engine
             .call_hit_hook("on_hit", source, target, hit, 0.5)
             .expect("hook should succeed");
 
-        assert_eq!(cmds.len(), 2, "expected 2 commands, got {cmds:?}");
-        assert!(matches!(cmds[0], Command::DealDamage { target_id: 2, amount } if (amount - 50.0).abs() < f32::EPSILON));
-        assert!(matches!(&cmds[1], Command::SpawnVfx { name, target_id: 2 } if name == "sparks"));
+        assert_eq!(intents.len(), 1, "expected 1 intent, got {intents:?}");
+        assert!(matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 50.0).abs() < f32::EPSILON));
+        assert_eq!(effects.len(), 1, "expected 1 effect, got {effects:?}");
+        assert!(matches!(&effects[0], Effect::Vfx { name, target_id: 2 } if name == "sparks"));
     }
 
     #[test]
@@ -297,14 +295,14 @@ mod tests {
         };
 
         // roll=0.3 < probability=0.5 → chance returns true
-        let (result_hit, _) = engine
+        let (result_hit, _, _) = engine
             .call_hit_hook("test_chance", combatant.clone(), combatant.clone(), hit.clone(), 0.3)
             .expect("hook should succeed");
         assert!((result_hit.damage - 999.0).abs() < f32::EPSILON, "chance(0.5) with roll=0.3 should be true");
         assert!(result_hit.is_crit);
 
         // roll=0.7 >= probability=0.5 → chance returns false
-        let (result_hit, _) = engine
+        let (result_hit, _, _) = engine
             .call_hit_hook("test_chance", combatant.clone(), combatant, hit, 0.7)
             .expect("hook should succeed");
         assert!((result_hit.damage - 10.0).abs() < f32::EPSILON, "chance(0.5) with roll=0.7 should be false");
@@ -353,7 +351,7 @@ mod tests {
             is_crit: false,
         };
 
-        let (result, _) = engine
+        let (result, _, _) = engine
             .call_hit_hook("amplify", combatant.clone(), combatant, hit, 0.0)
             .expect("hook should succeed");
 
@@ -421,7 +419,7 @@ mod tests {
         let hit = base_hit(); // damage=20, knockback=4
 
         // roll=0.1 < crit_chance=0.2 → crit
-        let (result, _cmds) = engine
+        let (result, _intents, _effects) = engine
             .call_hit_hook("on_pre_hit", source, target, hit, 0.1)
             .expect("hook should succeed");
 
@@ -446,7 +444,7 @@ mod tests {
         let hit = base_hit();
 
         // roll=0.9 >= crit_chance=0.2 → no crit
-        let (result, _cmds) = engine
+        let (result, _intents, _effects) = engine
             .call_hit_hook("on_pre_hit", source, target, hit, 0.9)
             .expect("hook should succeed");
 
@@ -474,7 +472,7 @@ mod tests {
             let stacks = min(stacks_i as f64, 12.0);
             set_stat(source, "fury_stacks", stacks);
             set_stat(source, "attack_speed_bonus", stacks * 0.12);
-            buff(source, "fury", 2.5);
+            add_buff(source, "fury", 2.5);
             hit
         }
     "#;
@@ -486,29 +484,29 @@ mod tests {
         let target = test_combatant(2);
         let hit = base_hit(); // is_crit=false
 
-        let (_result, cmds) = engine
+        let (_result, intents, _effects) = engine
             .call_hit_hook("on_hit", source, target, hit, 0.5)
             .expect("hook should succeed");
 
-        // Expect: SetStat(fury_stacks, 1.0), SetStat(attack_speed_bonus, 0.12), AddBuff(fury, 2.5)
-        assert_eq!(cmds.len(), 3, "expected 3 commands, got {cmds:?}");
+        // Expect: StatSet(fury_stacks, 1.0), StatSet(attack_speed_bonus, 0.12), BuffAdded(fury, 2.5)
+        assert_eq!(intents.len(), 3, "expected 3 intents, got {intents:?}");
         assert!(
-            matches!(&cmds[0], Command::SetStat { entity_id: 1, stat, value }
+            matches!(&intents[0], Intent::StatSet { entity_id: 1, stat, value }
                 if stat == "fury_stacks" && (*value - 1.0).abs() < f32::EPSILON),
-            "first command should set fury_stacks to 1, got {:?}",
-            cmds[0]
+            "first intent should set fury_stacks to 1, got {:?}",
+            intents[0]
         );
         assert!(
-            matches!(&cmds[1], Command::SetStat { entity_id: 1, stat, value }
+            matches!(&intents[1], Intent::StatSet { entity_id: 1, stat, value }
                 if stat == "attack_speed_bonus" && (*value - 0.12).abs() < 0.001),
-            "second command should set attack_speed_bonus to 0.12, got {:?}",
-            cmds[1]
+            "second intent should set attack_speed_bonus to 0.12, got {:?}",
+            intents[1]
         );
         assert!(
-            matches!(&cmds[2], Command::AddBuff { target_id: 1, name, duration }
+            matches!(&intents[2], Intent::BuffAdded { target_id: 1, name, duration }
                 if name == "fury" && (*duration - 2.5).abs() < f32::EPSILON),
-            "third command should be AddBuff fury 2.5, got {:?}",
-            cmds[2]
+            "third intent should be BuffAdded fury 2.5, got {:?}",
+            intents[2]
         );
     }
 
@@ -523,15 +521,15 @@ mod tests {
             is_crit: true,
         };
 
-        let (_result, cmds) = engine
+        let (_result, intents, _effects) = engine
             .call_hit_hook("on_hit", source, target, hit, 0.5)
             .expect("hook should succeed");
 
         assert!(
-            matches!(&cmds[0], Command::SetStat { entity_id: 1, stat, value }
+            matches!(&intents[0], Intent::StatSet { entity_id: 1, stat, value }
                 if stat == "fury_stacks" && (*value - 3.0).abs() < f32::EPSILON),
             "fury_stacks should be 3 on crit, got {:?}",
-            cmds[0]
+            intents[0]
         );
     }
 
@@ -543,7 +541,7 @@ mod tests {
         pub fn on_hit(source, target, hit) {
             let intensity = if hit.is_crit { 1.0 } else { 0.5 };
             vfx("hit_flash", target);
-            sound("impact", target.pos_x, target.pos_y, target.pos_z);
+            sound("impact", target);
             screen_shake(intensity);
             hit_stop(if hit.is_crit { 0.08 } else { 0.04 });
             hit
@@ -551,21 +549,22 @@ mod tests {
     "#;
 
     #[test]
-    fn feedback_emits_correct_commands() {
+    fn feedback_emits_correct_effects() {
         let engine = ScriptEngine::new(FEEDBACK_SCRIPT).expect("feedback script should compile");
         let source = test_combatant(1);
         let target = test_combatant(2);
         let hit = base_hit(); // is_crit=false
 
-        let (_result, cmds) = engine
+        let (_result, intents, effects) = engine
             .call_hit_hook("on_hit", source, target, hit, 0.5)
             .expect("hook should succeed");
 
-        assert_eq!(cmds.len(), 4, "expected 4 commands, got {cmds:?}");
-        assert!(matches!(&cmds[0], Command::SpawnVfx { name, target_id: 2 } if name == "hit_flash"));
-        assert!(matches!(&cmds[1], Command::PlaySound { name, .. } if name == "impact"));
-        assert!(matches!(&cmds[2], Command::ScreenShake { .. }));
-        assert!(matches!(&cmds[3], Command::HitStop { .. }));
+        assert!(intents.is_empty(), "feedback should emit no intents, got {intents:?}");
+        assert_eq!(effects.len(), 4, "expected 4 effects, got {effects:?}");
+        assert!(matches!(&effects[0], Effect::Vfx { name, target_id: 2 } if name == "hit_flash"));
+        assert!(matches!(&effects[1], Effect::Sound { name, target_id: 2 } if name == "impact"));
+        assert!(matches!(&effects[2], Effect::ScreenShake { .. }));
+        assert!(matches!(&effects[3], Effect::HitStop { .. }));
     }
 
     #[test]
@@ -576,18 +575,18 @@ mod tests {
 
         // Normal hit
         let hit_normal = base_hit();
-        let (_, cmds_normal) = engine
+        let (_, _intents, effects_normal) = engine
             .call_hit_hook("on_hit", source.clone(), target.clone(), hit_normal, 0.5)
             .expect("hook should succeed");
         assert!(
-            matches!(&cmds_normal[2], Command::ScreenShake { intensity } if (*intensity - 0.5).abs() < f32::EPSILON),
+            matches!(&effects_normal[2], Effect::ScreenShake { intensity } if (*intensity - 0.5).abs() < f32::EPSILON),
             "normal hit screen_shake should be 0.5, got {:?}",
-            cmds_normal[2]
+            effects_normal[2]
         );
         assert!(
-            matches!(&cmds_normal[3], Command::HitStop { duration } if (*duration - 0.04).abs() < f32::EPSILON),
+            matches!(&effects_normal[3], Effect::HitStop { duration } if (*duration - 0.04).abs() < f32::EPSILON),
             "normal hit hit_stop should be 0.04, got {:?}",
-            cmds_normal[3]
+            effects_normal[3]
         );
 
         // Crit hit
@@ -596,18 +595,18 @@ mod tests {
             knockback: 4.0,
             is_crit: true,
         };
-        let (_, cmds_crit) = engine
+        let (_, _intents, effects_crit) = engine
             .call_hit_hook("on_hit", source, target, hit_crit, 0.5)
             .expect("hook should succeed");
         assert!(
-            matches!(&cmds_crit[2], Command::ScreenShake { intensity } if (*intensity - 1.0).abs() < f32::EPSILON),
+            matches!(&effects_crit[2], Effect::ScreenShake { intensity } if (*intensity - 1.0).abs() < f32::EPSILON),
             "crit screen_shake should be 1.0, got {:?}",
-            cmds_crit[2]
+            effects_crit[2]
         );
         assert!(
-            matches!(&cmds_crit[3], Command::HitStop { duration } if (*duration - 0.08).abs() < f32::EPSILON),
+            matches!(&effects_crit[3], Effect::HitStop { duration } if (*duration - 0.08).abs() < f32::EPSILON),
             "crit hit_stop should be 0.08, got {:?}",
-            cmds_crit[3]
+            effects_crit[3]
         );
     }
 
@@ -618,13 +617,13 @@ mod tests {
 
         pub fn on_ability_start(source) {
             animate(source, "attack");
-            sound("swoosh", source.pos_x, source.pos_y, source.pos_z);
+            sound("swoosh", source);
 
             let targets = targets_in_cone(source, source.attack_range, source.attack_arc);
 
             for target in targets {
-                damage(target, source.attack_damage);
-                knockback(target, source.knockback_force);
+                apply_damage(target, source.attack_damage);
+                apply_knockback(target, source.knockback_force);
             }
         }
     "#;
@@ -673,16 +672,19 @@ mod tests {
         };
 
         let targets = vec![target_front, target_behind];
-        let cmds = engine
+        let (intents, effects) = engine
             .call_ability("on_ability_start", source, targets, 0.5)
             .expect("ability should succeed");
 
-        // Expected commands: Animate, Sound, DealDamage(target 2), ApplyKnockback(target 2)
-        assert_eq!(cmds.len(), 4, "expected 4 commands, got {cmds:?}");
-        assert!(matches!(&cmds[0], Command::Animate { entity_id: 1, animation } if animation == "attack"));
-        assert!(matches!(&cmds[1], Command::PlaySound { name, .. } if name == "swoosh"));
-        assert!(matches!(cmds[2], Command::DealDamage { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON));
-        assert!(matches!(cmds[3], Command::ApplyKnockback { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON));
+        // Expected effects: Animate, Sound
+        assert_eq!(effects.len(), 2, "expected 2 effects, got {effects:?}");
+        assert!(matches!(&effects[0], Effect::Animate { entity_id: 1, animation } if animation == "attack"));
+        assert!(matches!(&effects[1], Effect::Sound { name, target_id: 1 } if name == "swoosh"));
+
+        // Expected intents: DamageDealt(target 2), KnockbackApplied(target 2)
+        assert_eq!(intents.len(), 2, "expected 2 intents, got {intents:?}");
+        assert!(matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON));
+        assert!(matches!(intents[1], Intent::KnockbackApplied { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON));
     }
 
     const GROUND_POUND_SCRIPT: &str = r#"
@@ -690,15 +692,15 @@ mod tests {
 
         pub fn on_ability_start(source) {
             animate(source, "ground_pound");
-            sound("ground_pound", source.pos_x, source.pos_y, source.pos_z);
+            sound("ground_pound", source);
             vfx("ground_pound_shockwave", source);
 
             let targets = targets_in_radius(source.pos_x, source.pos_z, 6.0);
             let base_damage = source.attack_damage * 4.0;
 
             for target in targets {
-                damage(target, base_damage);
-                knockback(target, 20.0);
+                apply_damage(target, base_damage);
+                apply_knockback(target, 20.0);
             }
 
             screen_shake(1.5);
@@ -748,19 +750,22 @@ mod tests {
         };
 
         let targets = vec![target_close, target_far];
-        let cmds = engine
+        let (intents, effects) = engine
             .call_ability("on_ability_start", source, targets, 0.5)
             .expect("ability should succeed");
 
-        // Expected: Animate, Sound, SpawnVfx, DealDamage(target 2), ApplyKnockback(target 2), ScreenShake
-        assert_eq!(cmds.len(), 6, "expected 6 commands, got {cmds:?}");
-        assert!(matches!(&cmds[0], Command::Animate { entity_id: 1, animation } if animation == "ground_pound"));
-        assert!(matches!(&cmds[1], Command::PlaySound { name, .. } if name == "ground_pound"));
-        assert!(matches!(&cmds[2], Command::SpawnVfx { name, target_id: 1 } if name == "ground_pound_shockwave"));
+        // Expected effects: Animate, Sound, Vfx(shockwave), ScreenShake
+        assert_eq!(effects.len(), 4, "expected 4 effects, got {effects:?}");
+        assert!(matches!(&effects[0], Effect::Animate { entity_id: 1, animation } if animation == "ground_pound"));
+        assert!(matches!(&effects[1], Effect::Sound { name, target_id: 1 } if name == "ground_pound"));
+        assert!(matches!(&effects[2], Effect::Vfx { name, target_id: 1 } if name == "ground_pound_shockwave"));
+        assert!(matches!(effects[3], Effect::ScreenShake { intensity } if (intensity - 1.5).abs() < f32::EPSILON));
+
+        // Expected intents: DamageDealt(target 2, 40.0), KnockbackApplied(target 2, 20.0)
         // Only the close target (id=2) should be hit: damage = 10.0 * 4.0 = 40.0
-        assert!(matches!(cmds[3], Command::DealDamage { target_id: 2, amount } if (amount - 40.0).abs() < f32::EPSILON));
-        assert!(matches!(cmds[4], Command::ApplyKnockback { target_id: 2, force } if (force - 20.0).abs() < f32::EPSILON));
-        assert!(matches!(cmds[5], Command::ScreenShake { intensity } if (intensity - 1.5).abs() < f32::EPSILON));
+        assert_eq!(intents.len(), 2, "expected 2 intents, got {intents:?}");
+        assert!(matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 40.0).abs() < f32::EPSILON));
+        assert!(matches!(intents[1], Intent::KnockbackApplied { target_id: 2, force } if (force - 20.0).abs() < f32::EPSILON));
     }
 
     // --- fire_hook tests ---
@@ -770,7 +775,7 @@ mod tests {
 
         pub fn on_ability_start(source) {
             animate(source, "attack");
-            sound("swoosh", source.pos_x, source.pos_y, source.pos_z);
+            sound("swoosh", source);
 
             let targets = targets_in_cone(source, source.attack_range, source.attack_arc);
 
@@ -779,8 +784,8 @@ mod tests {
 
                 hit = fire_hook("on_pre_hit", source, target, hit);
 
-                damage(target, hit.damage);
-                knockback(target, hit.knockback);
+                apply_damage(target, hit.damage);
+                apply_knockback(target, hit.knockback);
 
                 hit = fire_hook("on_hit", source, target, hit);
 
@@ -796,7 +801,7 @@ mod tests {
 
         pub fn on_ability_start(source) {
             animate(source, "ground_pound");
-            sound("ground_pound", source.pos_x, source.pos_y, source.pos_z);
+            sound("ground_pound", source);
             vfx("ground_pound_shockwave", source);
 
             let targets = targets_in_radius(source.pos_x, source.pos_z, 6.0);
@@ -807,8 +812,8 @@ mod tests {
 
                 hit = fire_hook("on_pre_hit", source, target, hit);
 
-                damage(target, hit.damage);
-                knockback(target, hit.knockback);
+                apply_damage(target, hit.damage);
+                apply_knockback(target, hit.knockback);
 
                 hit = fire_hook("on_hit", source, target, hit);
             }
@@ -846,7 +851,7 @@ mod tests {
         let targets = vec![target];
 
         // rng_roll=0.1, which is < crit_chance=0.2, so crit triggers
-        let cmds = engine
+        let (intents, effects) = engine
             .call_ability_with_behaviors(
                 "on_ability_start",
                 source,
@@ -857,68 +862,69 @@ mod tests {
             )
             .expect("ability should succeed");
 
-        // Expected sequence:
+        // Expected sequence of intents:
+        // 1. DamageDealt(2, 20.0) -- crit doubled: 10*2=20
+        // 2. KnockbackApplied(2, 10.0) -- crit doubled: 5*2=10
+        // 3. StatSet(1, "fury_stacks", 3.0) -- stacking on_hit (crit → 3 stacks)
+        // 4. StatSet(1, "attack_speed_bonus", 0.36)
+        // 5. BuffAdded(1, "fury", 2.5)
+
+        // Expected sequence of effects:
         // 1. Animate(1, "attack")
-        // 2. PlaySound("swoosh", ...)
-        // -- fire_hook("on_pre_hit") runs crit.on_pre_hit (stacking has no on_pre_hit, skipped)
-        //    crit triggers: damage 10*2=20, knockback 5*2=10, is_crit=true
-        // 3. DealDamage(2, 20.0)  -- from ability script using modified hit
-        // 4. ApplyKnockback(2, 10.0) -- from ability script using modified hit
-        // -- fire_hook("on_hit") runs crit (no on_hit, skipped), stacking.on_hit
-        //    stacking: is_crit=true → add=3, stacks=3, sets fury_stacks=3, attack_speed_bonus=0.36, buff fury 2.5
-        // 5. SetStat(1, "fury_stacks", 3.0)
-        // 6. SetStat(1, "attack_speed_bonus", 0.36)
-        // 7. AddBuff(1, "fury", 2.5)
-        // 8. SpawnVfx("crit_particles", 2) -- from ability script (is_crit check)
+        // 2. Sound("swoosh", 1)
+        // 3. Vfx("crit_particles", 2) -- is_crit=true
 
-        assert_eq!(cmds.len(), 8, "expected 8 commands, got {cmds:?}");
+        assert_eq!(intents.len(), 5, "expected 5 intents, got {intents:?}");
+        assert_eq!(effects.len(), 3, "expected 3 effects, got {effects:?}");
 
+        // Effects
         assert!(
-            matches!(&cmds[0], Command::Animate { entity_id: 1, animation } if animation == "attack"),
-            "cmd[0] should be Animate, got {:?}",
-            cmds[0]
+            matches!(&effects[0], Effect::Animate { entity_id: 1, animation } if animation == "attack"),
+            "effects[0] should be Animate, got {:?}",
+            effects[0]
         );
         assert!(
-            matches!(&cmds[1], Command::PlaySound { name, .. } if name == "swoosh"),
-            "cmd[1] should be PlaySound swoosh, got {:?}",
-            cmds[1]
+            matches!(&effects[1], Effect::Sound { name, target_id: 1 } if name == "swoosh"),
+            "effects[1] should be Sound swoosh, got {:?}",
+            effects[1]
         );
+        assert!(
+            matches!(&effects[2], Effect::Vfx { name, target_id: 2 } if name == "crit_particles"),
+            "effects[2] should be Vfx crit_particles, got {:?}",
+            effects[2]
+        );
+
+        // Intents
         // Crit doubled the damage: 10 * 2.0 = 20
         assert!(
-            matches!(cmds[2], Command::DealDamage { target_id: 2, amount } if (amount - 20.0).abs() < f32::EPSILON),
-            "cmd[2] should be DealDamage 20.0, got {:?}",
-            cmds[2]
+            matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 20.0).abs() < f32::EPSILON),
+            "intents[0] should be DamageDealt 20.0, got {:?}",
+            intents[0]
         );
         // Crit doubled the knockback: 5 * 2.0 = 10
         assert!(
-            matches!(cmds[3], Command::ApplyKnockback { target_id: 2, force } if (force - 10.0).abs() < f32::EPSILON),
-            "cmd[3] should be ApplyKnockback 10.0, got {:?}",
-            cmds[3]
+            matches!(intents[1], Intent::KnockbackApplied { target_id: 2, force } if (force - 10.0).abs() < f32::EPSILON),
+            "intents[1] should be KnockbackApplied 10.0, got {:?}",
+            intents[1]
         );
-        // Stacking on_hit commands (crit → 3 stacks)
+        // Stacking on_hit intents (crit → 3 stacks)
         assert!(
-            matches!(&cmds[4], Command::SetStat { entity_id: 1, stat, value }
+            matches!(&intents[2], Intent::StatSet { entity_id: 1, stat, value }
                 if stat == "fury_stacks" && (*value - 3.0).abs() < f32::EPSILON),
-            "cmd[4] should be SetStat fury_stacks 3, got {:?}",
-            cmds[4]
+            "intents[2] should be StatSet fury_stacks 3, got {:?}",
+            intents[2]
         );
         assert!(
-            matches!(&cmds[5], Command::SetStat { entity_id: 1, stat, value }
+            matches!(&intents[3], Intent::StatSet { entity_id: 1, stat, value }
                 if stat == "attack_speed_bonus" && (*value - 0.36).abs() < 0.001),
-            "cmd[5] should be SetStat attack_speed_bonus 0.36, got {:?}",
-            cmds[5]
+            "intents[3] should be StatSet attack_speed_bonus 0.36, got {:?}",
+            intents[3]
         );
         assert!(
-            matches!(&cmds[6], Command::AddBuff { target_id: 1, name, duration }
+            matches!(&intents[4], Intent::BuffAdded { target_id: 1, name, duration }
                 if name == "fury" && (*duration - 2.5).abs() < f32::EPSILON),
-            "cmd[6] should be AddBuff fury 2.5, got {:?}",
-            cmds[6]
-        );
-        // is_crit was true, so vfx("crit_particles", target) runs
-        assert!(
-            matches!(&cmds[7], Command::SpawnVfx { name, target_id: 2 } if name == "crit_particles"),
-            "cmd[7] should be SpawnVfx crit_particles, got {:?}",
-            cmds[7]
+            "intents[4] should be BuffAdded fury 2.5, got {:?}",
+            intents[4]
         );
     }
 
@@ -946,7 +952,7 @@ mod tests {
             ..test_combatant(2)
         };
 
-        let cmds = engine
+        let (intents, effects) = engine
             .call_ability_with_behaviors(
                 "on_ability_start",
                 source,
@@ -962,32 +968,36 @@ mod tests {
         // knockback = source.knockback_force = 5.0
         // fire_hook("on_hit") — stacking.on_hit runs: is_crit=false → add=1
 
-        // Expected:
+        // Expected intents:
+        // 1. DamageDealt(2, 10.0) — unmodified
+        // 2. KnockbackApplied(2, 5.0) — unmodified
+        // 3. StatSet(1, fury_stacks, 1.0)
+        // 4. StatSet(1, attack_speed_bonus, 0.12)
+        // 5. BuffAdded(1, fury, 2.5)
+
+        // Expected effects:
         // 1. Animate(1, "attack")
-        // 2. PlaySound("swoosh")
-        // 3. DealDamage(2, 10.0)  — unmodified
-        // 4. ApplyKnockback(2, 5.0) — unmodified
-        // 5. SetStat(1, fury_stacks, 1.0)
-        // 6. SetStat(1, attack_speed_bonus, 0.12)
-        // 7. AddBuff(1, fury, 2.5)
+        // 2. Sound("swoosh", 1)
         // (no crit_particles since is_crit=false)
 
-        assert_eq!(cmds.len(), 7, "expected 7 commands, got {cmds:?}");
+        assert_eq!(intents.len(), 5, "expected 5 intents, got {intents:?}");
+        assert_eq!(effects.len(), 2, "expected 2 effects, got {effects:?}");
+
         assert!(
-            matches!(cmds[2], Command::DealDamage { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON),
+            matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON),
             "damage should be unmodified at 10.0, got {:?}",
-            cmds[2]
+            intents[0]
         );
         assert!(
-            matches!(cmds[3], Command::ApplyKnockback { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON),
+            matches!(intents[1], Intent::KnockbackApplied { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON),
             "knockback should be unmodified at 5.0, got {:?}",
-            cmds[3]
+            intents[1]
         );
         assert!(
-            matches!(&cmds[4], Command::SetStat { entity_id: 1, stat, value }
+            matches!(&intents[2], Intent::StatSet { entity_id: 1, stat, value }
                 if stat == "fury_stacks" && (*value - 1.0).abs() < f32::EPSILON),
             "fury_stacks should be 1 (normal hit), got {:?}",
-            cmds[4]
+            intents[2]
         );
     }
 
@@ -1006,7 +1016,7 @@ mod tests {
             ..test_combatant(2)
         };
 
-        let cmds = engine
+        let (intents, effects) = engine
             .call_ability_with_behaviors(
                 "on_ability_start",
                 source,
@@ -1017,11 +1027,13 @@ mod tests {
             )
             .expect("ability should succeed");
 
-        // No behaviors → no modifications, no stacking commands, no crit particles
-        // Just: Animate, PlaySound, DealDamage(10.0), ApplyKnockback(5.0)
-        assert_eq!(cmds.len(), 4, "expected 4 commands with no behaviors, got {cmds:?}");
-        assert!(matches!(cmds[2], Command::DealDamage { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON));
-        assert!(matches!(cmds[3], Command::ApplyKnockback { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON));
+        // No behaviors → no modifications, no stacking intents, no crit particles
+        // Intents: DamageDealt(10.0), KnockbackApplied(5.0)
+        // Effects: Animate, Sound
+        assert_eq!(intents.len(), 2, "expected 2 intents with no behaviors, got {intents:?}");
+        assert_eq!(effects.len(), 2, "expected 2 effects with no behaviors, got {effects:?}");
+        assert!(matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON));
+        assert!(matches!(intents[1], Intent::KnockbackApplied { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON));
     }
 
     #[test]
@@ -1044,7 +1056,7 @@ mod tests {
         };
 
         // rng_roll=0.1 < crit_chance=0.2 → crit
-        let cmds = engine
+        let (intents, effects) = engine
             .call_ability_with_behaviors(
                 "on_ability_start",
                 source,
@@ -1057,17 +1069,19 @@ mod tests {
 
         // base_damage = 10 * 4 = 40, crit doubles it → 80
         // knockback = 20, crit doubles → 40
-        // Expected: Animate, Sound, Vfx(shockwave), DealDamage(80), ApplyKnockback(40), ScreenShake
-        assert_eq!(cmds.len(), 6, "expected 6 commands, got {cmds:?}");
+        // Expected intents: DamageDealt(80), KnockbackApplied(40)
+        // Expected effects: Animate, Sound, Vfx(shockwave), ScreenShake
+        assert_eq!(intents.len(), 2, "expected 2 intents, got {intents:?}");
+        assert_eq!(effects.len(), 4, "expected 4 effects, got {effects:?}");
         assert!(
-            matches!(cmds[3], Command::DealDamage { target_id: 2, amount } if (amount - 80.0).abs() < f32::EPSILON),
+            matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 80.0).abs() < f32::EPSILON),
             "ground pound crit damage should be 80, got {:?}",
-            cmds[3]
+            intents[0]
         );
         assert!(
-            matches!(cmds[4], Command::ApplyKnockback { target_id: 2, force } if (force - 40.0).abs() < f32::EPSILON),
+            matches!(intents[1], Intent::KnockbackApplied { target_id: 2, force } if (force - 40.0).abs() < f32::EPSILON),
             "ground pound crit knockback should be 40, got {:?}",
-            cmds[4]
+            intents[1]
         );
     }
 
@@ -1089,7 +1103,7 @@ mod tests {
 
             if dist <= self_entity.attack_range && self_entity.cooldown_ready {
                 set_behavior(self_entity, "attack");
-                damage(player, self_entity.attack_damage);
+                apply_damage(player, self_entity.attack_damage);
             } else if dist <= 15.0 {
                 set_behavior(self_entity, "chase");
                 move_toward(self_entity, player.pos_x, player.pos_z, self_entity.speed);
@@ -1130,23 +1144,23 @@ mod tests {
         let zombie = zombie_combatant(1, 0.0, 0.0);
         let player = zombie_combatant(100, 10.0, 0.0); // distance=10, within chase range (<=15)
 
-        let cmds = engine
+        let (intents, _effects) = engine
             .call_tick("on_tick", zombie, vec![player], 0.016, 0.5)
             .expect("tick should succeed");
 
-        assert_eq!(cmds.len(), 2, "expected 2 commands (SetBehavior + MoveToward), got {cmds:?}");
+        assert_eq!(intents.len(), 2, "expected 2 intents (BehaviorSet + MovedToward), got {intents:?}");
         assert!(
-            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "chase"),
+            matches!(&intents[0], Intent::BehaviorSet { entity_id: 1, behavior } if behavior == "chase"),
             "should set behavior to chase, got {:?}",
-            cmds[0]
+            intents[0]
         );
         assert!(
-            matches!(cmds[1], Command::MoveToward { entity_id: 1, target_x, target_z, speed }
+            matches!(intents[1], Intent::MovedToward { entity_id: 1, target_x, target_z, speed }
                 if (target_x - 10.0).abs() < f32::EPSILON
                 && target_z.abs() < f32::EPSILON
                 && (speed - 5.0).abs() < f32::EPSILON),
             "should move toward player, got {:?}",
-            cmds[1]
+            intents[1]
         );
     }
 
@@ -1157,21 +1171,21 @@ mod tests {
         let zombie = zombie_combatant(1, 0.0, 0.0); // attack_range=2.0, cooldown_ready=true
         let player = zombie_combatant(100, 1.5, 0.0); // distance=1.5 <= attack_range
 
-        let cmds = engine
+        let (intents, _effects) = engine
             .call_tick("on_tick", zombie, vec![player], 0.016, 0.5)
             .expect("tick should succeed");
 
-        assert_eq!(cmds.len(), 2, "expected 2 commands (SetBehavior + DealDamage), got {cmds:?}");
+        assert_eq!(intents.len(), 2, "expected 2 intents (BehaviorSet + DamageDealt), got {intents:?}");
         assert!(
-            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "attack"),
+            matches!(&intents[0], Intent::BehaviorSet { entity_id: 1, behavior } if behavior == "attack"),
             "should set behavior to attack, got {:?}",
-            cmds[0]
+            intents[0]
         );
         assert!(
-            matches!(cmds[1], Command::DealDamage { target_id: 100, amount }
+            matches!(intents[1], Intent::DamageDealt { target_id: 100, amount }
                 if (amount - 10.0).abs() < f32::EPSILON),
             "should deal damage to player, got {:?}",
-            cmds[1]
+            intents[1]
         );
     }
 
@@ -1181,15 +1195,15 @@ mod tests {
 
         let zombie = zombie_combatant(1, 0.0, 0.0);
 
-        let cmds = engine
+        let (intents, _effects) = engine
             .call_tick("on_tick", zombie, vec![], 0.016, 0.5)
             .expect("tick should succeed");
 
-        assert_eq!(cmds.len(), 1, "expected 1 command (SetBehavior idle), got {cmds:?}");
+        assert_eq!(intents.len(), 1, "expected 1 intent (BehaviorSet idle), got {intents:?}");
         assert!(
-            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "idle"),
+            matches!(&intents[0], Intent::BehaviorSet { entity_id: 1, behavior } if behavior == "idle"),
             "should set behavior to idle, got {:?}",
-            cmds[0]
+            intents[0]
         );
     }
 
@@ -1200,15 +1214,15 @@ mod tests {
         let zombie = zombie_combatant(1, 0.0, 0.0);
         let player = zombie_combatant(100, 20.0, 0.0); // distance=20 > 15.0
 
-        let cmds = engine
+        let (intents, _effects) = engine
             .call_tick("on_tick", zombie, vec![player], 0.016, 0.5)
             .expect("tick should succeed");
 
-        assert_eq!(cmds.len(), 1, "expected 1 command (SetBehavior idle), got {cmds:?}");
+        assert_eq!(intents.len(), 1, "expected 1 intent (BehaviorSet idle), got {intents:?}");
         assert!(
-            matches!(&cmds[0], Command::SetBehavior { entity_id: 1, behavior } if behavior == "idle"),
+            matches!(&intents[0], Intent::BehaviorSet { entity_id: 1, behavior } if behavior == "idle"),
             "should set behavior to idle when player is far, got {:?}",
-            cmds[0]
+            intents[0]
         );
     }
 }
