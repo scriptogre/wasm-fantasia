@@ -1,5 +1,5 @@
 use game_core::combat::{self, defaults, effect_types, landing_aoe};
-use game_core::runtime::{Combatant, Command};
+use game_core::runtime::{Combatant, Effect, Intent};
 use spacetimedb::Table;
 
 use crate::schema::*;
@@ -132,7 +132,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .collect();
 
     let rng_roll = rng_from_seed(now as u64);
-    let commands = scripting::run_melee_attack(source, targets, rng_roll);
+    let (intents, effects) = scripting::run_melee_attack(source, targets, rng_roll);
 
     let world_id = attacker.world_id;
     let mut hit_any = false;
@@ -140,9 +140,10 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
     let mut new_speed_bonus = 0.0_f32;
     let mut buff_applied = false;
 
-    process_combat_commands(
+    process_combat_intents(
         ctx,
-        &commands,
+        &intents,
+        &effects,
         &attacker,
         world_id,
         &enemy_pos_index,
@@ -348,7 +349,7 @@ fn aoe_hit(
         .collect();
 
     let rng_roll = rng_from_seed(now as u64);
-    let commands = scripting::run_ground_pound(source, targets, rng_roll);
+    let (intents, effects) = scripting::run_ground_pound(source, targets, rng_roll);
 
     let world_id = attacker.world_id;
     let fwd = glam::Vec2::new(1.0, 0.0); // direction irrelevant for 360deg AOE
@@ -357,9 +358,10 @@ fn aoe_hit(
     let mut new_speed_bonus = 0.0_f32;
     let mut buff_applied = false;
 
-    process_combat_commands(
+    process_combat_intents(
         ctx,
-        &commands,
+        &intents,
+        &effects,
         attacker,
         world_id,
         &enemy_pos_index,
@@ -372,13 +374,14 @@ fn aoe_hit(
     );
 }
 
-// ── Command processing ───────────────────────────────────────────
+// ── Intent/Effect processing ─────────────────────────────────────
 
-/// Process Rune script commands and apply them to SpacetimeDB tables.
+/// Process Rune script intents and effects, applying them to SpacetimeDB tables.
 #[allow(clippy::too_many_arguments)]
-fn process_combat_commands(
+fn process_combat_intents(
     ctx: &spacetimedb::ReducerContext,
-    commands: &[Command],
+    intents: &[Intent],
+    effects: &[Effect],
     attacker: &Player,
     world_id: u32,
     enemy_pos_index: &std::collections::HashMap<u64, (f32, f32, f32)>,
@@ -390,51 +393,49 @@ fn process_combat_commands(
     buff_applied: &mut bool,
 ) {
     // Accumulate damage per target so we can batch health updates
-    let mut damage_by_target: std::collections::HashMap<u64, (f32, bool)> =
+    let mut damage_by_target: std::collections::HashMap<u64, f32> =
         std::collections::HashMap::new();
     let mut knockback_by_target: std::collections::HashMap<u64, f32> =
         std::collections::HashMap::new();
 
-    for cmd in commands {
-        match cmd {
-            Command::DealDamage { target_id, amount } => {
-                let entry = damage_by_target.entry(*target_id).or_insert((0.0, false));
-                entry.0 += amount;
+    for intent in intents {
+        match intent {
+            Intent::DamageDealt { target_id, amount } => {
+                *damage_by_target.entry(*target_id).or_insert(0.0) += amount;
                 *hit_any = true;
             }
-            Command::ApplyKnockback { target_id, force } => {
-                let entry = knockback_by_target.entry(*target_id).or_insert(0.0);
-                *entry += force;
+            Intent::KnockbackApplied { target_id, force } => {
+                *knockback_by_target.entry(*target_id).or_insert(0.0) += force;
             }
-            Command::SetStat {
-                entity_id: _,
-                stat,
-                value,
-            } => {
+            Intent::StatSet { stat, value, .. } => {
                 if stat == "fury_stacks" {
                     *new_stacks = *value;
                 } else if stat == "attack_speed_bonus" {
                     *new_speed_bonus = *value;
                 }
             }
-            Command::AddBuff { .. } => {
+            Intent::BuffAdded { .. } => {
                 *buff_applied = true;
             }
-            Command::SpawnVfx { target_id, .. } => {
-                // Mark is_crit on the damage entry for this target (crit_particles)
-                if let Some(entry) = damage_by_target.get_mut(target_id) {
-                    entry.1 = true; // is_crit
-                }
-            }
-            // Animate, PlaySound, ScreenShake, HitStop — client-only effects, no-op on server
             _ => {}
         }
     }
 
+    // Build a set of crit target IDs from effects (crit_particles VFX)
+    let crit_targets: std::collections::HashSet<u64> = effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Vfx { name, target_id } if name == "crit_particles" => Some(*target_id),
+            _ => None,
+        })
+        .collect();
+
     let enemy_mass = defaults::ENEMY_MASS;
 
     // Apply damage and knockback to enemies
-    for (target_id, (total_damage, is_crit)) in &damage_by_target {
+    for (target_id, total_damage) in &damage_by_target {
+        let is_crit = crit_targets.contains(target_id);
+
         let (hit_x, hit_y, hit_z) = enemy_pos_index
             .get(target_id)
             .copied()
@@ -446,7 +447,7 @@ fn process_combat_commands(
             y: hit_y,
             z: hit_z,
             damage: *total_damage,
-            is_crit: *is_crit,
+            is_crit,
             world_id,
             timestamp: now,
         });
