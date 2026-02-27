@@ -98,6 +98,9 @@ fn on_enemy_added(
     on: On<Add, Enemy>,
     vat_state: Option<Res<VatEnemyState>>,
     models: Res<Models>,
+    remap_infos: Res<Assets<RemapInfo>>,
+    time: Res<Time>,
+    behaviors: Query<&EnemyBehavior>,
     mut commands: Commands,
 ) {
     let entity = on.entity;
@@ -113,10 +116,16 @@ fn on_enemy_added(
     // for 5000 kinematic sensors.
     commands
         .entity(entity)
-        .insert((EnemyBehavior::default(), InheritedVisibility::default()));
+        .insert(InheritedVisibility::default());
+
+    let clip_name = match behaviors.get(entity).unwrap_or(&EnemyBehavior::Idle) {
+        EnemyBehavior::Idle => "Zombie_Idle_Loop",
+        EnemyBehavior::Chase => "Zombie_Walk_Fwd_Loop",
+        EnemyBehavior::Attack => "Zombie_Scratch",
+    };
 
     if let Some(vat_state) = vat_state {
-        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models);
+        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name);
     } else {
         // Assets not loaded yet — mark for later setup
         commands.entity(entity).insert(PendingVatSetup);
@@ -126,14 +135,21 @@ fn on_enemy_added(
 /// Catch-up system: attaches VAT mesh to enemies that were added before
 /// VatEnemyState was ready.
 fn attach_vat_to_pending_enemies(
-    pending: Query<Entity, With<PendingVatSetup>>,
+    pending: Query<(Entity, Option<&EnemyBehavior>), With<PendingVatSetup>>,
     vat_state: Res<VatEnemyState>,
     models: Res<Models>,
+    remap_infos: Res<Assets<RemapInfo>>,
+    time: Res<Time>,
     mut commands: Commands,
 ) {
-    for entity in &pending {
+    for (entity, behavior) in &pending {
+        let clip_name = match behavior.unwrap_or(&EnemyBehavior::Idle) {
+            EnemyBehavior::Idle => "Zombie_Idle_Loop",
+            EnemyBehavior::Chase => "Zombie_Walk_Fwd_Loop",
+            EnemyBehavior::Attack => "Zombie_Scratch",
+        };
         commands.entity(entity).remove::<PendingVatSetup>();
-        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models);
+        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name);
     }
 }
 
@@ -142,7 +158,7 @@ fn attach_vat_to_pending_enemies(
 // =============================================================================
 
 fn animate_enemies(
-    enemies: Query<(&EnemyBehavior, &VatMeshLink), Changed<EnemyBehavior>>,
+    enemies: Query<(&EnemyBehavior, &VatMeshLink)>,
     mut controllers: Query<&mut VatAnimationController>,
     remap_infos: Res<Assets<RemapInfo>>,
     time: Res<Time>,

@@ -12,35 +12,17 @@ use crate::{
 
 /// Synchronizes the CPU-side animation state with the GPU via a storage buffer.
 /// Rebuilds every frame for playing animations (start_time advances each frame).
-#[allow(clippy::too_many_arguments)]
 pub fn update_instance_data(
     mut commands: Commands,
-    changed_query: Query<Entity, Changed<VatAnimationController>>,
     controller_query: Query<(Entity, &VatAnimationController, Option<&MeshTag>)>,
     mut materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
     mat_query: Query<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, OpenVatExtension>>>,
     remap_infos: Res<Assets<RemapInfo>>,
     mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
     mut remap_events: MessageReader<AssetEvent<RemapInfo>>,
-    mut last_count: Local<usize>,
 ) {
-    let current_count = controller_query.iter().len();
-    let any_changed = !changed_query.is_empty();
-    let asset_changed = !remap_events.is_empty();
     remap_events.clear();
-
-    // Skip update if nothing changed (Performance Optimization)
-    if !any_changed && *last_count == current_count && !asset_changed {
-        return;
-    }
-
-    // Entity count changed means new entities were added or removed.
-    // The material's bind group needs to be refreshed so the GPU can see
-    // the resized buffer. In steady state (count unchanged), only the buffer
-    // data changes — the existing bind group already points to the right
-    // GPU buffer and Bevy re-uploads it via buffer asset change detection.
-    let count_changed = *last_count != current_count;
-    *last_count = current_count;
+    let current_count = controller_query.iter().len();
 
     let mut gpu_data_vec: Vec<VatInstanceData> = Vec::with_capacity(current_count);
 
@@ -91,30 +73,17 @@ pub fn update_instance_data(
 
     // Write buffer data. Deduplicate by material handle to avoid redundant
     // writes (all 5000 entities share 1-2 materials pointing to the same buffer).
-    //
-    // Only call materials.get_mut() when entity count changed — this marks the
-    // material as AssetChanged, triggering bind group recreation (needed when
-    // the buffer is resized for new entities). In steady state, just write buffer
-    // data via buffers.get_mut() which is sufficient for GPU re-upload without
-    // the expensive material re-specialization cascade.
-    if count_changed {
-        let mut seen: HashSet<AssetId<ExtendedMaterial<StandardMaterial, OpenVatExtension>>> =
-            HashSet::new();
-        for mat_handle in mat_query.iter() {
-            if seen.insert(mat_handle.0.id())
-                && let Some(mat) = materials.get_mut(&mat_handle.0)
-                && let Some(buffer) = buffers.get_mut(&mat.extension.instance)
-            {
-                buffer.set_data(gpu_data_vec.clone());
-            }
-        }
-    } else if let Some(mat_handle) = mat_query.iter().next() {
-        // Steady state: write buffer data only (no material change).
-        // All materials share the same buffer — one write is enough.
-        if let Some(mat) = materials.get(&mat_handle.0)
+    // Always use get_mut() on the material to mark it as AssetChanged — this
+    // forces bind group recreation, ensuring the GPU references the current
+    // buffer allocation (which changes when the buffer is resized).
+    let mut seen: HashSet<AssetId<ExtendedMaterial<StandardMaterial, OpenVatExtension>>> =
+        HashSet::new();
+    for mat_handle in mat_query.iter() {
+        if seen.insert(mat_handle.0.id())
+            && let Some(mat) = materials.get_mut(&mat_handle.0)
             && let Some(buffer) = buffers.get_mut(&mat.extension.instance)
         {
-            buffer.set_data(gpu_data_vec);
+            buffer.set_data(gpu_data_vec.clone());
         }
     }
 }

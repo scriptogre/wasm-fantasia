@@ -190,17 +190,25 @@ pub(crate) fn spawn_vat_mesh_child(
     enemy_entity: Entity,
     vat_state: &VatEnemyState,
     models: &Models,
+    remap_infos: &Assets<RemapInfo>,
+    elapsed_secs: f32,
+    clip_name: &str,
 ) {
     let base_transform = Transform::from_translation(MESH_OFFSET)
         .with_scale(Vec3::splat(MESH_SCALE))
         .with_rotation(Quat::from_rotation_y(std::f32::consts::PI));
 
+    let clip = remap_infos
+        .get(&models.enemy_remap_info)
+        .and_then(|info| info.clip_id(clip_name))
+        .unwrap_or(0);
+
     let controller = VatAnimationController {
         remap_info: models.enemy_remap_info.clone(),
-        current_clip: 0, // Will be set by animate_enemies when behavior changes
+        current_clip: clip,
         speed: 1.0,
         is_playing: true,
-        start_time: 0.0,
+        start_time: elapsed_secs,
         offset: 0.0,
     };
 

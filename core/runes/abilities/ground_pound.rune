@@ -6,7 +6,7 @@ pub fn on_ability_start(source) {
     vfx("ground_pound_shockwave", source);
 
     let targets = targets_in_radius(source.pos_x, source.pos_z, 6.0);
-    let base_damage = source.attack_damage * 1.0;
+    let base_damage = source.attack_damage * 4.0;
 
     for target in targets {
         let hit = Hit { damage: base_damage, knockback: 20.0, is_crit: false };

@@ -259,9 +259,31 @@ pub(super) fn drain_db_events(
 
     let my_id = conn.conn.try_identity();
 
+    // Pre-scan: when EnemyInsert and EnemyUpdate arrive in the same batch,
+    // the update can't query the entity (deferred commands). Collect the
+    // latest animation_state per enemy so inserts use the final value.
+    let mut latest_anim: HashMap<u64, u8> = HashMap::new();
+    for event in &events {
+        match event {
+            DbEvent::EnemyInsert { enemy } => {
+                latest_anim.insert(enemy.id, enemy.animation_state);
+            }
+            DbEvent::EnemyUpdate { id, new } => {
+                latest_anim.insert(*id, new.animation_state);
+            }
+            _ => {}
+        }
+    }
+
     for event in events {
         match event {
             DbEvent::EnemyInsert { enemy } => {
+                let anim = latest_anim.get(&enemy.id).copied().unwrap_or(enemy.animation_state);
+                let behavior = match EnemyBehaviorKind::from_u8(anim) {
+                    EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
+                    EnemyBehaviorKind::Chase => EnemyBehavior::Chase,
+                    EnemyBehaviorKind::Attack => EnemyBehavior::Attack,
+                };
                 let entity = commands
                     .spawn((
                         Name::new(format!("Enemy_{}", enemy.id)),
@@ -279,6 +301,7 @@ pub(super) fn drain_db_events(
                         Transform::from_xyz(enemy.x, enemy.y, enemy.z),
                         Health::new(enemy.max_health),
                         Enemy,
+                        behavior,
                         Combatant,
                         Stats::new()
                             .with(Stat::MaxHealth, enemy.max_health)
@@ -289,6 +312,12 @@ pub(super) fn drain_db_events(
             }
             DbEvent::EnemyUpdate { id, new } => {
                 if let Some(&entity) = entity_map.enemies.get(&id) {
+                    let new_behavior = match EnemyBehaviorKind::from_u8(new.animation_state) {
+                        EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
+                        EnemyBehaviorKind::Chase => EnemyBehavior::Chase,
+                        EnemyBehaviorKind::Attack => EnemyBehavior::Attack,
+                    };
+
                     if let Ok((mut world, mut health, behavior)) = remote_enemies.get_mut(entity) {
                         *world = WorldEntity {
                             x: new.x,
@@ -303,12 +332,6 @@ pub(super) fn drain_db_events(
                         health.max = new.max_health;
 
                         if let Some(mut behavior) = behavior {
-                            let kind = EnemyBehaviorKind::from_u8(new.animation_state);
-                            let new_behavior = match kind {
-                                EnemyBehaviorKind::Idle => EnemyBehavior::Idle,
-                                EnemyBehaviorKind::Chase => EnemyBehavior::Chase,
-                                EnemyBehaviorKind::Attack => EnemyBehavior::Attack,
-                            };
                             if *behavior != new_behavior {
                                 *behavior = new_behavior;
                             }
