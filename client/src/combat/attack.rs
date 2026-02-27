@@ -6,7 +6,7 @@ use crate::scripting::{ActiveAbility, EntityBehaviors, ScriptRegistryRes};
 use bevy_enhanced_input::prelude::{Fire, Start};
 use bevy_tnua::prelude::TnuaController;
 use game_core::combat::{HitFeedback, defaults, ground_pound};
-use game_core::runtime::Command as ScriptCommand;
+use game_core::runtime::{Intent, Effect};
 use game_core::runtime::types::Combatant as ScriptCombatant;
 use std::collections::HashMap;
 
@@ -193,13 +193,15 @@ fn stat_from_name(name: &str) -> Stat {
     }
 }
 
-/// Process script commands into Bevy events and stat updates.
+/// Process script intents and effects into Bevy events and stat updates.
 ///
-/// Groups `DealDamage` + `ApplyKnockback` per target into single `DamageDealt`
-/// events. Applies `SetStat` commands to the attacker's `Stats` component.
+/// Groups `DamageDealt` + `KnockbackApplied` intents per target into single
+/// `DamageDealt` events. Applies `StatSet` intents to the attacker's `Stats`
+/// component. Checks effects for crit VFX indicators.
 /// Returns whether any crit occurred (for attack animation state).
-fn process_script_commands(
-    cmds: &[ScriptCommand],
+fn process_script_results(
+    intents: &[Intent],
+    effects: &[Effect],
     attacker_entity: Entity,
     origin_pos: Vec3,
     forward: Vec3,
@@ -210,27 +212,26 @@ fn process_script_commands(
     let mut any_crit = false;
     let mut target_hits: HashMap<u64, (f32, f32)> = HashMap::new();
 
-    for cmd in cmds {
-        match cmd {
-            ScriptCommand::DealDamage { target_id, amount } => {
+    for intent in intents {
+        match intent {
+            Intent::DamageDealt { target_id, amount } => {
                 let entry = target_hits.entry(*target_id).or_insert((0.0, 0.0));
                 entry.0 += amount;
             }
-            ScriptCommand::ApplyKnockback { target_id, force } => {
+            Intent::KnockbackApplied { target_id, force } => {
                 let entry = target_hits.entry(*target_id).or_insert((0.0, 0.0));
                 entry.1 = *force;
             }
-            ScriptCommand::SetStat { stat, value, .. } => {
+            Intent::StatSet { stat, value, .. } => {
                 if let Some(s) = stats {
                     s.set(stat_from_name(stat), *value);
                 }
             }
-            ScriptCommand::AddBuff { .. } => {
-                // Stacking script already emits SetStat alongside AddBuff;
+            Intent::BuffAdded { .. } => {
+                // Stacking script already emits StatSet alongside BuffAdded;
                 // buff duration tracking will come in a later task.
             }
-            // Feedback (screen shake, hit stop, sound, VFX) is handled by
-            // the existing Bevy feedback pipeline via HitLanded events.
+            // Other intents (Healed, Killed, etc.) are handled elsewhere.
             _ => {}
         }
     }
@@ -245,8 +246,9 @@ fn process_script_commands(
             continue;
         };
 
-        let is_crit = cmds.iter().any(|c| {
-            matches!(c, ScriptCommand::SpawnVfx { name, target_id: tid }
+        // Check effects for crit VFX indicator
+        let is_crit = effects.iter().any(|e| {
+            matches!(e, Effect::Vfx { name, target_id: tid }
                 if name == "crit_particles" && tid == target_id)
         });
         if is_crit {
@@ -335,7 +337,7 @@ fn on_attack_hit(
 
     let behavior_names = behaviors.map(|b| b.0.clone()).unwrap_or_default();
 
-    let script_cmds: Vec<ScriptCommand> = match ability_engine.call_ability_with_behaviors(
+    let (intents, effects) = match ability_engine.call_ability_with_behaviors(
         "on_ability_start",
         source,
         script_targets,
@@ -343,7 +345,7 @@ fn on_attack_hit(
         registry.0.clone(),
         behavior_names,
     ) {
-        Ok(cmds) => cmds,
+        Ok(result) => result,
         Err(e) => {
             warn!("Ability script '{ability_name}' failed: {e}");
             return;
@@ -351,8 +353,9 @@ fn on_attack_hit(
     };
 
     let mut stats_mut = stats;
-    let any_crit = process_script_commands(
-        &script_cmds,
+    let any_crit = process_script_results(
+        &intents,
+        &effects,
         attacker_entity,
         attacker_pos,
         forward,
@@ -419,7 +422,7 @@ fn on_ground_pound_hit(
 
     let behavior_names = behaviors.map(|b| b.0.clone()).unwrap_or_default();
 
-    let script_cmds: Vec<ScriptCommand> = match ability_engine.call_ability_with_behaviors(
+    let (intents, effects) = match ability_engine.call_ability_with_behaviors(
         "on_ability_start",
         source,
         script_targets,
@@ -427,26 +430,34 @@ fn on_ground_pound_hit(
         registry.0.clone(),
         behavior_names,
     ) {
-        Ok(cmds) => cmds,
+        Ok(result) => result,
         Err(e) => {
             warn!("Ground pound script failed: {e}");
             return;
         }
     };
 
-    // For ground pound, knockback is radial from impact center
+    // For ground pound, knockback is radial from impact center.
+    // We reuse process_script_results but with impact_pos as origin
+    // and forward as the fallback direction. The knockback_displacement
+    // in process_script_results uses (radial_dir, fwd_2d) which gives
+    // correct radial push for ground pound since each target's radial
+    // direction is computed from impact_pos.
+    //
+    // NOTE: Ground pound also applies vertical launch via ground_pound::LAUNCH,
+    // so we handle it inline to pass the launch parameter.
     let forward_flat = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
     let forward_xz = Vec2::new(forward_flat.x, forward_flat.z);
 
     let mut target_hits: HashMap<u64, (f32, f32)> = HashMap::new();
 
-    for cmd in &script_cmds {
-        match cmd {
-            ScriptCommand::DealDamage { target_id, amount } => {
+    for intent in &intents {
+        match intent {
+            Intent::DamageDealt { target_id, amount } => {
                 let entry = target_hits.entry(*target_id).or_insert((0.0, 0.0));
                 entry.0 += amount;
             }
-            ScriptCommand::ApplyKnockback { target_id, force } => {
+            Intent::KnockbackApplied { target_id, force } => {
                 let entry = target_hits.entry(*target_id).or_insert((0.0, 0.0));
                 entry.1 = *force;
             }
@@ -461,8 +472,8 @@ fn on_ground_pound_hit(
             continue;
         };
 
-        let is_crit = script_cmds.iter().any(|c| {
-            matches!(c, ScriptCommand::SpawnVfx { name, target_id: tid }
+        let is_crit = effects.iter().any(|e| {
+            matches!(e, Effect::Vfx { name, target_id: tid }
                 if name == "crit_particles" && tid == target_id)
         });
 
