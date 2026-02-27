@@ -111,20 +111,27 @@ pub fn build_gameplay_module() -> Result<Module, ContextError> {
     m.ty::<Combatant>()?;
     m.ty::<Hit>()?;
 
-    // Command functions (buffered writes)
+    // New state primitives (mutate + log intent)
+    m.function("apply_damage", apply_damage).build()?;
+    m.function("apply_knockback", apply_knockback).build()?;
+    m.function("add_buff", add_buff).build()?;
+    m.function("kill", kill).build()?;
+
+    // Functions that keep the same Rune name but now also log intents/effects.
+    // They still push to COMMAND_BUFFER for backward compat (removed in Task 7).
     m.function("damage", damage).build()?;
     m.function("heal", heal).build()?;
     m.function("knockback", knockback).build()?;
-    m.function("vfx", vfx).build()?;
-    m.function("sound", sound).build()?;
-    m.function("animate", animate).build()?;
     m.function("buff", buff).build()?;
     m.function("remove_buff", remove_buff).build()?;
     m.function("set_stat", set_stat).build()?;
-    m.function("screen_shake", screen_shake).build()?;
-    m.function("hit_stop", hit_stop).build()?;
     m.function("set_behavior", set_behavior).build()?;
     m.function("move_toward", move_toward).build()?;
+    m.function("vfx", vfx).build()?;
+    m.function("sound", sound).build()?;
+    m.function("screen_shake", screen_shake).build()?;
+    m.function("hit_stop", hit_stop).build()?;
+    m.function("animate", animate).build()?;
 
     // Query functions (reads)
     m.function("chance", chance).build()?;
@@ -145,10 +152,64 @@ pub fn build_gameplay_module() -> Result<Module, ContextError> {
     Ok(m)
 }
 
-// --- Command functions ---
+// --- New state primitives (intent-only, not registered under legacy names) ---
+
+pub(crate) fn apply_damage_impl(target: &mut Combatant, amount: f32) -> f32 {
+    let actual = amount.min(target.health).max(0.0);
+    target.health -= actual;
+    push_intent(Intent::DamageDealt {
+        target_id: target.id,
+        amount: actual,
+    });
+    actual
+}
+
+fn apply_damage(mut target: rune::runtime::Mut<Combatant>, amount: f32) -> f32 {
+    apply_damage_impl(&mut target, amount)
+}
+
+pub(crate) fn heal_impl(target: &mut Combatant, amount: f32) -> f32 {
+    let actual = amount.min(target.max_health - target.health).max(0.0);
+    target.health += actual;
+    push_intent(Intent::Healed {
+        target_id: target.id,
+        amount: actual,
+    });
+    actual
+}
+
+fn apply_knockback(target: &Combatant, force: f32) {
+    push_intent(Intent::KnockbackApplied {
+        target_id: target.id,
+        force,
+    });
+}
+
+fn add_buff(target: &Combatant, name: &str, duration: f32) {
+    push_intent(Intent::BuffAdded {
+        target_id: target.id,
+        name: name.to_string(),
+        duration,
+    });
+}
+
+fn kill(mut target: rune::runtime::Mut<Combatant>) {
+    target.health = 0.0;
+    push_intent(Intent::Killed {
+        target_id: target.id,
+    });
+}
+
+// --- Legacy-compatible functions (push to BOTH command buffer and intent/effect log) ---
+// These keep the old Rune names so existing scripts continue to work.
+// The command buffer push will be removed in Task 7 when scripts are updated.
 
 fn damage(target: &Combatant, amount: f32) {
     push_command(Command::DealDamage {
+        target_id: target.id,
+        amount,
+    });
+    push_intent(Intent::DamageDealt {
         target_id: target.id,
         amount,
     });
@@ -159,6 +220,10 @@ fn heal(target: &Combatant, amount: f32) {
         target_id: target.id,
         amount,
     });
+    push_intent(Intent::Healed {
+        target_id: target.id,
+        amount,
+    });
 }
 
 fn knockback(target: &Combatant, force: f32) {
@@ -166,33 +231,19 @@ fn knockback(target: &Combatant, force: f32) {
         target_id: target.id,
         force,
     });
-}
-
-fn vfx(name: &str, target: &Combatant) {
-    push_command(Command::SpawnVfx {
-        name: name.to_string(),
+    push_intent(Intent::KnockbackApplied {
         target_id: target.id,
-    });
-}
-
-fn sound(name: &str, x: f32, y: f32, z: f32) {
-    push_command(Command::PlaySound {
-        name: name.to_string(),
-        pos_x: x,
-        pos_y: y,
-        pos_z: z,
-    });
-}
-
-fn animate(entity: &Combatant, animation: &str) {
-    push_command(Command::Animate {
-        entity_id: entity.id,
-        animation: animation.to_string(),
+        force,
     });
 }
 
 fn buff(target: &Combatant, name: &str, duration: f32) {
     push_command(Command::AddBuff {
+        target_id: target.id,
+        name: name.to_string(),
+        duration,
+    });
+    push_intent(Intent::BuffAdded {
         target_id: target.id,
         name: name.to_string(),
         duration,
@@ -204,6 +255,10 @@ fn remove_buff(target: &Combatant, name: &str) {
         target_id: target.id,
         name: name.to_string(),
     });
+    push_intent(Intent::BuffRemoved {
+        target_id: target.id,
+        name: name.to_string(),
+    });
 }
 
 fn set_stat(entity: &Combatant, stat: &str, value: f32) {
@@ -212,18 +267,19 @@ fn set_stat(entity: &Combatant, stat: &str, value: f32) {
         stat: stat.to_string(),
         value,
     });
-}
-
-fn screen_shake(intensity: f32) {
-    push_command(Command::ScreenShake { intensity });
-}
-
-fn hit_stop(duration: f32) {
-    push_command(Command::HitStop { duration });
+    push_intent(Intent::StatSet {
+        entity_id: entity.id,
+        stat: stat.to_string(),
+        value,
+    });
 }
 
 fn set_behavior(entity: &Combatant, behavior: &str) {
     push_command(Command::SetBehavior {
+        entity_id: entity.id,
+        behavior: behavior.to_string(),
+    });
+    push_intent(Intent::BehaviorSet {
         entity_id: entity.id,
         behavior: behavior.to_string(),
     });
@@ -236,6 +292,55 @@ fn move_toward(entity: &Combatant, target_x: f32, target_z: f32, speed: f32) {
         target_z,
         speed,
     });
+    push_intent(Intent::MovedToward {
+        entity_id: entity.id,
+        target_x,
+        target_z,
+        speed,
+    });
+}
+
+fn vfx(name: &str, target: &Combatant) {
+    push_command(Command::SpawnVfx {
+        name: name.to_string(),
+        target_id: target.id,
+    });
+    push_effect(Effect::Vfx {
+        name: name.to_string(),
+        target_id: target.id,
+    });
+}
+
+fn sound(name: &str, x: f32, y: f32, z: f32) {
+    push_command(Command::PlaySound {
+        name: name.to_string(),
+        pos_x: x,
+        pos_y: y,
+        pos_z: z,
+    });
+    // Note: legacy sound takes coords; new Effect::Sound uses target_id.
+    // We can't log a proper Effect::Sound here since we don't have a target_id.
+}
+
+fn animate(entity: &Combatant, animation: &str) {
+    push_command(Command::Animate {
+        entity_id: entity.id,
+        animation: animation.to_string(),
+    });
+    push_effect(Effect::Animate {
+        entity_id: entity.id,
+        animation: animation.to_string(),
+    });
+}
+
+fn screen_shake(intensity: f32) {
+    push_command(Command::ScreenShake { intensity });
+    push_effect(Effect::ScreenShake { intensity });
+}
+
+fn hit_stop(duration: f32) {
+    push_command(Command::HitStop { duration });
+    push_effect(Effect::HitStop { duration });
 }
 
 // --- Query functions ---
@@ -397,5 +502,61 @@ mod tests {
         clear_logs();
         assert!(take_intents().is_empty());
         assert!(take_effects().is_empty());
+    }
+
+    fn make_combatant(id: u64, health: f32, max_health: f32) -> Combatant {
+        Combatant {
+            id,
+            health,
+            max_health,
+            pos_x: 0.0,
+            pos_y: 0.0,
+            pos_z: 0.0,
+            dir_x: 1.0,
+            dir_z: 0.0,
+            attack_damage: 10.0,
+            crit_chance: 0.0,
+            crit_multiplier: 1.5,
+            knockback_force: 5.0,
+            attack_range: 2.0,
+            attack_arc: 90.0,
+            attack_speed: 1.0,
+            fury_stacks: 0,
+            attack_speed_bonus: 0.0,
+            cooldown_ready: true,
+            speed: 5.0,
+        }
+    }
+
+    #[test]
+    fn apply_damage_mutates_and_logs() {
+        clear_logs();
+        let mut target = make_combatant(1, 100.0, 100.0);
+        let dealt = apply_damage_impl(&mut target, 30.0);
+        assert!((dealt - 30.0).abs() < f32::EPSILON);
+        assert!((target.health - 70.0).abs() < f32::EPSILON);
+        let intents = take_intents();
+        assert_eq!(intents.len(), 1);
+        assert!(matches!(intents[0], Intent::DamageDealt { target_id: 1, amount } if (amount - 30.0).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn apply_damage_clamps_to_zero() {
+        clear_logs();
+        let mut target = make_combatant(1, 20.0, 100.0);
+        let dealt = apply_damage_impl(&mut target, 50.0);
+        assert!((dealt - 20.0).abs() < f32::EPSILON);
+        assert!(target.health <= 0.0);
+    }
+
+    #[test]
+    fn heal_mutates_and_logs() {
+        clear_logs();
+        let mut target = make_combatant(1, 60.0, 100.0);
+        let healed = heal_impl(&mut target, 50.0);
+        assert!((healed - 40.0).abs() < f32::EPSILON);
+        assert!((target.health - 100.0).abs() < f32::EPSILON);
+        let intents = take_intents();
+        assert!(matches!(intents[0], Intent::Healed { target_id: 1, amount } if (amount - 40.0).abs() < f32::EPSILON));
     }
 }
