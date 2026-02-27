@@ -12,7 +12,7 @@
 
 ### Task 1: Fix broken include_str! paths from previous move
 
-The `.rune` files were moved from `client/assets/scripts/` to `core/gameplay/` but the `include_str!()` paths in both client and server scripting modules were never updated.
+The `.rune` files were moved from `client/assets/scripts/` to `core/runes/` but the `include_str!()` paths in both client and server scripting modules were never updated.
 
 **Files:**
 - Modify: `client/src/scripting.rs` (lines 34, 41, 48, 55, 62, 70 — include_str! paths; lines 162, 206 — hot-reload PathBuf)
@@ -21,23 +21,23 @@ The `.rune` files were moved from `client/assets/scripts/` to `core/gameplay/` b
 **Step 1: Update client include_str! paths**
 
 In `client/src/scripting.rs`, change all 6 `include_str!` paths:
-- `"../assets/scripts/behaviors/crit.rune"` → `"../../core/gameplay/behaviors/crit.rune"`
-- `"../assets/scripts/behaviors/stacking.rune"` → `"../../core/gameplay/behaviors/stacking.rune"`
-- `"../assets/scripts/behaviors/feedback.rune"` → `"../../core/gameplay/behaviors/feedback.rune"`
-- `"../assets/scripts/abilities/melee_attack.rune"` → `"../../core/gameplay/abilities/melee_attack.rune"`
-- `"../assets/scripts/abilities/ground_pound.rune"` → `"../../core/gameplay/abilities/ground_pound.rune"`
-- `"../assets/scripts/enemies/zombie_ai.rune"` → `"../../core/gameplay/enemies/zombie_ai.rune"`
+- `"../assets/scripts/behaviors/crit.rune"` → `"../../core/runes/behaviors/crit.rune"`
+- `"../assets/scripts/behaviors/stacking.rune"` → `"../../core/runes/behaviors/stacking.rune"`
+- `"../assets/scripts/behaviors/feedback.rune"` → `"../../core/runes/behaviors/feedback.rune"`
+- `"../assets/scripts/abilities/melee_attack.rune"` → `"../../core/runes/abilities/melee_attack.rune"`
+- `"../assets/scripts/abilities/ground_pound.rune"` → `"../../core/runes/abilities/ground_pound.rune"`
+- `"../assets/scripts/enemies/zombie_ai.rune"` → `"../../core/runes/enemies/zombie_ai.rune"`
 
 Change 2 hot-reload `PathBuf` references:
-- `"client/assets/scripts"` → `"core/gameplay"` (lines 162 and 206)
+- `"client/assets/scripts"` → `"core/runes"` (lines 162 and 206)
 
 **Step 2: Update server include_str! paths**
 
 In `server/src/scripting.rs`, change all 4 `include_str!` paths:
-- `"../../client/assets/scripts/behaviors/crit.rune"` → `"../../core/gameplay/behaviors/crit.rune"`
-- `"../../client/assets/scripts/behaviors/stacking.rune"` → `"../../core/gameplay/behaviors/stacking.rune"`
-- `"../../client/assets/scripts/abilities/melee_attack.rune"` → `"../../core/gameplay/abilities/melee_attack.rune"`
-- `"../../client/assets/scripts/abilities/ground_pound.rune"` → `"../../core/gameplay/abilities/ground_pound.rune"`
+- `"../../client/assets/scripts/behaviors/crit.rune"` → `"../../core/runes/behaviors/crit.rune"`
+- `"../../client/assets/scripts/behaviors/stacking.rune"` → `"../../core/runes/behaviors/stacking.rune"`
+- `"../../client/assets/scripts/abilities/melee_attack.rune"` → `"../../core/runes/abilities/melee_attack.rune"`
+- `"../../client/assets/scripts/abilities/ground_pound.rune"` → `"../../core/runes/abilities/ground_pound.rune"`
 
 **Step 3: Remove empty old directory**
 
@@ -55,7 +55,7 @@ Expected: All pass.
 **Step 5: Commit**
 
 ```bash
-git add -A && git commit -m "Fix include_str paths after script move to core/gameplay"
+git add -A && git commit -m "Fix include_str paths after script move to core/runes"
 ```
 
 ---
@@ -564,12 +564,12 @@ git add -A && git commit -m "Update ScriptEngine to return intents and effects"
 Change all scripts from `use game::*` to `use gameplay::*` and update function names.
 
 **Files:**
-- Modify: `core/gameplay/abilities/melee_attack.rune`
-- Modify: `core/gameplay/abilities/ground_pound.rune`
-- Modify: `core/gameplay/behaviors/crit.rune`
-- Modify: `core/gameplay/behaviors/stacking.rune`
-- Modify: `core/gameplay/behaviors/feedback.rune`
-- Modify: `core/gameplay/enemies/zombie_ai.rune`
+- Modify: `core/runes/abilities/melee_attack.rune`
+- Modify: `core/runes/abilities/ground_pound.rune`
+- Modify: `core/runes/behaviors/crit.rune`
+- Modify: `core/runes/behaviors/stacking.rune`
+- Modify: `core/runes/behaviors/feedback.rune`
+- Modify: `core/runes/enemies/zombie_ai.rune`
 
 **Changes per file:**
 
@@ -887,7 +887,7 @@ core/src/runtime/
   registry.rs  — ScriptRegistry
   types.rs     — Combatant, Hit
 
-core/gameplay/
+core/runes/
   abilities/melee_attack.rune
   abilities/ground_pound.rune
   behaviors/crit.rune

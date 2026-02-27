@@ -148,7 +148,7 @@ core/src/runtime/       (was: core/src/scripting/)
   registry.rs           ScriptRegistry: compiled script storage
   types.rs              Combatant, Hit
 
-core/gameplay/          .rune script files
+core/runes/          .rune script files
   abilities/            melee_attack.rune, ground_pound.rune
   behaviors/            crit.rune, stacking.rune, feedback.rune
   enemies/              zombie_ai.rune
