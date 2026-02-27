@@ -34,3 +34,79 @@ pub struct Player {
 impl __sdk::InModule for Player {
     type Module = super::RemoteModule;
 }
+
+/// Column accessor struct for the table `Player`.
+///
+/// Provides typed access to columns for query building.
+pub struct PlayerCols {
+    pub identity: __sdk::__query_builder::Col<Player, __sdk::Identity>,
+    pub name: __sdk::__query_builder::Col<Player, Option<String>>,
+    pub online: __sdk::__query_builder::Col<Player, bool>,
+    pub world_id: __sdk::__query_builder::Col<Player, u32>,
+    pub last_update: __sdk::__query_builder::Col<Player, i64>,
+    pub x: __sdk::__query_builder::Col<Player, f32>,
+    pub y: __sdk::__query_builder::Col<Player, f32>,
+    pub z: __sdk::__query_builder::Col<Player, f32>,
+    pub rotation_y: __sdk::__query_builder::Col<Player, f32>,
+    pub animation_state: __sdk::__query_builder::Col<Player, u8>,
+    pub attack_sequence: __sdk::__query_builder::Col<Player, u32>,
+    pub attack_animation: __sdk::__query_builder::Col<Player, u8>,
+    pub health: __sdk::__query_builder::Col<Player, f32>,
+    pub max_health: __sdk::__query_builder::Col<Player, f32>,
+    pub attack_damage: __sdk::__query_builder::Col<Player, f32>,
+    pub crit_chance: __sdk::__query_builder::Col<Player, f32>,
+    pub crit_multiplier: __sdk::__query_builder::Col<Player, f32>,
+    pub attack_range: __sdk::__query_builder::Col<Player, f32>,
+    pub attack_arc: __sdk::__query_builder::Col<Player, f32>,
+    pub knockback_force: __sdk::__query_builder::Col<Player, f32>,
+    pub attack_speed: __sdk::__query_builder::Col<Player, f32>,
+    pub last_attack_time: __sdk::__query_builder::Col<Player, i64>,
+}
+
+impl __sdk::__query_builder::HasCols for Player {
+    type Cols = PlayerCols;
+    fn cols(table_name: &'static str) -> Self::Cols {
+        PlayerCols {
+            identity: __sdk::__query_builder::Col::new(table_name, "identity"),
+            name: __sdk::__query_builder::Col::new(table_name, "name"),
+            online: __sdk::__query_builder::Col::new(table_name, "online"),
+            world_id: __sdk::__query_builder::Col::new(table_name, "world_id"),
+            last_update: __sdk::__query_builder::Col::new(table_name, "last_update"),
+            x: __sdk::__query_builder::Col::new(table_name, "x"),
+            y: __sdk::__query_builder::Col::new(table_name, "y"),
+            z: __sdk::__query_builder::Col::new(table_name, "z"),
+            rotation_y: __sdk::__query_builder::Col::new(table_name, "rotation_y"),
+            animation_state: __sdk::__query_builder::Col::new(table_name, "animation_state"),
+            attack_sequence: __sdk::__query_builder::Col::new(table_name, "attack_sequence"),
+            attack_animation: __sdk::__query_builder::Col::new(table_name, "attack_animation"),
+            health: __sdk::__query_builder::Col::new(table_name, "health"),
+            max_health: __sdk::__query_builder::Col::new(table_name, "max_health"),
+            attack_damage: __sdk::__query_builder::Col::new(table_name, "attack_damage"),
+            crit_chance: __sdk::__query_builder::Col::new(table_name, "crit_chance"),
+            crit_multiplier: __sdk::__query_builder::Col::new(table_name, "crit_multiplier"),
+            attack_range: __sdk::__query_builder::Col::new(table_name, "attack_range"),
+            attack_arc: __sdk::__query_builder::Col::new(table_name, "attack_arc"),
+            knockback_force: __sdk::__query_builder::Col::new(table_name, "knockback_force"),
+            attack_speed: __sdk::__query_builder::Col::new(table_name, "attack_speed"),
+            last_attack_time: __sdk::__query_builder::Col::new(table_name, "last_attack_time"),
+        }
+    }
+}
+
+/// Indexed column accessor struct for the table `Player`.
+///
+/// Provides typed access to indexed columns for query building.
+pub struct PlayerIxCols {
+    pub identity: __sdk::__query_builder::IxCol<Player, __sdk::Identity>,
+}
+
+impl __sdk::__query_builder::HasIxCols for Player {
+    type IxCols = PlayerIxCols;
+    fn ix_cols(table_name: &'static str) -> Self::IxCols {
+        PlayerIxCols {
+            identity: __sdk::__query_builder::IxCol::new(table_name, "identity"),
+        }
+    }
+}
+
+impl __sdk::__query_builder::CanBeLookupTable for Player {}

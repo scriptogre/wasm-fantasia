@@ -36,14 +36,14 @@ pub struct SpacetimeDbConnection {
 #[derive(Resource, Clone, Debug)]
 pub struct SpacetimeDbConfig {
     pub uri: String,
-    pub module_name: String,
+    pub database_name: String,
 }
 
 impl Default for SpacetimeDbConfig {
     fn default() -> Self {
         Self {
             uri: default_uri(),
-            module_name: "game-server".to_string(),
+            database_name: "game-server".to_string(),
         }
     }
 }

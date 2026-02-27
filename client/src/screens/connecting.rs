@@ -77,12 +77,12 @@ fn spawn_connecting_screen(
             log.push("Starting local SpacetimeDB server...");
         }
         Some(ServerTarget::Remote { uri }) => {
-            log.push(format!("Connecting to {} ({})...", uri, config.module_name));
+            log.push(format!("Connecting to {} ({})...", uri, config.database_name));
         }
         None => {
             log.push(format!(
                 "Connecting to {} ({})...",
-                config.uri, config.module_name
+                config.uri, config.database_name
             ));
         }
     }

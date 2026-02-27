@@ -1,5 +1,5 @@
 /// Player state stored on the server (authoritative).
-#[spacetimedb::table(name = player, public)]
+#[spacetimedb::table(accessor = player, public)]
 pub struct Player {
     #[primary_key]
     pub identity: spacetimedb::Identity,
@@ -35,7 +35,7 @@ pub struct Player {
 }
 
 /// Server-authoritative enemy.
-#[spacetimedb::table(name = enemy, public)]
+#[spacetimedb::table(accessor = enemy, public)]
 pub struct Enemy {
     #[primary_key]
     #[auto_inc]
@@ -69,7 +69,7 @@ pub struct Enemy {
 }
 
 /// Ephemeral hit notification. Inserted by attack_hit, consumed by clients for VFX.
-#[spacetimedb::table(name = combat_event, public)]
+#[spacetimedb::table(accessor = combat_event, public)]
 pub struct CombatEvent {
     #[primary_key]
     #[auto_inc]
@@ -85,7 +85,7 @@ pub struct CombatEvent {
 
 /// Dynamic effect (buff, debuff, DoT). Managed by combat reducers now,
 /// by Rhai/Lua scripts later.
-#[spacetimedb::table(name = active_effect, public)]
+#[spacetimedb::table(accessor = active_effect, public)]
 pub struct ActiveEffect {
     #[primary_key]
     #[auto_inc]
@@ -99,7 +99,7 @@ pub struct ActiveEffect {
 }
 
 /// Scheduled tick for server-side game logic (enemy AI, etc.).
-#[spacetimedb::table(name = tick_schedule, scheduled(crate::enemy_ai::game_tick))]
+#[spacetimedb::table(accessor = tick_schedule, scheduled(crate::enemy_ai::game_tick))]
 pub struct TickSchedule {
     #[primary_key]
     #[auto_inc]
@@ -109,7 +109,7 @@ pub struct TickSchedule {
 
 /// Knockback impulse to be applied to an enemy during the next physics tick.
 /// Inserted by combat reducers, consumed by game_tick.
-#[spacetimedb::table(name = knockback_impulse, public)]
+#[spacetimedb::table(accessor = knockback_impulse, public)]
 pub struct KnockbackImpulse {
     #[primary_key]
     #[auto_inc]
@@ -122,7 +122,7 @@ pub struct KnockbackImpulse {
 }
 
 /// Tracks which worlds are paused (singleplayer ESC menu).
-#[spacetimedb::table(name = world_pause, public)]
+#[spacetimedb::table(accessor = world_pause, public)]
 pub struct WorldPause {
     #[primary_key]
     pub world_id: u32,

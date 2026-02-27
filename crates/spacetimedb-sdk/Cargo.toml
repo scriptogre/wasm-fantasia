@@ -1,6 +1,6 @@
 [package]
 name = "spacetimedb-sdk"
-version = "1.12.0"
+version = "2.0.2"
 edition = "2021"
 description = "A Rust SDK for clients to interface with SpacetimeDB (with WASM support)"
 license-file = "LICENSE"
@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [features]
 default = []
+allow_loopback_http_for_tests = []
 web = [
     "dep:getrandom",
     "dep:gloo-console",
@@ -38,11 +39,17 @@ prometheus = "0.13.0"
 rand = "0.9"
 thiserror = "1.0.37"
 
-spacetimedb-client-api-messages = "=1.12.0"
-spacetimedb-data-structures = "=1.12.0"
-spacetimedb-lib = { version = "=1.12.0", default-features = false, features = ["serde", "metrics_impls"] }
-spacetimedb-metrics = "=1.12.0"
-spacetimedb-sats = "=1.12.0"
+spacetimedb-client-api-messages = "=2.0.2"
+spacetimedb-data-structures = "=2.0.2"
+spacetimedb-lib = { version = "=2.0.2", default-features = false, features = ["serde", "metrics_impls"] }
+spacetimedb-metrics = "=2.0.2"
+spacetimedb-query-builder = "=2.0.2"
+spacetimedb-sats = "=2.0.2"
+# spacetimedb-schema removed: not used by SDK source, and its transitive dep
+# spacetimedb-sql-parser has size assertions that fail on wasm32.
+
+# Native-only deps also used by WASM (TLS not needed on WASM)
+native-tls = { version = "=0.2.14", optional = true }
 
 # WASM-optional deps
 getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
@@ -58,11 +65,12 @@ web-sys = { version = "0.3", features = ["HtmlDocument", "Window", "Storage"], o
 # Native-only deps (conditional on target)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 home = "0.5"
+native-tls = "=0.2.14"
 tokio = { version = "1.37", features = ["full"] }
 tokio-tungstenite = { version = "0.27.0", features = ["native-tls", "url"] }
 
 [package.metadata.cargo-machete]
-ignored = ["base64", "getrandom", "gloo-console", "gloo-net", "gloo-utils", "js-sys", "rand", "wasm-bindgen"]
+ignored = ["base64", "getrandom", "gloo-console", "gloo-net", "gloo-utils", "js-sys", "rand", "wasm-bindgen", "native-tls"]
 
 [lints.clippy]
 result_large_err = "allow"

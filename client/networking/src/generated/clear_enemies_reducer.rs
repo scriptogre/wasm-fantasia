@@ -18,8 +18,6 @@ impl __sdk::InModule for ClearEnemiesArgs {
     type Module = super::RemoteModule;
 }
 
-pub struct ClearEnemiesCallbackId(__sdk::CallbackId);
-
 #[allow(non_camel_case_types)]
 /// Extension trait for access to the reducer `clear_enemies`.
 ///
@@ -29,72 +27,36 @@ pub trait clear_enemies {
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
-    ///  and its status can be observed by listening for [`Self::on_clear_enemies`] callbacks.
-    fn clear_enemies(&self) -> __sdk::Result<()>;
-    /// Register a callback to run whenever we are notified of an invocation of the reducer `clear_enemies`.
+    ///  and this method provides no way to listen for its completion status.
+    /// /// Use [`clear_enemies:clear_enemies_then`] to run a callback after the reducer completes.
+    fn clear_enemies(&self) -> __sdk::Result<()> {
+        self.clear_enemies_then(|_, _| {})
+    }
+
+    /// Request that the remote module invoke the reducer `clear_enemies` to run as soon as possible,
+    /// registering `callback` to run when we are notified that the reducer completed.
     ///
-    /// Callbacks should inspect the [`__sdk::ReducerEvent`] contained in the [`super::ReducerEventContext`]
-    /// to determine the reducer's status.
-    ///
-    /// The returned [`ClearEnemiesCallbackId`] can be passed to [`Self::remove_on_clear_enemies`]
-    /// to cancel the callback.
-    fn on_clear_enemies(
+    /// This method returns immediately, and errors only if we are unable to send the request.
+    /// The reducer will run asynchronously in the future,
+    ///  and its status can be observed with the `callback`.
+    fn clear_enemies_then(
         &self,
-        callback: impl FnMut(&super::ReducerEventContext) + Send + 'static,
-    ) -> ClearEnemiesCallbackId;
-    /// Cancel a callback previously registered by [`Self::on_clear_enemies`],
-    /// causing it not to run in the future.
-    fn remove_on_clear_enemies(&self, callback: ClearEnemiesCallbackId);
+
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()>;
 }
 
 impl clear_enemies for super::RemoteReducers {
-    fn clear_enemies(&self) -> __sdk::Result<()> {
-        self.imp.call_reducer("clear_enemies", ClearEnemiesArgs {})
-    }
-    fn on_clear_enemies(
+    fn clear_enemies_then(
         &self,
-        mut callback: impl FnMut(&super::ReducerEventContext) + Send + 'static,
-    ) -> ClearEnemiesCallbackId {
-        ClearEnemiesCallbackId(self.imp.on_reducer(
-            "clear_enemies",
-            Box::new(move |ctx: &super::ReducerEventContext| {
-                #[allow(irrefutable_let_patterns)]
-                let super::ReducerEventContext {
-                    event:
-                        __sdk::ReducerEvent {
-                            reducer: super::Reducer::ClearEnemies {},
-                            ..
-                        },
-                    ..
-                } = ctx
-                else {
-                    unreachable!()
-                };
-                callback(ctx)
-            }),
-        ))
-    }
-    fn remove_on_clear_enemies(&self, callback: ClearEnemiesCallbackId) {
-        self.imp.remove_on_reducer("clear_enemies", callback.0)
-    }
-}
 
-#[allow(non_camel_case_types)]
-#[doc(hidden)]
-/// Extension trait for setting the call-flags for the reducer `clear_enemies`.
-///
-/// Implemented for [`super::SetReducerFlags`].
-///
-/// This type is currently unstable and may be removed without a major version bump.
-pub trait set_flags_for_clear_enemies {
-    /// Set the call-reducer flags for the reducer `clear_enemies` to `flags`.
-    ///
-    /// This type is currently unstable and may be removed without a major version bump.
-    fn clear_enemies(&self, flags: __ws::CallReducerFlags);
-}
-
-impl set_flags_for_clear_enemies for super::SetReducerFlags {
-    fn clear_enemies(&self, flags: __ws::CallReducerFlags) {
-        self.imp.set_call_reducer_flags("clear_enemies", flags);
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()> {
+        self.imp
+            .invoke_reducer_with_callback(ClearEnemiesArgs {}, callback)
     }
 }

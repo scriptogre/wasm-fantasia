@@ -78,11 +78,6 @@ impl<'ctx> __sdk::Table for WorldPauseTableHandle<'ctx> {
     }
 }
 
-#[doc(hidden)]
-pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
-    let _table = client_cache.get_or_make_table::<WorldPause>("world_pause");
-    _table.add_unique_constraint::<u32>("world_id", |row| &row.world_id);
-}
 pub struct WorldPauseUpdateCallbackId(__sdk::CallbackId);
 
 impl<'ctx> __sdk::TableWithPrimaryKey for WorldPauseTableHandle<'ctx> {
@@ -98,17 +93,6 @@ impl<'ctx> __sdk::TableWithPrimaryKey for WorldPauseTableHandle<'ctx> {
     fn remove_on_update(&self, callback: WorldPauseUpdateCallbackId) {
         self.imp.remove_on_update(callback.0)
     }
-}
-
-#[doc(hidden)]
-pub(super) fn parse_table_update(
-    raw_updates: __ws::TableUpdate<__ws::BsatnFormat>,
-) -> __sdk::Result<__sdk::TableUpdate<WorldPause>> {
-    __sdk::TableUpdate::parse_table_update(raw_updates).map_err(|e| {
-        __sdk::InternalError::failed_parse("TableUpdate<WorldPause>", "TableUpdate")
-            .with_cause(e)
-            .into()
-    })
 }
 
 /// Access to the `world_id` unique index on the table `world_pause`,
@@ -138,5 +122,38 @@ impl<'ctx> WorldPauseWorldIdUnique<'ctx> {
     /// if such a row is present in the client cache.
     pub fn find(&self, col_val: &u32) -> Option<WorldPause> {
         self.imp.find(col_val)
+    }
+}
+
+#[doc(hidden)]
+pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
+    let _table = client_cache.get_or_make_table::<WorldPause>("world_pause");
+    _table.add_unique_constraint::<u32>("world_id", |row| &row.world_id);
+}
+
+#[doc(hidden)]
+pub(super) fn parse_table_update(
+    raw_updates: __ws::v2::TableUpdate,
+) -> __sdk::Result<__sdk::TableUpdate<WorldPause>> {
+    __sdk::TableUpdate::parse_table_update(raw_updates).map_err(|e| {
+        __sdk::InternalError::failed_parse("TableUpdate<WorldPause>", "TableUpdate")
+            .with_cause(e)
+            .into()
+    })
+}
+
+#[allow(non_camel_case_types)]
+/// Extension trait for query builder access to the table `WorldPause`.
+///
+/// Implemented for [`__sdk::QueryTableAccessor`].
+pub trait world_pauseQueryTableAccess {
+    #[allow(non_snake_case)]
+    /// Get a query builder for the table `WorldPause`.
+    fn world_pause(&self) -> __sdk::__query_builder::Table<WorldPause>;
+}
+
+impl world_pauseQueryTableAccess for __sdk::QueryTableAccessor {
+    fn world_pause(&self) -> __sdk::__query_builder::Table<WorldPause> {
+        __sdk::__query_builder::Table::new("world_pause")
     }
 }

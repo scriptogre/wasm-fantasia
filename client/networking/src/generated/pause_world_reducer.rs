@@ -18,8 +18,6 @@ impl __sdk::InModule for PauseWorldArgs {
     type Module = super::RemoteModule;
 }
 
-pub struct PauseWorldCallbackId(__sdk::CallbackId);
-
 #[allow(non_camel_case_types)]
 /// Extension trait for access to the reducer `pause_world`.
 ///
@@ -29,72 +27,36 @@ pub trait pause_world {
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
-    ///  and its status can be observed by listening for [`Self::on_pause_world`] callbacks.
-    fn pause_world(&self) -> __sdk::Result<()>;
-    /// Register a callback to run whenever we are notified of an invocation of the reducer `pause_world`.
+    ///  and this method provides no way to listen for its completion status.
+    /// /// Use [`pause_world:pause_world_then`] to run a callback after the reducer completes.
+    fn pause_world(&self) -> __sdk::Result<()> {
+        self.pause_world_then(|_, _| {})
+    }
+
+    /// Request that the remote module invoke the reducer `pause_world` to run as soon as possible,
+    /// registering `callback` to run when we are notified that the reducer completed.
     ///
-    /// Callbacks should inspect the [`__sdk::ReducerEvent`] contained in the [`super::ReducerEventContext`]
-    /// to determine the reducer's status.
-    ///
-    /// The returned [`PauseWorldCallbackId`] can be passed to [`Self::remove_on_pause_world`]
-    /// to cancel the callback.
-    fn on_pause_world(
+    /// This method returns immediately, and errors only if we are unable to send the request.
+    /// The reducer will run asynchronously in the future,
+    ///  and its status can be observed with the `callback`.
+    fn pause_world_then(
         &self,
-        callback: impl FnMut(&super::ReducerEventContext) + Send + 'static,
-    ) -> PauseWorldCallbackId;
-    /// Cancel a callback previously registered by [`Self::on_pause_world`],
-    /// causing it not to run in the future.
-    fn remove_on_pause_world(&self, callback: PauseWorldCallbackId);
+
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()>;
 }
 
 impl pause_world for super::RemoteReducers {
-    fn pause_world(&self) -> __sdk::Result<()> {
-        self.imp.call_reducer("pause_world", PauseWorldArgs {})
-    }
-    fn on_pause_world(
+    fn pause_world_then(
         &self,
-        mut callback: impl FnMut(&super::ReducerEventContext) + Send + 'static,
-    ) -> PauseWorldCallbackId {
-        PauseWorldCallbackId(self.imp.on_reducer(
-            "pause_world",
-            Box::new(move |ctx: &super::ReducerEventContext| {
-                #[allow(irrefutable_let_patterns)]
-                let super::ReducerEventContext {
-                    event:
-                        __sdk::ReducerEvent {
-                            reducer: super::Reducer::PauseWorld {},
-                            ..
-                        },
-                    ..
-                } = ctx
-                else {
-                    unreachable!()
-                };
-                callback(ctx)
-            }),
-        ))
-    }
-    fn remove_on_pause_world(&self, callback: PauseWorldCallbackId) {
-        self.imp.remove_on_reducer("pause_world", callback.0)
-    }
-}
 
-#[allow(non_camel_case_types)]
-#[doc(hidden)]
-/// Extension trait for setting the call-flags for the reducer `pause_world`.
-///
-/// Implemented for [`super::SetReducerFlags`].
-///
-/// This type is currently unstable and may be removed without a major version bump.
-pub trait set_flags_for_pause_world {
-    /// Set the call-reducer flags for the reducer `pause_world` to `flags`.
-    ///
-    /// This type is currently unstable and may be removed without a major version bump.
-    fn pause_world(&self, flags: __ws::CallReducerFlags);
-}
-
-impl set_flags_for_pause_world for super::SetReducerFlags {
-    fn pause_world(&self, flags: __ws::CallReducerFlags) {
-        self.imp.set_call_reducer_flags("pause_world", flags);
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()> {
+        self.imp
+            .invoke_reducer_with_callback(PauseWorldArgs {}, callback)
     }
 }

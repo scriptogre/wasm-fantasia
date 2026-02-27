@@ -220,7 +220,7 @@ fn spawn_deploy(server: &LocalServer) -> Result<DeployProcess, String> {
     let listen_addr = format!("127.0.0.1:{}", server.port);
 
     // Use pre-compiled WASM if adjacent to the executable, otherwise
-    // fall back to --project-path for dev workflow.
+    // fall back to --module-path for dev workflow.
     let bin_path = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|d| d.join("game_server.wasm")))
@@ -231,14 +231,14 @@ fn spawn_deploy(server: &LocalServer) -> Result<DeployProcess, String> {
         "publish",
         "game-server",
         "--yes",
-        "--delete-data",
+        "--delete-data=always",
         "-s",
         &format!("http://{listen_addr}"),
     ]);
     if let Some(ref wasm_path) = bin_path {
         cmd.args(["--bin-path", &wasm_path.to_string_lossy()]);
     } else {
-        cmd.args(["--project-path", "server"]);
+        cmd.args(["--module-path", "server"]);
     }
 
     cmd.stdout(Stdio::piped())

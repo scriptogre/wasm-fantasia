@@ -18,3 +18,49 @@ pub struct ActiveEffect {
 impl __sdk::InModule for ActiveEffect {
     type Module = super::RemoteModule;
 }
+
+/// Column accessor struct for the table `ActiveEffect`.
+///
+/// Provides typed access to columns for query building.
+pub struct ActiveEffectCols {
+    pub id: __sdk::__query_builder::Col<ActiveEffect, u64>,
+    pub owner: __sdk::__query_builder::Col<ActiveEffect, __sdk::Identity>,
+    pub effect_type: __sdk::__query_builder::Col<ActiveEffect, u8>,
+    pub magnitude: __sdk::__query_builder::Col<ActiveEffect, f32>,
+    pub duration: __sdk::__query_builder::Col<ActiveEffect, f32>,
+    pub timestamp: __sdk::__query_builder::Col<ActiveEffect, i64>,
+}
+
+impl __sdk::__query_builder::HasCols for ActiveEffect {
+    type Cols = ActiveEffectCols;
+    fn cols(table_name: &'static str) -> Self::Cols {
+        ActiveEffectCols {
+            id: __sdk::__query_builder::Col::new(table_name, "id"),
+            owner: __sdk::__query_builder::Col::new(table_name, "owner"),
+            effect_type: __sdk::__query_builder::Col::new(table_name, "effect_type"),
+            magnitude: __sdk::__query_builder::Col::new(table_name, "magnitude"),
+            duration: __sdk::__query_builder::Col::new(table_name, "duration"),
+            timestamp: __sdk::__query_builder::Col::new(table_name, "timestamp"),
+        }
+    }
+}
+
+/// Indexed column accessor struct for the table `ActiveEffect`.
+///
+/// Provides typed access to indexed columns for query building.
+pub struct ActiveEffectIxCols {
+    pub id: __sdk::__query_builder::IxCol<ActiveEffect, u64>,
+    pub owner: __sdk::__query_builder::IxCol<ActiveEffect, __sdk::Identity>,
+}
+
+impl __sdk::__query_builder::HasIxCols for ActiveEffect {
+    type IxCols = ActiveEffectIxCols;
+    fn ix_cols(table_name: &'static str) -> Self::IxCols {
+        ActiveEffectIxCols {
+            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            owner: __sdk::__query_builder::IxCol::new(table_name, "owner"),
+        }
+    }
+}
+
+impl __sdk::__query_builder::CanBeLookupTable for ActiveEffect {}

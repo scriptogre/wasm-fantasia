@@ -20,7 +20,7 @@ pub fn spawn_enemies(
     _forward_x: f32,
     _forward_z: f32,
 ) {
-    let Some(player) = ctx.db.player().identity().find(ctx.sender) else {
+    let Some(player) = ctx.db.player().identity().find(ctx.sender()) else {
         return;
     };
 
@@ -64,7 +64,7 @@ pub fn spawn_enemies(
 /// Delete all enemies in the caller's world.
 #[spacetimedb::reducer]
 pub fn clear_enemies(ctx: &spacetimedb::ReducerContext) {
-    let Some(player) = ctx.db.player().identity().find(ctx.sender) else {
+    let Some(player) = ctx.db.player().identity().find(ctx.sender()) else {
         return;
     };
 

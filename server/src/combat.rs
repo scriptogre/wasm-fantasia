@@ -19,7 +19,7 @@ fn rng_from_seed(seed: u64) -> f32 {
 #[spacetimedb::reducer]
 pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
-    let Some(attacker) = ctx.db.player().identity().find(ctx.sender) else {
+    let Some(attacker) = ctx.db.player().identity().find(ctx.sender()) else {
         return;
     };
 
@@ -50,7 +50,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         .db
         .active_effect()
         .owner()
-        .filter(&ctx.sender)
+        .filter(&ctx.sender())
         .find(|e| e.effect_type == effect_types::STACKING_DAMAGE);
 
     let (stacks, last_hit_time) = if let Some(ref effect) = stacking_effect {
@@ -169,7 +169,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         } else if new_stacks > 0.0 {
             ctx.db.active_effect().insert(ActiveEffect {
                 id: 0,
-                owner: ctx.sender,
+                owner: ctx.sender(),
                 effect_type: effect_types::STACKING_DAMAGE,
                 magnitude: new_stacks,
                 duration: -1.0,
@@ -201,7 +201,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
 pub fn ground_pound_hit(ctx: &spacetimedb::ReducerContext, x: f32, y: f32, z: f32) {
     use combat::ground_pound as gp;
 
-    let Some(attacker) = ctx.db.player().identity().find(ctx.sender) else {
+    let Some(attacker) = ctx.db.player().identity().find(ctx.sender()) else {
         return;
     };
     if attacker.health <= 0.0 {
@@ -226,7 +226,7 @@ pub fn ground_pound_hit(ctx: &spacetimedb::ReducerContext, x: f32, y: f32, z: f3
 /// Server-authoritative landing AOE. Client sends velocity + impact position.
 #[spacetimedb::reducer]
 pub fn landing_aoe_hit(ctx: &spacetimedb::ReducerContext, velocity_y: f32, x: f32, y: f32, z: f32) {
-    let Some(attacker) = ctx.db.player().identity().find(ctx.sender) else {
+    let Some(attacker) = ctx.db.player().identity().find(ctx.sender()) else {
         return;
     };
     if attacker.health <= 0.0 {

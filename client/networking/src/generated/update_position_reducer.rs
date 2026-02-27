@@ -34,8 +34,6 @@ impl __sdk::InModule for UpdatePositionArgs {
     type Module = super::RemoteModule;
 }
 
-pub struct UpdatePositionCallbackId(__sdk::CallbackId);
-
 #[allow(non_camel_case_types)]
 /// Extension trait for access to the reducer `update_position`.
 ///
@@ -45,36 +43,8 @@ pub trait update_position {
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
-    ///  and its status can be observed by listening for [`Self::on_update_position`] callbacks.
-    fn update_position(
-        &self,
-        x: f32,
-        y: f32,
-        z: f32,
-        rotation_y: f32,
-        animation_state: u8,
-        attack_sequence: u32,
-        attack_animation: u8,
-    ) -> __sdk::Result<()>;
-    /// Register a callback to run whenever we are notified of an invocation of the reducer `update_position`.
-    ///
-    /// Callbacks should inspect the [`__sdk::ReducerEvent`] contained in the [`super::ReducerEventContext`]
-    /// to determine the reducer's status.
-    ///
-    /// The returned [`UpdatePositionCallbackId`] can be passed to [`Self::remove_on_update_position`]
-    /// to cancel the callback.
-    fn on_update_position(
-        &self,
-        callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &u8, &u32, &u8)
-        + Send
-        + 'static,
-    ) -> UpdatePositionCallbackId;
-    /// Cancel a callback previously registered by [`Self::on_update_position`],
-    /// causing it not to run in the future.
-    fn remove_on_update_position(&self, callback: UpdatePositionCallbackId);
-}
-
-impl update_position for super::RemoteReducers {
+    ///  and this method provides no way to listen for its completion status.
+    /// /// Use [`update_position:update_position_then`] to run a callback after the reducer completes.
     fn update_position(
         &self,
         x: f32,
@@ -85,8 +55,56 @@ impl update_position for super::RemoteReducers {
         attack_sequence: u32,
         attack_animation: u8,
     ) -> __sdk::Result<()> {
-        self.imp.call_reducer(
-            "update_position",
+        self.update_position_then(
+            x,
+            y,
+            z,
+            rotation_y,
+            animation_state,
+            attack_sequence,
+            attack_animation,
+            |_, _| {},
+        )
+    }
+
+    /// Request that the remote module invoke the reducer `update_position` to run as soon as possible,
+    /// registering `callback` to run when we are notified that the reducer completed.
+    ///
+    /// This method returns immediately, and errors only if we are unable to send the request.
+    /// The reducer will run asynchronously in the future,
+    ///  and its status can be observed with the `callback`.
+    fn update_position_then(
+        &self,
+        x: f32,
+        y: f32,
+        z: f32,
+        rotation_y: f32,
+        animation_state: u8,
+        attack_sequence: u32,
+        attack_animation: u8,
+
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()>;
+}
+
+impl update_position for super::RemoteReducers {
+    fn update_position_then(
+        &self,
+        x: f32,
+        y: f32,
+        z: f32,
+        rotation_y: f32,
+        animation_state: u8,
+        attack_sequence: u32,
+        attack_animation: u8,
+
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()> {
+        self.imp.invoke_reducer_with_callback(
             UpdatePositionArgs {
                 x,
                 y,
@@ -96,72 +114,7 @@ impl update_position for super::RemoteReducers {
                 attack_sequence,
                 attack_animation,
             },
+            callback,
         )
-    }
-    fn on_update_position(
-        &self,
-        mut callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32, &u8, &u32, &u8)
-        + Send
-        + 'static,
-    ) -> UpdatePositionCallbackId {
-        UpdatePositionCallbackId(self.imp.on_reducer(
-            "update_position",
-            Box::new(move |ctx: &super::ReducerEventContext| {
-                #[allow(irrefutable_let_patterns)]
-                let super::ReducerEventContext {
-                    event:
-                        __sdk::ReducerEvent {
-                            reducer:
-                                super::Reducer::UpdatePosition {
-                                    x,
-                                    y,
-                                    z,
-                                    rotation_y,
-                                    animation_state,
-                                    attack_sequence,
-                                    attack_animation,
-                                },
-                            ..
-                        },
-                    ..
-                } = ctx
-                else {
-                    unreachable!()
-                };
-                callback(
-                    ctx,
-                    x,
-                    y,
-                    z,
-                    rotation_y,
-                    animation_state,
-                    attack_sequence,
-                    attack_animation,
-                )
-            }),
-        ))
-    }
-    fn remove_on_update_position(&self, callback: UpdatePositionCallbackId) {
-        self.imp.remove_on_reducer("update_position", callback.0)
-    }
-}
-
-#[allow(non_camel_case_types)]
-#[doc(hidden)]
-/// Extension trait for setting the call-flags for the reducer `update_position`.
-///
-/// Implemented for [`super::SetReducerFlags`].
-///
-/// This type is currently unstable and may be removed without a major version bump.
-pub trait set_flags_for_update_position {
-    /// Set the call-reducer flags for the reducer `update_position` to `flags`.
-    ///
-    /// This type is currently unstable and may be removed without a major version bump.
-    fn update_position(&self, flags: __ws::CallReducerFlags);
-}
-
-impl set_flags_for_update_position for super::SetReducerFlags {
-    fn update_position(&self, flags: __ws::CallReducerFlags) {
-        self.imp.set_call_reducer_flags("update_position", flags);
     }
 }

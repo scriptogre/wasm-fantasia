@@ -6,7 +6,7 @@ use crate::schema::*;
 #[spacetimedb::reducer]
 pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_id: u32) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
-    if let Some(existing) = ctx.db.player().identity().find(ctx.sender) {
+    if let Some(existing) = ctx.db.player().identity().find(ctx.sender()) {
         ctx.db.player().identity().update(Player {
             online: true,
             world_id,
@@ -16,7 +16,7 @@ pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_
         });
     } else {
         ctx.db.player().insert(Player {
-            identity: ctx.sender,
+            identity: ctx.sender(),
             name,
             online: true,
             world_id,
@@ -45,7 +45,7 @@ pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_
 /// Reset health to max and reposition player at spawn point.
 #[spacetimedb::reducer]
 pub fn respawn(ctx: &spacetimedb::ReducerContext) {
-    let Some(player) = ctx.db.player().identity().find(ctx.sender) else {
+    let Some(player) = ctx.db.player().identity().find(ctx.sender()) else {
         return;
     };
 
@@ -60,7 +60,7 @@ pub fn respawn(ctx: &spacetimedb::ReducerContext) {
         .db
         .active_effect()
         .iter()
-        .filter(|e| e.owner == ctx.sender)
+        .filter(|e| e.owner == ctx.sender())
         .map(|e| e.id)
         .collect();
     for id in effect_ids {
@@ -91,7 +91,7 @@ pub fn on_disconnect(ctx: &spacetimedb::ReducerContext) {
 }
 
 fn set_player_offline(ctx: &spacetimedb::ReducerContext) {
-    if let Some(player) = ctx.db.player().identity().find(ctx.sender) {
+    if let Some(player) = ctx.db.player().identity().find(ctx.sender()) {
         let world_id = player.world_id;
         let is_solo = world_id != 0;
 

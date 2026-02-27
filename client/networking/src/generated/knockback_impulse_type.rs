@@ -18,3 +18,47 @@ pub struct KnockbackImpulse {
 impl __sdk::InModule for KnockbackImpulse {
     type Module = super::RemoteModule;
 }
+
+/// Column accessor struct for the table `KnockbackImpulse`.
+///
+/// Provides typed access to columns for query building.
+pub struct KnockbackImpulseCols {
+    pub id: __sdk::__query_builder::Col<KnockbackImpulse, u64>,
+    pub enemy_id: __sdk::__query_builder::Col<KnockbackImpulse, u64>,
+    pub world_id: __sdk::__query_builder::Col<KnockbackImpulse, u32>,
+    pub impulse_x: __sdk::__query_builder::Col<KnockbackImpulse, f32>,
+    pub impulse_y: __sdk::__query_builder::Col<KnockbackImpulse, f32>,
+    pub impulse_z: __sdk::__query_builder::Col<KnockbackImpulse, f32>,
+}
+
+impl __sdk::__query_builder::HasCols for KnockbackImpulse {
+    type Cols = KnockbackImpulseCols;
+    fn cols(table_name: &'static str) -> Self::Cols {
+        KnockbackImpulseCols {
+            id: __sdk::__query_builder::Col::new(table_name, "id"),
+            enemy_id: __sdk::__query_builder::Col::new(table_name, "enemy_id"),
+            world_id: __sdk::__query_builder::Col::new(table_name, "world_id"),
+            impulse_x: __sdk::__query_builder::Col::new(table_name, "impulse_x"),
+            impulse_y: __sdk::__query_builder::Col::new(table_name, "impulse_y"),
+            impulse_z: __sdk::__query_builder::Col::new(table_name, "impulse_z"),
+        }
+    }
+}
+
+/// Indexed column accessor struct for the table `KnockbackImpulse`.
+///
+/// Provides typed access to indexed columns for query building.
+pub struct KnockbackImpulseIxCols {
+    pub id: __sdk::__query_builder::IxCol<KnockbackImpulse, u64>,
+}
+
+impl __sdk::__query_builder::HasIxCols for KnockbackImpulse {
+    type IxCols = KnockbackImpulseIxCols;
+    fn ix_cols(table_name: &'static str) -> Self::IxCols {
+        KnockbackImpulseIxCols {
+            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+        }
+    }
+}
+
+impl __sdk::__query_builder::CanBeLookupTable for KnockbackImpulse {}

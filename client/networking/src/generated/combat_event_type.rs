@@ -20,3 +20,51 @@ pub struct CombatEvent {
 impl __sdk::InModule for CombatEvent {
     type Module = super::RemoteModule;
 }
+
+/// Column accessor struct for the table `CombatEvent`.
+///
+/// Provides typed access to columns for query building.
+pub struct CombatEventCols {
+    pub id: __sdk::__query_builder::Col<CombatEvent, u64>,
+    pub x: __sdk::__query_builder::Col<CombatEvent, f32>,
+    pub y: __sdk::__query_builder::Col<CombatEvent, f32>,
+    pub z: __sdk::__query_builder::Col<CombatEvent, f32>,
+    pub damage: __sdk::__query_builder::Col<CombatEvent, f32>,
+    pub is_crit: __sdk::__query_builder::Col<CombatEvent, bool>,
+    pub world_id: __sdk::__query_builder::Col<CombatEvent, u32>,
+    pub timestamp: __sdk::__query_builder::Col<CombatEvent, i64>,
+}
+
+impl __sdk::__query_builder::HasCols for CombatEvent {
+    type Cols = CombatEventCols;
+    fn cols(table_name: &'static str) -> Self::Cols {
+        CombatEventCols {
+            id: __sdk::__query_builder::Col::new(table_name, "id"),
+            x: __sdk::__query_builder::Col::new(table_name, "x"),
+            y: __sdk::__query_builder::Col::new(table_name, "y"),
+            z: __sdk::__query_builder::Col::new(table_name, "z"),
+            damage: __sdk::__query_builder::Col::new(table_name, "damage"),
+            is_crit: __sdk::__query_builder::Col::new(table_name, "is_crit"),
+            world_id: __sdk::__query_builder::Col::new(table_name, "world_id"),
+            timestamp: __sdk::__query_builder::Col::new(table_name, "timestamp"),
+        }
+    }
+}
+
+/// Indexed column accessor struct for the table `CombatEvent`.
+///
+/// Provides typed access to indexed columns for query building.
+pub struct CombatEventIxCols {
+    pub id: __sdk::__query_builder::IxCol<CombatEvent, u64>,
+}
+
+impl __sdk::__query_builder::HasIxCols for CombatEvent {
+    type IxCols = CombatEventIxCols;
+    fn ix_cols(table_name: &'static str) -> Self::IxCols {
+        CombatEventIxCols {
+            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+        }
+    }
+}
+
+impl __sdk::__query_builder::CanBeLookupTable for CombatEvent {}

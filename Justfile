@@ -36,9 +36,9 @@ spacetimedb:
         fi
     fi
     "{{spacetime}}" publish game-server \
-        --project-path server \
+        --module-path server \
         --yes \
-        --delete-data
+        --delete-data=always
 
 # Release build — native bundle in dist/native/, WASM bundle in dist/web/
 build:
@@ -79,7 +79,7 @@ web-size *args:
 generate:
     #!/usr/bin/env bash
     set -euo pipefail
-    "{{spacetime}}" generate --lang rust --project-path server --out-dir client/networking/src/generated --yes
+    "{{spacetime}}" generate --lang rust --module-path server --out-dir client/networking/src/generated --yes
     # The codegen emits advance_one_message_blocking() and run_threaded() which
     # don't exist in our WASM-patched SDK fork. Gate them to native-only.
     sed -i '' 's/    pub fn advance_one_message_blocking/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn advance_one_message_blocking/' client/networking/src/generated/mod.rs
@@ -100,4 +100,4 @@ build-web:
 
 # Wipe SpacetimeDB data and redeploy module
 db-reset:
-    "{{spacetime}}" publish game-server --project-path server --yes --delete-data
+    "{{spacetime}}" publish game-server --module-path server --yes --delete-data=always

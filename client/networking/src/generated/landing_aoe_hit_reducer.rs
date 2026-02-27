@@ -28,8 +28,6 @@ impl __sdk::InModule for LandingAoeHitArgs {
     type Module = super::RemoteModule;
 }
 
-pub struct LandingAoeHitCallbackId(__sdk::CallbackId);
-
 #[allow(non_camel_case_types)]
 /// Extension trait for access to the reducer `landing_aoe_hit`.
 ///
@@ -39,86 +37,51 @@ pub trait landing_aoe_hit {
     ///
     /// This method returns immediately, and errors only if we are unable to send the request.
     /// The reducer will run asynchronously in the future,
-    ///  and its status can be observed by listening for [`Self::on_landing_aoe_hit`] callbacks.
-    fn landing_aoe_hit(&self, velocity_y: f32, x: f32, y: f32, z: f32) -> __sdk::Result<()>;
-    /// Register a callback to run whenever we are notified of an invocation of the reducer `landing_aoe_hit`.
+    ///  and this method provides no way to listen for its completion status.
+    /// /// Use [`landing_aoe_hit:landing_aoe_hit_then`] to run a callback after the reducer completes.
+    fn landing_aoe_hit(&self, velocity_y: f32, x: f32, y: f32, z: f32) -> __sdk::Result<()> {
+        self.landing_aoe_hit_then(velocity_y, x, y, z, |_, _| {})
+    }
+
+    /// Request that the remote module invoke the reducer `landing_aoe_hit` to run as soon as possible,
+    /// registering `callback` to run when we are notified that the reducer completed.
     ///
-    /// Callbacks should inspect the [`__sdk::ReducerEvent`] contained in the [`super::ReducerEventContext`]
-    /// to determine the reducer's status.
-    ///
-    /// The returned [`LandingAoeHitCallbackId`] can be passed to [`Self::remove_on_landing_aoe_hit`]
-    /// to cancel the callback.
-    fn on_landing_aoe_hit(
+    /// This method returns immediately, and errors only if we are unable to send the request.
+    /// The reducer will run asynchronously in the future,
+    ///  and its status can be observed with the `callback`.
+    fn landing_aoe_hit_then(
         &self,
-        callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32) + Send + 'static,
-    ) -> LandingAoeHitCallbackId;
-    /// Cancel a callback previously registered by [`Self::on_landing_aoe_hit`],
-    /// causing it not to run in the future.
-    fn remove_on_landing_aoe_hit(&self, callback: LandingAoeHitCallbackId);
+        velocity_y: f32,
+        x: f32,
+        y: f32,
+        z: f32,
+
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()>;
 }
 
 impl landing_aoe_hit for super::RemoteReducers {
-    fn landing_aoe_hit(&self, velocity_y: f32, x: f32, y: f32, z: f32) -> __sdk::Result<()> {
-        self.imp.call_reducer(
-            "landing_aoe_hit",
+    fn landing_aoe_hit_then(
+        &self,
+        velocity_y: f32,
+        x: f32,
+        y: f32,
+        z: f32,
+
+        callback: impl FnOnce(&super::ReducerEventContext, Result<Result<(), String>, __sdk::InternalError>)
+            + Send
+            + 'static,
+    ) -> __sdk::Result<()> {
+        self.imp.invoke_reducer_with_callback(
             LandingAoeHitArgs {
                 velocity_y,
                 x,
                 y,
                 z,
             },
+            callback,
         )
-    }
-    fn on_landing_aoe_hit(
-        &self,
-        mut callback: impl FnMut(&super::ReducerEventContext, &f32, &f32, &f32, &f32) + Send + 'static,
-    ) -> LandingAoeHitCallbackId {
-        LandingAoeHitCallbackId(self.imp.on_reducer(
-            "landing_aoe_hit",
-            Box::new(move |ctx: &super::ReducerEventContext| {
-                #[allow(irrefutable_let_patterns)]
-                let super::ReducerEventContext {
-                    event:
-                        __sdk::ReducerEvent {
-                            reducer:
-                                super::Reducer::LandingAoeHit {
-                                    velocity_y,
-                                    x,
-                                    y,
-                                    z,
-                                },
-                            ..
-                        },
-                    ..
-                } = ctx
-                else {
-                    unreachable!()
-                };
-                callback(ctx, velocity_y, x, y, z)
-            }),
-        ))
-    }
-    fn remove_on_landing_aoe_hit(&self, callback: LandingAoeHitCallbackId) {
-        self.imp.remove_on_reducer("landing_aoe_hit", callback.0)
-    }
-}
-
-#[allow(non_camel_case_types)]
-#[doc(hidden)]
-/// Extension trait for setting the call-flags for the reducer `landing_aoe_hit`.
-///
-/// Implemented for [`super::SetReducerFlags`].
-///
-/// This type is currently unstable and may be removed without a major version bump.
-pub trait set_flags_for_landing_aoe_hit {
-    /// Set the call-reducer flags for the reducer `landing_aoe_hit` to `flags`.
-    ///
-    /// This type is currently unstable and may be removed without a major version bump.
-    fn landing_aoe_hit(&self, flags: __ws::CallReducerFlags);
-}
-
-impl set_flags_for_landing_aoe_hit for super::SetReducerFlags {
-    fn landing_aoe_hit(&self, flags: __ws::CallReducerFlags) {
-        self.imp.set_call_reducer_flags("landing_aoe_hit", flags);
     }
 }

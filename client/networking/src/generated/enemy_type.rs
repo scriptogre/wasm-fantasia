@@ -29,3 +29,69 @@ pub struct Enemy {
 impl __sdk::InModule for Enemy {
     type Module = super::RemoteModule;
 }
+
+/// Column accessor struct for the table `Enemy`.
+///
+/// Provides typed access to columns for query building.
+pub struct EnemyCols {
+    pub id: __sdk::__query_builder::Col<Enemy, u64>,
+    pub enemy_type: __sdk::__query_builder::Col<Enemy, u8>,
+    pub world_id: __sdk::__query_builder::Col<Enemy, u32>,
+    pub x: __sdk::__query_builder::Col<Enemy, f32>,
+    pub y: __sdk::__query_builder::Col<Enemy, f32>,
+    pub z: __sdk::__query_builder::Col<Enemy, f32>,
+    pub rotation_y: __sdk::__query_builder::Col<Enemy, f32>,
+    pub velocity_x: __sdk::__query_builder::Col<Enemy, f32>,
+    pub velocity_y: __sdk::__query_builder::Col<Enemy, f32>,
+    pub velocity_z: __sdk::__query_builder::Col<Enemy, f32>,
+    pub animation_state: __sdk::__query_builder::Col<Enemy, u8>,
+    pub health: __sdk::__query_builder::Col<Enemy, f32>,
+    pub max_health: __sdk::__query_builder::Col<Enemy, f32>,
+    pub attack_damage: __sdk::__query_builder::Col<Enemy, f32>,
+    pub attack_range: __sdk::__query_builder::Col<Enemy, f32>,
+    pub attack_speed: __sdk::__query_builder::Col<Enemy, f32>,
+    pub last_attack_time: __sdk::__query_builder::Col<Enemy, i64>,
+}
+
+impl __sdk::__query_builder::HasCols for Enemy {
+    type Cols = EnemyCols;
+    fn cols(table_name: &'static str) -> Self::Cols {
+        EnemyCols {
+            id: __sdk::__query_builder::Col::new(table_name, "id"),
+            enemy_type: __sdk::__query_builder::Col::new(table_name, "enemy_type"),
+            world_id: __sdk::__query_builder::Col::new(table_name, "world_id"),
+            x: __sdk::__query_builder::Col::new(table_name, "x"),
+            y: __sdk::__query_builder::Col::new(table_name, "y"),
+            z: __sdk::__query_builder::Col::new(table_name, "z"),
+            rotation_y: __sdk::__query_builder::Col::new(table_name, "rotation_y"),
+            velocity_x: __sdk::__query_builder::Col::new(table_name, "velocity_x"),
+            velocity_y: __sdk::__query_builder::Col::new(table_name, "velocity_y"),
+            velocity_z: __sdk::__query_builder::Col::new(table_name, "velocity_z"),
+            animation_state: __sdk::__query_builder::Col::new(table_name, "animation_state"),
+            health: __sdk::__query_builder::Col::new(table_name, "health"),
+            max_health: __sdk::__query_builder::Col::new(table_name, "max_health"),
+            attack_damage: __sdk::__query_builder::Col::new(table_name, "attack_damage"),
+            attack_range: __sdk::__query_builder::Col::new(table_name, "attack_range"),
+            attack_speed: __sdk::__query_builder::Col::new(table_name, "attack_speed"),
+            last_attack_time: __sdk::__query_builder::Col::new(table_name, "last_attack_time"),
+        }
+    }
+}
+
+/// Indexed column accessor struct for the table `Enemy`.
+///
+/// Provides typed access to indexed columns for query building.
+pub struct EnemyIxCols {
+    pub id: __sdk::__query_builder::IxCol<Enemy, u64>,
+}
+
+impl __sdk::__query_builder::HasIxCols for Enemy {
+    type IxCols = EnemyIxCols;
+    fn ix_cols(table_name: &'static str) -> Self::IxCols {
+        EnemyIxCols {
+            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+        }
+    }
+}
+
+impl __sdk::__query_builder::CanBeLookupTable for Enemy {}

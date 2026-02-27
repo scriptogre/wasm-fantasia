@@ -52,7 +52,7 @@ macro_rules! connection_builder {
         let queue = $queue;
         DbConnection::builder()
             .with_uri($uri)
-            .with_module_name($module_name)
+            .with_database_name($module_name)
             .with_token(stored)
             .on_connect(move |conn, identity, token| {
                 info!("Connected to SpacetimeDB with identity: {:?}", identity);
@@ -284,7 +284,7 @@ pub(super) fn auto_connect(
         ServerTarget::Remote { uri } => uri.clone(),
     };
     let is_solo = *mode != GameMode::Multiplayer;
-    if let Some(conn) = try_connect(&uri, &config.module_name, &token, is_solo, &queue) {
+    if let Some(conn) = try_connect(&uri, &config.database_name, &token, is_solo, &queue) {
         commands.insert_resource(conn);
         commands.insert_resource(HandshakeStart(Instant::now()));
         info!("auto_connect: connection initiated");
