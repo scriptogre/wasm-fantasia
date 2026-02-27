@@ -1273,11 +1273,11 @@ use game_core::scripting::registry::ScriptRegistry;
 thread_local! {
     static SCRIPTS: RefCell<ScriptRegistry> = RefCell::new({
         let mut reg = ScriptRegistry::new();
-        reg.register("crit".into(), include_str!("../../client/assets/scripts/behaviors/crit.rune")).unwrap();
-        reg.register("stacking".into(), include_str!("../../client/assets/scripts/behaviors/stacking.rune")).unwrap();
-        reg.register("melee_attack".into(), include_str!("../../client/assets/scripts/abilities/melee_attack.rune")).unwrap();
-        reg.register("ground_pound".into(), include_str!("../../client/assets/scripts/abilities/ground_pound.rune")).unwrap();
-        reg.register("zombie_ai".into(), include_str!("../../client/assets/scripts/enemies/zombie_ai.rune")).unwrap();
+        reg.register("crit".into(), include_str!("../../core/gameplay/behaviors/crit.rune")).unwrap();
+        reg.register("stacking".into(), include_str!("../../core/gameplay/behaviors/stacking.rune")).unwrap();
+        reg.register("melee_attack".into(), include_str!("../../core/gameplay/abilities/melee_attack.rune")).unwrap();
+        reg.register("ground_pound".into(), include_str!("../../core/gameplay/abilities/ground_pound.rune")).unwrap();
+        reg.register("zombie_ai".into(), include_str!("../../core/gameplay/enemies/zombie_ai.rune")).unwrap();
         reg
     });
 }

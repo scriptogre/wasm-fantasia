@@ -7,22 +7,22 @@ thread_local! {
         let mut reg = ScriptRegistry::new();
         reg.register(
             "crit".into(),
-            include_str!("../../client/assets/scripts/behaviors/crit.rune"),
+            include_str!("../../core/gameplay/behaviors/crit.rune"),
         )
         .expect("crit script should compile");
         reg.register(
             "stacking".into(),
-            include_str!("../../client/assets/scripts/behaviors/stacking.rune"),
+            include_str!("../../core/gameplay/behaviors/stacking.rune"),
         )
         .expect("stacking script should compile");
         reg.register(
             "melee_attack".into(),
-            include_str!("../../client/assets/scripts/abilities/melee_attack.rune"),
+            include_str!("../../core/gameplay/abilities/melee_attack.rune"),
         )
         .expect("melee_attack script should compile");
         reg.register(
             "ground_pound".into(),
-            include_str!("../../client/assets/scripts/abilities/ground_pound.rune"),
+            include_str!("../../core/gameplay/abilities/ground_pound.rune"),
         )
         .expect("ground_pound script should compile");
         Arc::new(reg)
