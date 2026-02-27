@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use game_core::scripting::ScriptRegistry;
+use game_core::runtime::ScriptRegistry;
 
 thread_local! {
     static SCRIPTS: Arc<ScriptRegistry> = {
@@ -31,10 +31,10 @@ thread_local! {
 
 /// Execute a melee attack ability via the Rune scripting engine.
 pub fn run_melee_attack(
-    source: game_core::scripting::Combatant,
-    targets: Vec<game_core::scripting::Combatant>,
+    source: game_core::runtime::Combatant,
+    targets: Vec<game_core::runtime::Combatant>,
     rng_roll: f32,
-) -> Vec<game_core::scripting::Command> {
+) -> Vec<game_core::runtime::Command> {
     SCRIPTS.with(|reg| {
         let engine = reg.get("melee_attack").expect("melee_attack script must be registered");
         let behaviors = vec!["crit".into(), "stacking".into()];
@@ -53,10 +53,10 @@ pub fn run_melee_attack(
 
 /// Execute a ground pound ability via the Rune scripting engine.
 pub fn run_ground_pound(
-    source: game_core::scripting::Combatant,
-    targets: Vec<game_core::scripting::Combatant>,
+    source: game_core::runtime::Combatant,
+    targets: Vec<game_core::runtime::Combatant>,
     rng_roll: f32,
-) -> Vec<game_core::scripting::Command> {
+) -> Vec<game_core::runtime::Command> {
     SCRIPTS.with(|reg| {
         let engine = reg.get("ground_pound").expect("ground_pound script must be registered");
         let behaviors = vec!["crit".into(), "stacking".into()];

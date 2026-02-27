@@ -1,6 +1,6 @@
 //! Bevy plugin for Rune script loading and execution.
 //!
-//! Wraps the `game_core::scripting` engine as Bevy resources and components,
+//! Wraps the `game_core::runtime` engine as Bevy resources and components,
 //! compiling `.rune` scripts at startup via `include_str!()`.
 //!
 //! In dev builds (`feature = "dev"`), scripts are loaded from the filesystem
@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use game_core::scripting::registry::ScriptRegistry;
+use game_core::runtime::registry::ScriptRegistry;
 
 /// Bevy resource wrapping an `Arc<ScriptRegistry>` that holds all compiled scripts.
 #[derive(Resource)]

@@ -1,5 +1,5 @@
 use game_core::combat::{self, defaults, effect_types, landing_aoe};
-use game_core::scripting::{Combatant, Command};
+use game_core::runtime::{Combatant, Command};
 use spacetimedb::Table;
 
 use crate::schema::*;

@@ -6,8 +6,8 @@ use crate::scripting::{ActiveAbility, EntityBehaviors, ScriptRegistryRes};
 use bevy_enhanced_input::prelude::{Fire, Start};
 use bevy_tnua::prelude::TnuaController;
 use game_core::combat::{HitFeedback, defaults, ground_pound};
-use game_core::scripting::Command as ScriptCommand;
-use game_core::scripting::types::Combatant as ScriptCombatant;
+use game_core::runtime::Command as ScriptCommand;
+use game_core::runtime::types::Combatant as ScriptCombatant;
 use std::collections::HashMap;
 
 /// Visual constants for attack effects
