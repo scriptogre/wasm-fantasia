@@ -174,6 +174,16 @@ pub enum EnemyBehavior {
     Attack,
 }
 
+impl EnemyBehavior {
+    pub fn clip_name(&self) -> &'static str {
+        match self {
+            Self::Idle => "Zombie_Idle_Loop",
+            Self::Chase => "Zombie_Walk_Fwd_Loop",
+            Self::Attack => "Zombie_Scratch",
+        }
+    }
+}
+
 /// Queued knockback shove to apply on the next Tnua action feeding cycle.
 /// Inserted by the damage observer, consumed by the knockback system that
 /// runs after movement so `initiate_action_feeding()` has already been called.

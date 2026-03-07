@@ -118,11 +118,7 @@ fn on_enemy_added(
         .entity(entity)
         .insert(InheritedVisibility::default());
 
-    let clip_name = match behaviors.get(entity).unwrap_or(&EnemyBehavior::Idle) {
-        EnemyBehavior::Idle => "Zombie_Idle_Loop",
-        EnemyBehavior::Chase => "Zombie_Walk_Fwd_Loop",
-        EnemyBehavior::Attack => "Zombie_Scratch",
-    };
+    let clip_name = behaviors.get(entity).unwrap_or(&EnemyBehavior::Idle).clip_name();
 
     if let Some(vat_state) = vat_state {
         spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name);
@@ -143,11 +139,7 @@ fn attach_vat_to_pending_enemies(
     mut commands: Commands,
 ) {
     for (entity, behavior) in &pending {
-        let clip_name = match behavior.unwrap_or(&EnemyBehavior::Idle) {
-            EnemyBehavior::Idle => "Zombie_Idle_Loop",
-            EnemyBehavior::Chase => "Zombie_Walk_Fwd_Loop",
-            EnemyBehavior::Attack => "Zombie_Scratch",
-        };
+        let clip_name = behavior.unwrap_or(&EnemyBehavior::Idle).clip_name();
         commands.entity(entity).remove::<PendingVatSetup>();
         spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name);
     }
@@ -164,11 +156,7 @@ fn animate_enemies(
     time: Res<Time>,
 ) {
     for (behavior, vat_link) in &enemies {
-        let clip_name = match behavior {
-            EnemyBehavior::Idle => "Zombie_Idle_Loop",
-            EnemyBehavior::Chase => "Zombie_Walk_Fwd_Loop",
-            EnemyBehavior::Attack => "Zombie_Scratch",
-        };
+        let clip_name = behavior.clip_name();
 
         let now = time.elapsed_secs();
         for &mesh_entity in &vat_link.0 {
