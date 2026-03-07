@@ -64,14 +64,6 @@ fn build_registry() -> ScriptRegistry {
         )
         .expect("ground_pound.rune should compile");
 
-    // Enemy AI scripts
-    registry
-        .register(
-            "zombie_ai".to_string(),
-            include_str!("../../core/runes/enemies/zombie_ai.rune"),
-        )
-        .expect("zombie_ai.rune should compile");
-
     registry
 }
 
