@@ -3,6 +3,7 @@
 use super::SpacetimeDbConnection;
 use super::generated::attack_hit_reducer::attack_hit;
 use super::generated::clear_enemies_reducer::clear_enemies;
+use super::generated::restart_run_reducer::restart_run;
 use super::generated::ground_pound_hit_reducer::ground_pound_hit;
 use super::generated::landing_aoe_hit_reducer::landing_aoe_hit;
 use super::generated::spawn_enemies_reducer::spawn_enemies;
@@ -62,6 +63,13 @@ pub fn send_landing_aoe_to_server(on: On<LandingImpact>, conn: Option<Res<Spacet
         event.position.z,
     ) {
         warn!("Failed to send landing_aoe_hit: {:?}", e);
+    }
+}
+
+/// Send restart_run request to server.
+pub fn send_restart_run(conn: &SpacetimeDbConnection) {
+    if let Err(e) = conn.conn.reducers.restart_run() {
+        warn!("Failed to send restart_run: {:?}", e);
     }
 }
 

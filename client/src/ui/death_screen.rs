@@ -46,10 +46,7 @@ fn on_restart_run(
     mut commands: Commands,
 ) {
     if let Some(conn) = conn {
-        use crate::networking::generated::restart_run_reducer::restart_run;
-        if let Err(e) = conn.conn.reducers.restart_run() {
-            warn!("Failed to send restart_run: {:?}", e);
-        }
+        crate::networking::combat::send_restart_run(&conn);
     }
 
     commands.trigger(GoTo(Screen::Gameplay));

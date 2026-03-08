@@ -42,6 +42,33 @@ pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_
     }
 }
 
+/// Return a player reset to full health at the spawn point.
+fn reset_player(player: Player, now: i64) -> Player {
+    Player {
+        health: player.max_health,
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+        attack_speed: 1.0,
+        last_update: now,
+        ..player
+    }
+}
+
+/// Clear all active effects owned by the given identity.
+fn clear_effects(ctx: &spacetimedb::ReducerContext) {
+    let effect_ids: Vec<u64> = ctx
+        .db
+        .active_effect()
+        .iter()
+        .filter(|e| e.owner == ctx.sender())
+        .map(|e| e.id)
+        .collect();
+    for id in effect_ids {
+        ctx.db.active_effect().id().delete(id);
+    }
+}
+
 /// Reset health to max and reposition player at spawn point.
 #[spacetimedb::reducer]
 pub fn respawn(ctx: &spacetimedb::ReducerContext) {
@@ -54,28 +81,8 @@ pub fn respawn(ctx: &spacetimedb::ReducerContext) {
     }
 
     let now = ctx.timestamp.to_micros_since_unix_epoch();
-
-    // Clear stacking buff on respawn
-    let effect_ids: Vec<u64> = ctx
-        .db
-        .active_effect()
-        .iter()
-        .filter(|e| e.owner == ctx.sender())
-        .map(|e| e.id)
-        .collect();
-    for id in effect_ids {
-        ctx.db.active_effect().id().delete(id);
-    }
-
-    ctx.db.player().identity().update(Player {
-        health: player.max_health,
-        x: 0.0,
-        y: 1.0,
-        z: 0.0,
-        attack_speed: 1.0,
-        last_update: now,
-        ..player
-    });
+    clear_effects(ctx);
+    ctx.db.player().identity().update(reset_player(player, now));
 }
 
 /// Full run restart: respawn the player and clear all enemies in their world.
@@ -86,41 +93,24 @@ pub fn restart_run(ctx: &spacetimedb::ReducerContext) {
     };
 
     let world_id = player.world_id;
+    let is_solo = world_id != 0;
     let now = ctx.timestamp.to_micros_since_unix_epoch();
 
-    // Clear stacking buffs
-    let effect_ids: Vec<u64> = ctx
-        .db
-        .active_effect()
-        .iter()
-        .filter(|e| e.owner == ctx.sender())
-        .map(|e| e.id)
-        .collect();
-    for id in effect_ids {
-        ctx.db.active_effect().id().delete(id);
-    }
+    clear_effects(ctx);
+    ctx.db.player().identity().update(reset_player(player, now));
 
-    // Reset player health and position
-    ctx.db.player().identity().update(Player {
-        health: player.max_health,
-        x: 0.0,
-        y: 1.0,
-        z: 0.0,
-        attack_speed: 1.0,
-        last_update: now,
-        ..player
-    });
-
-    // Clear all enemies in this world
-    let enemy_ids: Vec<u64> = ctx
-        .db
-        .enemy()
-        .iter()
-        .filter(|e| e.world_id == world_id)
-        .map(|e| e.id)
-        .collect();
-    for id in enemy_ids {
-        ctx.db.enemy().id().delete(id);
+    // Only clear enemies in solo worlds — never wipe a shared multiplayer world.
+    if is_solo {
+        let enemy_ids: Vec<u64> = ctx
+            .db
+            .enemy()
+            .iter()
+            .filter(|e| e.world_id == world_id)
+            .map(|e| e.id)
+            .collect();
+        for id in enemy_ids {
+            ctx.db.enemy().id().delete(id);
+        }
     }
 }
 
