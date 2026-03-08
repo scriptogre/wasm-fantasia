@@ -127,3 +127,13 @@ pub struct WorldPause {
     #[primary_key]
     pub world_id: u32,
 }
+
+/// Horde spawner state — one row per world, drives automatic enemy spawning.
+#[spacetimedb::table(accessor = horde_state, public)]
+pub struct HordeState {
+    #[primary_key]
+    pub world_id: u32,
+    pub active: bool,
+    pub elapsed_secs: f32,
+    pub spawn_accumulator: f32,
+}

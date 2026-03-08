@@ -128,6 +128,23 @@ pub mod attack_anim {
 /// Enemy type encoding for the server DB.
 pub mod enemy_types {
     pub const BASIC: u8 = 0;
+    pub const FAST: u8 = 1;
+    pub const BRUTE: u8 = 2;
+}
+
+/// Returns (health, damage, speed, attack_range, attack_speed) for a given enemy type.
+pub fn enemy_defaults(enemy_type: u8) -> (f32, f32, f32, f32, f32) {
+    match enemy_type {
+        enemy_types::FAST => (200.0, 10.0, 4.0, 2.0, 1.5),
+        enemy_types::BRUTE => (1200.0, 25.0, 1.2, 2.5, 0.5),
+        _ => (
+            defaults::ENEMY_HEALTH,
+            defaults::ENEMY_ATTACK_DAMAGE,
+            defaults::ENEMY_WALK_SPEED,
+            defaults::ENEMY_ATTACK_RANGE,
+            1.0,
+        ),
+    }
 }
 
 /// Effect type encoding for the server DB.

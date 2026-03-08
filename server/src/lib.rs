@@ -2,6 +2,7 @@ use spacetimedb::{Table, TimeDuration};
 
 mod combat;
 mod enemy_ai;
+mod horde;
 mod lifecycle;
 pub mod schema;
 mod scripting;

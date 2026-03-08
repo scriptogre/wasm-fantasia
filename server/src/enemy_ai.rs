@@ -491,6 +491,14 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         }
     }
 
+    // Tick horde spawner for each active world with players
+    for (&world_id, players) in &players_by_world {
+        if ctx.db.world_pause().world_id().find(world_id).is_some() {
+            continue;
+        }
+        crate::horde::tick_horde(ctx, world_id, dt, players);
+    }
+
     // Delete consumed knockback impulses
     let impulse_ids: Vec<u64> = ctx.db.knockback_impulse().iter().map(|i| i.id).collect();
     for id in impulse_ids {

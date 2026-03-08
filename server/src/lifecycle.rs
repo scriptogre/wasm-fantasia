@@ -40,6 +40,12 @@ pub fn join_game(ctx: &spacetimedb::ReducerContext, name: Option<String>, world_
             last_attack_time: 0,
         });
     }
+
+    // Ensure horde spawner is running for this world (idempotent — won't
+    // reset an already-active horde since start_horde uses insert-or-update).
+    if ctx.db.horde_state().world_id().find(world_id).is_none() {
+        crate::horde::start_horde(ctx, world_id);
+    }
 }
 
 /// Return a player reset to full health at the spawn point.
@@ -112,6 +118,9 @@ pub fn restart_run(ctx: &spacetimedb::ReducerContext) {
             ctx.db.enemy().id().delete(id);
         }
     }
+
+    // Reset and start the horde spawner for this world
+    crate::horde::start_horde(ctx, world_id);
 }
 
 #[spacetimedb::reducer]
@@ -140,6 +149,7 @@ fn set_player_offline(ctx: &spacetimedb::ReducerContext) {
         // Clean up solo world data to prevent abandoned state accumulating.
         // "shared" is the multiplayer world — never delete its entities.
         if is_solo {
+            crate::horde::stop_horde(ctx, world_id);
             let enemy_ids: Vec<u64> = ctx
                 .db
                 .enemy()
