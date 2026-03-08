@@ -13,7 +13,7 @@ use super::generated::enemy_type::Enemy as ServerEnemy;
 use super::generated::player_table::PlayerTableAccess;
 use super::generated::player_type::Player as ServerPlayer;
 use game_client_models::Player as LocalPlayer;
-use game_client_models::combat::{Combatant, Enemy, EnemyBehavior, Health, Stat, Stats};
+use game_client_models::combat::{Combatant, Enemy, EnemyBehavior, EnemyType, Health, Stat, Stats};
 use game_client_models::player::RemotePlayer;
 
 // =============================================================================
@@ -100,6 +100,7 @@ pub struct RemotePlayerState {
 
 pub(super) struct EnemySnapshot {
     pub id: u64,
+    pub enemy_type: u8,
     pub x: f32,
     pub y: f32,
     pub z: f32,
@@ -130,6 +131,7 @@ impl From<&ServerEnemy> for EnemySnapshot {
     fn from(e: &ServerEnemy) -> Self {
         Self {
             id: e.id,
+            enemy_type: e.enemy_type,
             x: e.x,
             y: e.y,
             z: e.z,
@@ -284,6 +286,7 @@ pub(super) fn drain_db_events(
                     EnemyBehaviorKind::Chase => EnemyBehavior::Chase,
                     EnemyBehaviorKind::Attack => EnemyBehavior::Attack,
                 };
+                let enemy_type = EnemyType::from_u8(enemy.enemy_type);
                 let entity = commands
                     .spawn((
                         Name::new(format!("Enemy_{}", enemy.id)),
@@ -301,6 +304,7 @@ pub(super) fn drain_db_events(
                         Transform::from_xyz(enemy.x, enemy.y, enemy.z),
                         Health::new(enemy.max_health),
                         Enemy,
+                        enemy_type,
                         behavior,
                         Combatant,
                         Stats::new()

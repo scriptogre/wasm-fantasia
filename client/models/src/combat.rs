@@ -5,7 +5,8 @@ pub use game_core::combat::{attack_timing, hit_timing};
 pub fn plugin(app: &mut App) {
     app.register_type::<Health>()
         .register_type::<AttackState>()
-        .register_type::<EnemyBehavior>();
+        .register_type::<EnemyBehavior>()
+        .register_type::<EnemyType>();
 }
 
 /// Health component for any entity that can take damage.
@@ -163,6 +164,43 @@ pub struct PlayerCombatant;
 #[derive(Component, Reflect, Debug, Clone, Default)]
 #[reflect(Component)]
 pub struct Enemy;
+
+/// Enemy variant type — determines visual scale and movement speed.
+#[derive(Component, Default, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[reflect(Component)]
+#[repr(u8)]
+pub enum EnemyType {
+    #[default]
+    Basic = 0,
+    Fast = 1,
+    Brute = 2,
+}
+
+impl EnemyType {
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Fast,
+            2 => Self::Brute,
+            _ => Self::Basic,
+        }
+    }
+
+    pub fn scale(&self) -> f32 {
+        match self {
+            Self::Basic => 1.0,
+            Self::Fast => 0.8,
+            Self::Brute => 1.4,
+        }
+    }
+
+    pub fn walk_speed(&self) -> f32 {
+        match self {
+            Self::Basic => 2.0,
+            Self::Fast => 4.0,
+            Self::Brute => 1.2,
+        }
+    }
+}
 
 /// Current behavior state for enemy AI and animation.
 #[derive(Component, Default, Clone, Copy, PartialEq, Eq, Reflect, Debug)]

@@ -7,6 +7,7 @@ use crate::rendering::{
 use bevy_enhanced_input::prelude::Start;
 use bevy_open_vat::prelude::*;
 use bevy_open_vat::asset::RemapInfo;
+use game_client_models::combat::EnemyType;
 
 /// Squared XZ distance beyond which enemies are culled (fog_end + 5)².
 /// Enemies past the fog end are fully obscured, so hiding them is free.
@@ -101,6 +102,7 @@ fn on_enemy_added(
     remap_infos: Res<Assets<RemapInfo>>,
     time: Res<Time>,
     behaviors: Query<&EnemyBehavior>,
+    enemy_types: Query<&EnemyType>,
     mut commands: Commands,
 ) {
     let entity = on.entity;
@@ -119,9 +121,10 @@ fn on_enemy_added(
         .insert(InheritedVisibility::default());
 
     let clip_name = behaviors.get(entity).unwrap_or(&EnemyBehavior::Idle).clip_name();
+    let scale = enemy_types.get(entity).unwrap_or(&EnemyType::Basic).scale();
 
     if let Some(vat_state) = vat_state {
-        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name);
+        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name, scale);
     } else {
         // Assets not loaded yet — mark for later setup
         commands.entity(entity).insert(PendingVatSetup);
@@ -131,17 +134,18 @@ fn on_enemy_added(
 /// Catch-up system: attaches VAT mesh to enemies that were added before
 /// VatEnemyState was ready.
 fn attach_vat_to_pending_enemies(
-    pending: Query<(Entity, Option<&EnemyBehavior>), With<PendingVatSetup>>,
+    pending: Query<(Entity, Option<&EnemyBehavior>, Option<&EnemyType>), With<PendingVatSetup>>,
     vat_state: Res<VatEnemyState>,
     models: Res<Models>,
     remap_infos: Res<Assets<RemapInfo>>,
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (entity, behavior) in &pending {
+    for (entity, behavior, enemy_type) in &pending {
         let clip_name = behavior.unwrap_or(&EnemyBehavior::Idle).clip_name();
+        let scale = enemy_type.unwrap_or(&EnemyType::Basic).scale();
         commands.entity(entity).remove::<PendingVatSetup>();
-        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name);
+        spawn_vat_mesh_child(&mut commands, entity, &vat_state, &models, &remap_infos, time.elapsed_secs(), clip_name, scale);
     }
 }
 

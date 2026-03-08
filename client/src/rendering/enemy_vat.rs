@@ -185,6 +185,7 @@ fn generate_lod_mesh(source_handle: &Handle<Mesh>, meshes: &mut Assets<Mesh>) ->
 
 /// Spawns mesh children (one per LOD tier) with `VisibilityRange`.
 /// All share the same VAT material and animation controller.
+/// `scale_multiplier` is applied on top of `MESH_SCALE` for enemy type differentiation.
 pub(crate) fn spawn_vat_mesh_child(
     commands: &mut Commands,
     enemy_entity: Entity,
@@ -193,9 +194,10 @@ pub(crate) fn spawn_vat_mesh_child(
     remap_infos: &Assets<RemapInfo>,
     elapsed_secs: f32,
     clip_name: &str,
+    scale_multiplier: f32,
 ) {
     let base_transform = Transform::from_translation(MESH_OFFSET)
-        .with_scale(Vec3::splat(MESH_SCALE))
+        .with_scale(Vec3::splat(MESH_SCALE * scale_multiplier))
         .with_rotation(Quat::from_rotation_y(std::f32::consts::PI));
 
     let clip = remap_infos
