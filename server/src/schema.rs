@@ -56,6 +56,8 @@ pub struct Enemy {
 
     // Animation
     pub animation_state: u8,
+    /// Timestamp (micros since epoch) when current animation_state began.
+    pub state_start_time: i64,
 
     // Health
     pub health: f32,

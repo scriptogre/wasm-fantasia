@@ -435,7 +435,7 @@ fn bench_ai_decisions(c: &mut Criterion) {
                             }
                         }
                         let ready = (now - enemy.last_attack_time) >= cooldown_micros;
-                        let decision = enemy_ai_decision(nearest_dist, ready);
+                        let decision = enemy_ai_decision(EnemyBehaviorKind::Idle, 10.0, nearest_dist, ready);
                         decisions.push((decision, nearest_dist, nearest_pos));
                     }
                     black_box(&decisions);

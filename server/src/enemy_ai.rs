@@ -51,6 +51,7 @@ pub fn spawn_enemies(
             velocity_y: 0.0,
             velocity_z: 0.0,
             animation_state: EnemyBehaviorKind::IDLE,
+            state_start_time: 0,
             health: defaults::ENEMY_HEALTH,
             max_health: defaults::ENEMY_HEALTH,
             attack_damage: defaults::ENEMY_ATTACK_DAMAGE,
@@ -305,6 +306,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         // when only ~0-50 are actually airborne from knockback.
         struct EnemyUpdate {
             decision: combat::EnemyBehaviorKind,
+            current_state: combat::EnemyBehaviorKind,
             nearest_dist: f32,
             nearest_pos: (f32, f32),
             new_x: f32,
@@ -320,9 +322,13 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         // Collect airborne enemy indices + their impulses for physics
         let mut airborne_indices: Vec<usize> = Vec::with_capacity(64);
 
+        // Pending player damage from enemy attacks hitting their target
+        let mut pending_player_damage: Vec<(spacetimedb::Identity, f32)> = Vec::new();
+
         for (idx, enemy) in enemies.iter().enumerate() {
             let mut nearest_dist_sq = f32::MAX;
             let mut nearest_pos = (0.0_f32, 0.0_f32);
+            let mut nearest_player_identity = players[0].identity;
             for p in players {
                 let dx = p.x - enemy.x;
                 let dz = p.z - enemy.z;
@@ -330,17 +336,30 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 if dist_sq < nearest_dist_sq {
                     nearest_dist_sq = dist_sq;
                     nearest_pos = (p.x, p.z);
+                    nearest_player_identity = p.identity;
                 }
             }
             let nearest_dist = nearest_dist_sq.sqrt();
 
+            let current_state = EnemyBehaviorKind::from_u8(enemy.animation_state);
+            let state_elapsed = (now - enemy.state_start_time) as f32 / 1_000_000.0;
             let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
-            let decision = enemy_ai_decision(nearest_dist, attack_cooldown_ready);
+            let decision = enemy_ai_decision(current_state, state_elapsed, nearest_dist, attack_cooldown_ready);
+
+            // Check if enemy is at the hit frame of its attack
+            if current_state == EnemyBehaviorKind::Attack {
+                let prev_elapsed = state_elapsed - dt;
+                if prev_elapsed < defaults::ENEMY_ATTACK_HIT && state_elapsed >= defaults::ENEMY_ATTACK_HIT {
+                    if nearest_dist <= defaults::ENEMY_ATTACK_RANGE {
+                        pending_player_damage.push((nearest_player_identity, enemy.attack_damage));
+                    }
+                }
+            }
 
             let has_knockback = impulses_by_enemy.contains_key(&enemy.id);
             let is_airborne = has_knockback || enemy.velocity_y.abs() > 0.1;
 
-            // Chase velocity (only when grounded and not being knocked back)
+            // Chase velocity (only when grounded, not knocked back, and not attacking)
             let (mut vx, mut vz) = (0.0_f32, 0.0_f32);
             if !has_knockback && decision == combat::EnemyBehaviorKind::Chase && nearest_dist > 0.01
             {
@@ -351,15 +370,17 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 vz = dz * inv_dist * defaults::ENEMY_WALK_SPEED;
             }
 
-            // Add separation push
-            vx += separation[idx].0;
-            vz += separation[idx].1;
+            // Reduce separation force during committed states to prevent jitter
+            let sep_scale = if decision == EnemyBehaviorKind::Attack { 0.3 } else { 1.0 };
+            vx += separation[idx].0 * sep_scale;
+            vz += separation[idx].1 * sep_scale;
 
             if is_airborne {
                 // This enemy needs physics — will be processed below
                 airborne_indices.push(idx);
                 updates.push(EnemyUpdate {
                     decision,
+                    current_state,
                     nearest_dist,
                     nearest_pos,
                     // Placeholder — physics will overwrite these
@@ -374,6 +395,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 // Grounded: simple XZ movement, y stays the same
                 updates.push(EnemyUpdate {
                     decision,
+                    current_state,
                     nearest_dist,
                     nearest_pos,
                     new_x: enemy.x + vx * dt,
@@ -439,6 +461,17 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             }
         }
 
+        // Apply accumulated enemy damage to players
+        for (identity, damage) in &pending_player_damage {
+            if let Some(player) = ctx.db.player().identity().find(*identity) {
+                let new_health = (player.health - damage).max(0.0);
+                ctx.db.player().identity().update(Player {
+                    health: new_health,
+                    ..player
+                });
+            }
+        }
+
         // Write back to DB
         for (idx, enemy) in enemies.iter().enumerate() {
             let update = &updates[idx];
@@ -450,13 +483,23 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 new_rotation_y = f32::atan2(-dx, -dz);
             }
 
-            let new_last_attack_time = if update.decision == combat::EnemyBehaviorKind::Attack {
-                now
+            // Only set last_attack_time when the attack COMPLETES (transitions away from Attack)
+            let new_last_attack_time = if update.current_state == combat::EnemyBehaviorKind::Attack
+                && update.decision != combat::EnemyBehaviorKind::Attack
+            {
+                now // Attack just finished — start cooldown
             } else {
                 enemy.last_attack_time
             };
 
             let new_anim = update.decision.as_u8();
+
+            // Update state_start_time only when the state actually changes
+            let state_start_time = if new_anim != enemy.animation_state {
+                now
+            } else {
+                enemy.state_start_time
+            };
 
             // S2: Skip DB write if nothing meaningful changed
             let pos_changed = (update.new_x - enemy.x).abs() > 0.01
@@ -464,8 +507,9 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 || (update.new_z - enemy.z).abs() > 0.01;
             let anim_changed = enemy.animation_state != new_anim;
             let attack_changed = new_last_attack_time != enemy.last_attack_time;
+            let state_time_changed = state_start_time != enemy.state_start_time;
 
-            if !pos_changed && !anim_changed && !attack_changed {
+            if !pos_changed && !anim_changed && !attack_changed && !state_time_changed {
                 continue;
             }
 
@@ -481,6 +525,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 velocity_y: update.new_vy,
                 velocity_z: update.new_vz,
                 animation_state: new_anim,
+                state_start_time,
                 health: enemy.health,
                 max_health: enemy.max_health,
                 attack_damage: enemy.attack_damage,

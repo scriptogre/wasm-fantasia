@@ -135,6 +135,7 @@ pub fn tick_horde(
             velocity_y: 0.0,
             velocity_z: 0.0,
             animation_state: EnemyBehaviorKind::IDLE,
+            state_start_time: 0,
             health: stats.health,
             max_health: stats.health,
             attack_damage: stats.damage,

@@ -21,6 +21,15 @@ pub mod defaults {
     pub const ENEMY_WALK_SPEED: f32 = 2.0;
     pub const ENEMY_ATTACK_COOLDOWN: f32 = 2.0;
     pub const ENEMY_ATTACK_DAMAGE: f32 = 10.0;
+    /// Attack animation windup before hit (seconds).
+    pub const ENEMY_ATTACK_WINDUP: f32 = 0.4;
+    /// Attack animation hit frame (seconds).
+    pub const ENEMY_ATTACK_HIT: f32 = 0.55;
+    /// Full committed attack duration (seconds).
+    pub const ENEMY_ATTACK_DURATION: f32 = 1.0;
+    /// Hysteresis: must exceed this distance to leave attack idle (> ATTACK_RANGE).
+    pub const ENEMY_ATTACK_DISENGAGE: f32 = 2.5;
+
     /// Enemies within this radius push each other apart.
     pub const ENEMY_SEPARATION_RADIUS: f32 = 1.2;
     /// Separation speed in m/s (higher than walk speed so separation wins).
@@ -40,16 +49,31 @@ pub mod defaults {
     pub const ENEMY_SPAWN_Y: f32 = 1.0;
 }
 
-/// Pure decision function for enemy AI state machine.
+/// Committed AI decision. States with minimum durations cannot be interrupted.
 /// Both client (singleplayer) and server (multiplayer) call this to ensure
 /// identical behavior logic. The caller handles movement/DB writes.
-pub fn enemy_ai_decision(distance: f32, attack_cooldown_ready: bool) -> EnemyBehaviorKind {
-    if distance > defaults::ENEMY_ATTACK_RANGE {
-        EnemyBehaviorKind::Chase
-    } else if attack_cooldown_ready {
-        EnemyBehaviorKind::Attack
-    } else {
-        EnemyBehaviorKind::Idle
+pub fn enemy_ai_decision(
+    current_state: EnemyBehaviorKind,
+    state_elapsed: f32,
+    distance: f32,
+    attack_cooldown_ready: bool,
+) -> EnemyBehaviorKind {
+    match current_state {
+        // Attack is committed for its full duration
+        EnemyBehaviorKind::Attack if state_elapsed < defaults::ENEMY_ATTACK_DURATION => {
+            EnemyBehaviorKind::Attack
+        }
+        // After any committed state expires, or for non-committed states, evaluate:
+        _ => {
+            if distance <= defaults::ENEMY_ATTACK_RANGE && attack_cooldown_ready {
+                EnemyBehaviorKind::Attack
+            } else if distance > defaults::ENEMY_ATTACK_RANGE {
+                EnemyBehaviorKind::Chase
+            } else {
+                // In range but cooldown not ready — wait
+                EnemyBehaviorKind::Idle
+            }
+        }
     }
 }
 
