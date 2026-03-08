@@ -105,7 +105,8 @@ pub fn restart_run(ctx: &spacetimedb::ReducerContext) {
     clear_effects(ctx);
     ctx.db.player().identity().update(reset_player(player, now));
 
-    // Only clear enemies in solo worlds — never wipe a shared multiplayer world.
+    // Only clear enemies and reset the horde in solo worlds — never wipe a
+    // shared multiplayer world or reset its spawner because one player died.
     if is_solo {
         let enemy_ids: Vec<u64> = ctx
             .db
@@ -117,10 +118,9 @@ pub fn restart_run(ctx: &spacetimedb::ReducerContext) {
         for id in enemy_ids {
             ctx.db.enemy().id().delete(id);
         }
-    }
 
-    // Reset and start the horde spawner for this world
-    crate::horde::start_horde(ctx, world_id);
+        crate::horde::start_horde(ctx, world_id);
+    }
 }
 
 #[spacetimedb::reducer]

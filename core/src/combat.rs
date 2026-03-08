@@ -132,18 +132,40 @@ pub mod enemy_types {
     pub const BRUTE: u8 = 2;
 }
 
-/// Returns (health, damage, speed, attack_range, attack_speed) for a given enemy type.
-pub fn enemy_defaults(enemy_type: u8) -> (f32, f32, f32, f32, f32) {
+/// Per-type enemy combat stats returned by [`enemy_defaults`].
+#[derive(Debug, Clone, Copy)]
+pub struct EnemyStats {
+    pub health: f32,
+    pub damage: f32,
+    pub speed: f32,
+    pub attack_range: f32,
+    pub attack_speed: f32,
+}
+
+/// Returns the baseline stats for a given enemy type.
+pub fn enemy_defaults(enemy_type: u8) -> EnemyStats {
     match enemy_type {
-        enemy_types::FAST => (200.0, 10.0, 4.0, 2.0, 1.5),
-        enemy_types::BRUTE => (1200.0, 25.0, 1.2, 2.5, 0.5),
-        _ => (
-            defaults::ENEMY_HEALTH,
-            defaults::ENEMY_ATTACK_DAMAGE,
-            defaults::ENEMY_WALK_SPEED,
-            defaults::ENEMY_ATTACK_RANGE,
-            1.0,
-        ),
+        enemy_types::FAST => EnemyStats {
+            health: 200.0,
+            damage: 10.0,
+            speed: 4.0,
+            attack_range: 2.0,
+            attack_speed: 1.5,
+        },
+        enemy_types::BRUTE => EnemyStats {
+            health: 1200.0,
+            damage: 25.0,
+            speed: 1.2,
+            attack_range: 2.5,
+            attack_speed: 0.5,
+        },
+        _ => EnemyStats {
+            health: defaults::ENEMY_HEALTH,
+            damage: defaults::ENEMY_ATTACK_DAMAGE,
+            speed: defaults::ENEMY_WALK_SPEED,
+            attack_range: defaults::ENEMY_ATTACK_RANGE,
+            attack_speed: 1.0,
+        },
     }
 }
 

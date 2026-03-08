@@ -7,6 +7,9 @@ use crate::schema::*;
 const SPAWN_RADIUS_MIN: f32 = 30.0;
 const SPAWN_RADIUS_MAX: f32 = 50.0;
 
+/// Hard cap on enemy count per world to prevent unbounded accumulation.
+const MAX_ENEMIES: usize = 2000;
+
 /// Insert or reset the horde state for a world, activating continuous spawning.
 pub fn start_horde(ctx: &spacetimedb::ReducerContext, world_id: u32) {
     let state = HordeState {
@@ -42,6 +45,19 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
     }
 
     let elapsed = state.elapsed_secs + dt;
+
+    // Cap enemy count to prevent unbounded accumulation.
+    let enemy_count = ctx.db.enemy().iter().filter(|e| e.world_id == world_id).count();
+    if enemy_count >= MAX_ENEMIES {
+        ctx.db.horde_state().world_id().update(HordeState {
+            world_id,
+            active: true,
+            elapsed_secs: elapsed,
+            spawn_accumulator: 0.0,
+        });
+        return;
+    }
+
     let spawn_rate = 1.0 + elapsed * 0.05;
     let mut accumulator = state.spawn_accumulator + spawn_rate * dt;
 
@@ -95,7 +111,7 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
         let radius =
             SPAWN_RADIUS_MIN + ((h >> 16) & 0xFFFF) as f32 / 65535.0 * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
 
-        let (health, damage, _speed, attack_range, attack_speed) = enemy_defaults(enemy_type);
+        let stats = enemy_defaults(enemy_type);
 
         ctx.db.enemy().insert(Enemy {
             id: 0,
@@ -109,11 +125,11 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
             velocity_y: 0.0,
             velocity_z: 0.0,
             animation_state: EnemyBehaviorKind::IDLE,
-            health,
-            max_health: health,
-            attack_damage: damage,
-            attack_range,
-            attack_speed,
+            health: stats.health,
+            max_health: stats.health,
+            attack_damage: stats.damage,
+            attack_range: stats.attack_range,
+            attack_speed: stats.attack_speed,
             last_attack_time: 0,
         });
 
