@@ -9,7 +9,9 @@ use std::time::Duration;
 pub fn plugin(app: &mut App) {
     app.add_systems(
         OnExit(Screen::Gameplay),
-        stop_soundtrack.before(GameplayCleanup),
+        stop_soundtrack
+            .before(GameplayCleanup)
+            .run_if(not(is_entering_game_over)),
     )
     .add_systems(OnEnter(Screen::Gameplay), start_soundtrack)
     .add_systems(

@@ -1,16 +1,14 @@
-//! Outbound combat networking: attack relay, respawn, enemy spawn requests.
+//! Outbound combat networking: attack relay, enemy spawn requests.
 
 use super::SpacetimeDbConnection;
 use super::generated::attack_hit_reducer::attack_hit;
 use super::generated::clear_enemies_reducer::clear_enemies;
 use super::generated::ground_pound_hit_reducer::ground_pound_hit;
 use super::generated::landing_aoe_hit_reducer::landing_aoe_hit;
-use super::generated::respawn_reducer::respawn;
 use super::generated::spawn_enemies_reducer::spawn_enemies;
 use bevy::prelude::*;
-use game_client_models::Player as LocalPlayer;
 use game_client_models::combat::{
-    AttackIntent, GroundPoundImpact, Health, LandingImpact, PlayerCombatant,
+    AttackIntent, GroundPoundImpact, LandingImpact, PlayerCombatant,
 };
 
 /// Observer: when local player's attack connects, notify the server.
@@ -23,22 +21,6 @@ pub fn send_attack_to_server(
     if players.get(on.event().attacker).is_ok() {
         if let Err(e) = conn.conn.reducers.attack_hit() {
             warn!("Failed to send attack_hit: {:?}", e);
-        }
-    }
-}
-
-/// Auto-respawn when local player dies (calls server respawn reducer).
-pub fn request_respawn_on_death(
-    conn: Res<SpacetimeDbConnection>,
-    query: Query<&Health, With<LocalPlayer>>,
-) {
-    let Ok(health) = query.single() else {
-        return;
-    };
-
-    if health.is_dead() {
-        if let Err(e) = conn.conn.reducers.respawn() {
-            warn!("Failed to send respawn: {:?}", e);
         }
     }
 }

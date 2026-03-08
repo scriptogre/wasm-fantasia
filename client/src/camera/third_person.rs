@@ -4,7 +4,12 @@ use bevy_third_person_camera::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::Gameplay), add_tpv_cam)
-        .add_systems(OnExit(Screen::Gameplay), rm_tpv_cam.before(GameplayCleanup))
+        .add_systems(
+            OnExit(Screen::Gameplay),
+            rm_tpv_cam
+                .before(GameplayCleanup)
+                .run_if(not(is_entering_game_over)),
+        )
         .add_observer(toggle_cam_cursor);
 }
 
