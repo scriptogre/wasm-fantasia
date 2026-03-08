@@ -118,7 +118,7 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
             enemy_type,
             world_id,
             x: player.x + angle.cos() * radius,
-            y: player.y,
+            y: 0.0,
             z: player.z + angle.sin() * radius,
             rotation_y: 0.0,
             velocity_x: 0.0,
