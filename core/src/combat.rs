@@ -52,28 +52,48 @@ pub mod defaults {
 /// Committed AI decision. States with minimum durations cannot be interrupted.
 /// Both client (singleplayer) and server (multiplayer) call this to ensure
 /// identical behavior logic. The caller handles movement/DB writes.
+/// Decision table (after committed Attack expires):
+///
+/// | Distance           | Cooldown ready | Result |
+/// |--------------------|----------------|--------|
+/// | ≤ ATTACK_RANGE     | yes            | Attack |
+/// | ≤ ATTACK_RANGE     | no             | Idle   |
+/// | RANGE..DISENGAGE   | yes            | Chase  |
+/// | RANGE..DISENGAGE   | no             | Idle   |
+/// | > DISENGAGE        | *              | Chase  |
+///
+/// The RANGE..DISENGAGE band prevents oscillation: enemies waiting for
+/// cooldown stay Idle (no Chase↔Idle flicker from separation forces),
+/// but resume Chase once cooldown is ready to close the gap and attack.
 pub fn enemy_ai_decision(
     current_state: EnemyBehaviorKind,
     state_elapsed: f32,
     distance: f32,
     attack_cooldown_ready: bool,
 ) -> EnemyBehaviorKind {
-    match current_state {
-        // Attack is committed for its full duration
-        EnemyBehaviorKind::Attack if state_elapsed < defaults::ENEMY_ATTACK_DURATION => {
-            EnemyBehaviorKind::Attack
+    if current_state == EnemyBehaviorKind::Attack {
+        if state_elapsed < defaults::ENEMY_ATTACK_DURATION {
+            // Attack committed — cannot be interrupted.
+            return EnemyBehaviorKind::Attack;
         }
-        // After any committed state expires, or for non-committed states, evaluate:
-        _ => {
-            if distance <= defaults::ENEMY_ATTACK_RANGE && attack_cooldown_ready {
-                EnemyBehaviorKind::Attack
-            } else if distance > defaults::ENEMY_ATTACK_RANGE {
-                EnemyBehaviorKind::Chase
-            } else {
-                // In range but cooldown not ready — wait
-                EnemyBehaviorKind::Idle
-            }
-        }
+        // Attack duration expired — MUST transition to Idle so that
+        // last_attack_time gets set and the cooldown period starts.
+        // Without this, the general logic immediately re-enters Attack
+        // (cooldown_ready is still true) and the enemy never leaves Attack.
+        return EnemyBehaviorKind::Idle;
+    }
+
+    if distance <= defaults::ENEMY_ATTACK_RANGE && attack_cooldown_ready {
+        EnemyBehaviorKind::Attack
+    } else if distance <= defaults::ENEMY_ATTACK_DISENGAGE && !attack_cooldown_ready {
+        // In or near attack range but cooldown not ready — hold position.
+        EnemyBehaviorKind::Idle
+    } else if distance > defaults::ENEMY_ATTACK_RANGE {
+        // Beyond attack range — close the gap.
+        EnemyBehaviorKind::Chase
+    } else {
+        // In attack range, cooldown not ready — wait.
+        EnemyBehaviorKind::Idle
     }
 }
 

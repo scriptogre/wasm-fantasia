@@ -116,6 +116,8 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         return;
     }
 
+
+
     // Group alive enemies by world_id
     let mut enemies_by_world: HashMap<u32, Vec<Enemy>> = HashMap::new();
     for e in ctx.db.enemy().iter().filter(|e| e.health > 0.0) {
@@ -346,6 +348,7 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
             let decision = enemy_ai_decision(current_state, state_elapsed, nearest_dist, attack_cooldown_ready);
 
+
             // Check if enemy is at the hit frame of its attack
             if current_state == EnemyBehaviorKind::Attack {
                 let prev_elapsed = state_elapsed - dt;
@@ -370,10 +373,27 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 vz = dz * inv_dist * defaults::ENEMY_WALK_SPEED;
             }
 
-            // Reduce separation force during committed states to prevent jitter
+            // Add separation force, but when not chasing, remove the component
+            // that would push the enemy toward the player. Without this, a horde
+            // converging on the player stacks separation forces and pushes front
+            // enemies straight through the player.
             let sep_scale = if decision == EnemyBehaviorKind::Attack { 0.3 } else { 1.0 };
-            vx += separation[idx].0 * sep_scale;
-            vz += separation[idx].1 * sep_scale;
+            let mut sep_x = separation[idx].0 * sep_scale;
+            let mut sep_z = separation[idx].1 * sep_scale;
+
+            if decision != combat::EnemyBehaviorKind::Chase && nearest_dist > 0.01 {
+                let to_player_x = (nearest_pos.0 - enemy.x) / nearest_dist;
+                let to_player_z = (nearest_pos.1 - enemy.z) / nearest_dist;
+                let dot = sep_x * to_player_x + sep_z * to_player_z;
+                if dot > 0.0 {
+                    // Remove player-ward component — only allow lateral/outward separation
+                    sep_x -= dot * to_player_x;
+                    sep_z -= dot * to_player_z;
+                }
+            }
+
+            vx += sep_x;
+            vz += sep_z;
 
             if is_airborne {
                 // This enemy needs physics — will be processed below
@@ -551,4 +571,5 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     for id in impulse_ids {
         ctx.db.knockback_impulse().id().delete(id);
     }
+
 }

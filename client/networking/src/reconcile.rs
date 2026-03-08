@@ -323,14 +323,19 @@ pub(super) fn drain_db_events(
                     };
 
                     if let Ok((mut world, mut health, behavior)) = remote_enemies.get_mut(entity) {
+                        // Zero velocity so the interpolation system does
+                        // pure lerp toward server position — no extrapolation.
+                        // Enemies update at 30Hz which is smooth enough for
+                        // lerp. Extrapolating with chase/knockback velocity
+                        // caused visual overshoot then snap-back.
                         *world = WorldEntity {
                             x: new.x,
                             y: new.y,
                             z: new.z,
                             rotation_y: new.rotation_y,
-                            velocity_x: new.velocity_x,
-                            velocity_y: new.velocity_y,
-                            velocity_z: new.velocity_z,
+                            velocity_x: 0.0,
+                            velocity_y: 0.0,
+                            velocity_z: 0.0,
                         };
                         health.current = new.health;
                         health.max = new.max_health;

@@ -24,6 +24,7 @@ pub fn update_instance_data(
     mut buffers: ResMut<Assets<ShaderStorageBuffer>>,
     mut remap_events: MessageReader<AssetEvent<RemapInfo>>,
     mut last_count: Local<usize>,
+    time: Res<Time>,
 ) {
     remap_events.clear();
     let current_count = controller_query.iter().len();
@@ -62,8 +63,23 @@ pub fn update_instance_data(
         } else {
             0.0
         };
-        let rate = speed / duration;
-        let offset = -(controller.start_time * rate) + controller.offset;
+        let mut rate = speed / duration;
+        let mut offset = -(controller.start_time * rate) + controller.offset;
+
+        // Non-looping clips: clamp at last frame instead of wrapping.
+        // The shader uses fract() which wraps all clips — freeze the
+        // animation by setting rate=0 and offset to the end once elapsed
+        // time exceeds the clip duration.
+        if !clip.looping && speed > 0.0 {
+            let elapsed = time.elapsed_secs() - controller.start_time;
+            if elapsed >= duration / speed {
+                let fc = (clip.end_frame - clip.start_frame).max(1) as f32;
+                rate = 0.0;
+                // Land on the last frame: (fc - 0.5) / fc rounds to fc,
+                // giving absolute_frame = start + fc = end_frame.
+                offset = (fc - 0.5) / fc;
+            }
+        }
 
         gpu_data_vec.push(VatInstanceData {
             start_frame: clip.start_frame,

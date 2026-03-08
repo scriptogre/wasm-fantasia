@@ -30,45 +30,61 @@ thread_local! {
 }
 
 /// Execute a melee attack ability via the Rune scripting engine.
+/// Returns empty results on script error instead of panicking the module.
 pub fn run_melee_attack(
     source: game_core::runtime::Combatant,
     targets: Vec<game_core::runtime::Combatant>,
     rng_roll: f32,
 ) -> (Vec<Intent>, Vec<Effect>) {
     SCRIPTS.with(|reg| {
-        let engine = reg.get("melee_attack").expect("melee_attack script must be registered");
+        let Some(engine) = reg.get("melee_attack") else {
+            spacetimedb::log::warn!("melee_attack script not registered");
+            return (vec![], vec![]);
+        };
         let behaviors = vec!["crit".into(), "stacking".into()];
-        engine
-            .call_ability_with_behaviors(
-                "on_ability_start",
-                source,
-                targets,
-                rng_roll,
-                reg.clone(),
-                behaviors,
-            )
-            .expect("melee_attack script execution failed")
+        match engine.call_ability_with_behaviors(
+            "on_ability_start",
+            source,
+            targets,
+            rng_roll,
+            reg.clone(),
+            behaviors,
+        ) {
+            Ok(result) => result,
+            Err(e) => {
+                spacetimedb::log::warn!("melee_attack script error: {e}");
+                (vec![], vec![])
+            }
+        }
     })
 }
 
 /// Execute a ground pound ability via the Rune scripting engine.
+/// Returns empty results on script error instead of panicking the module.
 pub fn run_ground_pound(
     source: game_core::runtime::Combatant,
     targets: Vec<game_core::runtime::Combatant>,
     rng_roll: f32,
 ) -> (Vec<Intent>, Vec<Effect>) {
     SCRIPTS.with(|reg| {
-        let engine = reg.get("ground_pound").expect("ground_pound script must be registered");
+        let Some(engine) = reg.get("ground_pound") else {
+            spacetimedb::log::warn!("ground_pound script not registered");
+            return (vec![], vec![]);
+        };
         let behaviors = vec!["crit".into(), "stacking".into()];
-        engine
-            .call_ability_with_behaviors(
-                "on_ability_start",
-                source,
-                targets,
-                rng_roll,
-                reg.clone(),
-                behaviors,
-            )
-            .expect("ground_pound script execution failed")
+        match engine.call_ability_with_behaviors(
+            "on_ability_start",
+            source,
+            targets,
+            rng_roll,
+            reg.clone(),
+            behaviors,
+        ) {
+            Ok(result) => result,
+            Err(e) => {
+                spacetimedb::log::warn!("ground_pound script error: {e}");
+                (vec![], vec![])
+            }
+        }
     })
 }

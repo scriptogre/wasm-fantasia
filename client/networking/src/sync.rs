@@ -86,6 +86,10 @@ pub(super) fn interpolate_synced_entities(
         // Only apply gravity when the entity has vertical velocity — otherwise
         // grounded entities sink through the floor as elapsed grows unbounded
         // (position-based snapshot detection doesn't reset when standing still).
+        //
+        // NOTE: Enemy velocity is zeroed in the reconciler so enemies get
+        // pure lerp (no extrapolation overshoot). Only remote players use
+        // velocity extrapolation here.
         let gravity_term = if snapshot.velocity.y.abs() > 0.01 {
             0.5 * GRAVITY * elapsed * elapsed
         } else {
@@ -94,10 +98,6 @@ pub(super) fn interpolate_synced_entities(
         let target =
             snapshot.position + snapshot.velocity * elapsed + Vec3::new(0.0, gravity_term, 0.0);
 
-        // Only write Transform when the delta is significant. Unconditional
-        // writes trigger Changed<Transform> on all 5000+ enemies every frame,
-        // causing expensive cascades in propagate_parent_transforms,
-        // calculate_bounds, reset_view_visibility, and update_instance_data.
         let new_translation = transform.translation.lerp(target, alpha);
         let target_rotation = Quat::from_rotation_y(world_entity.rotation_y);
         let new_rotation = Quat::slerp(transform.rotation, target_rotation, alpha);
