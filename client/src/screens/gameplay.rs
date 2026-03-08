@@ -13,24 +13,23 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
         .add_systems(
             OnExit(Screen::Gameplay),
-            (unpause_server_on_exit, cleanup_gameplay_entities)
+            (unpause_server_on_exit, strip_input_contexts, cleanup_gameplay_entities)
                 .chain()
                 .run_if(not(is_entering_game_over))
                 .in_set(GameplayCleanup),
         )
         .add_systems(
             OnExit(Screen::GameOver),
-            (unpause_server_on_exit, cleanup_gameplay_entities)
+            (unpause_server_on_exit, strip_input_contexts, cleanup_gameplay_entities)
                 .chain()
                 .in_set(GameplayCleanup),
         )
         .add_systems(
             Update,
-            (
-                sync_gameplay_lock.run_if(in_state(Screen::Gameplay)),
-                sync_virtual_time,
-            ),
+            sync_gameplay_lock.run_if(in_state(Screen::Gameplay)),
         )
+        .add_systems(OnEnter(PauseState::Paused), on_pause)
+        .add_systems(OnExit(PauseState::Paused), on_unpause)
         .add_observer(toggle_pause)
         .add_observer(trigger_menu_toggle_on_esc)
         .add_observer(toggle_mute);
@@ -51,16 +50,17 @@ fn mark_startup_entities_persistent(
 /// Covers all exit paths (Main Menu, disconnect, etc.) so the server tick
 /// isn't left frozen when the player returns.
 fn unpause_server_on_exit(
-    mut session: ResMut<Session>,
+    pause: Res<State<PauseState>>,
     mode: Res<GameMode>,
     conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+    mut next_pause: ResMut<NextState<PauseState>>,
 ) {
-    if session.paused && *mode != GameMode::Multiplayer {
+    if *pause.get() == PauseState::Paused && *mode != GameMode::Multiplayer {
         if let Some(conn) = conn {
             let _ = conn.conn.reducers.resume_world();
         }
     }
-    session.paused = false;
+    next_pause.set(PauseState::Running);
 }
 
 /// Nuclear cleanup on gameplay exit: despawn every root entity that wasn't
@@ -80,11 +80,27 @@ fn cleanup_gameplay_entities(
     mut commands: Commands,
 ) {
     for entity in entities.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 }
 
 fn spawn_gameplay_ui() {}
+
+/// Remove input contexts before nuclear despawn so their `On<Remove>` observers
+/// fire while entities are still fully alive (avoids stale-entity panics from
+/// `despawn_related::<Actions<_>>`).
+fn strip_input_contexts(
+    players: Query<Entity, With<PlayerCtx>>,
+    modals: Query<Entity, With<ModalCtx>>,
+    mut commands: Commands,
+) {
+    for entity in players.iter() {
+        commands.entity(entity).remove::<PlayerCtx>();
+    }
+    for entity in modals.iter() {
+        commands.entity(entity).remove::<ModalCtx>();
+    }
+}
 
 /// Declarative cursor/input lock. Runs every frame during gameplay.
 /// Gameplay is blocked when: paused, or any entity with [`BlocksGameplay`] exists.
@@ -92,12 +108,12 @@ fn spawn_gameplay_ui() {}
 /// When unblocked: cursor locked, PlayerCtx restored.
 fn sync_gameplay_lock(
     blockers: Query<(), With<BlocksGameplay>>,
-    session: Res<Session>,
+    pause: Res<State<PauseState>>,
     player: Query<Entity, With<Player>>,
     mut cam: Query<&mut ThirdPersonCamera>,
     mut commands: Commands,
 ) {
-    let should_lock = !session.paused && blockers.is_empty();
+    let should_lock = *pause.get() != PauseState::Paused && blockers.is_empty();
 
     if let Ok(mut cam) = cam.single_mut() {
         cam.cursor_lock_active = should_lock;
@@ -112,35 +128,40 @@ fn sync_gameplay_lock(
     }
 }
 
-/// Keeps `Time<Virtual>` in sync with `session.paused`.
-/// Runs globally so leaving gameplay with time paused always cleans up.
-fn sync_virtual_time(session: Res<Session>, mode: Res<GameMode>, mut time: ResMut<Time<Virtual>>) {
-    let should_pause = session.paused && *mode != GameMode::Multiplayer;
-    if should_pause != time.is_paused() {
-        if should_pause {
-            time.pause();
-        } else {
-            time.unpause();
+fn on_pause(
+    mode: Res<GameMode>,
+    conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+    mut time: ResMut<Time<Virtual>>,
+) {
+    if *mode != GameMode::Multiplayer {
+        time.pause();
+        if let Some(conn) = conn {
+            let _ = conn.conn.reducers.pause_world();
+        }
+    }
+}
+
+fn on_unpause(
+    mode: Res<GameMode>,
+    conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+    mut time: ResMut<Time<Virtual>>,
+) {
+    if *mode != GameMode::Multiplayer {
+        time.unpause();
+        if let Some(conn) = conn {
+            let _ = conn.conn.reducers.resume_world();
         }
     }
 }
 
 fn toggle_pause(
     _: On<TogglePause>,
-    mut session: ResMut<Session>,
-    mode: Res<GameMode>,
-    conn: Option<Res<crate::networking::SpacetimeDbConnection>>,
+    pause: Res<State<PauseState>>,
+    mut next_pause: ResMut<NextState<PauseState>>,
 ) {
-    session.paused = !session.paused;
-
-    if *mode != GameMode::Multiplayer {
-        if let Some(conn) = conn {
-            let _ = if session.paused {
-                conn.conn.reducers.pause_world()
-            } else {
-                conn.conn.reducers.resume_world()
-            };
-        }
+    match pause.get() {
+        PauseState::Paused => next_pause.set(PauseState::Running),
+        PauseState::Running => next_pause.set(PauseState::Paused),
     }
 }
 

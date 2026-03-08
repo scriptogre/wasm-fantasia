@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use game_client_models::{GameplayCleanup, Screen, ServerTarget, is_entering_game_over};
+use game_client_models::{GameplayCleanup, Screen, ServerTarget, is_entering_connecting, is_entering_game_over};
 
 pub mod combat;
 mod connection;
@@ -135,11 +135,15 @@ impl Plugin for NetworkingPlugin {
             .add_systems(
                 OnExit(Screen::GameOver),
                 (
+                    // On restart (→ Connecting), on_restart_run already disconnected
+                    // and we need ServerTarget + GameMode to survive for reconnection.
+                    // On quit (→ Title), run full networking teardown.
                     (
                         connection::disconnect_from_spacetimedb,
                         connection::remove_server_target,
                     )
-                        .run_if(is_server_connected),
+                        .run_if(is_server_connected)
+                        .run_if(not(is_entering_connecting)),
                     reconcile::reset_entity_map,
                 )
                     .before(GameplayCleanup),

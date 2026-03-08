@@ -6,7 +6,6 @@ mod connecting;
 mod gameplay;
 mod loading;
 mod settings;
-mod splash;
 mod title;
 
 pub fn plugin(app: &mut App) {
@@ -14,7 +13,6 @@ pub fn plugin(app: &mut App) {
 
     app.add_plugins((
         camera::plugin,
-        splash::plugin,
         loading::plugin,
         title::plugin,
         settings::plugin,

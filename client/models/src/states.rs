@@ -3,6 +3,7 @@ use bevy::prelude::*;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Session>()
         .init_resource::<GameMode>()
+        .init_state::<PauseState>()
         .register_type::<Mood>();
 }
 
@@ -49,7 +50,6 @@ pub struct Session {
     pub diagnostics: bool,
     pub debug_ui: bool,
     pub screen_shake: bool,
-    pub paused: bool,
     pub muted: bool,
 }
 
@@ -61,7 +61,6 @@ impl Default for Session {
             diagnostics: false,
             debug_ui: false,    // Off by default
             screen_shake: true, // On by default
-            paused: false,
             muted: false,
         }
     }
@@ -69,29 +68,38 @@ impl Default for Session {
 
 impl Session {
     pub fn reset(&mut self) {
-        self.paused = false;
         self.muted = false;
     }
 }
 
-pub fn is_paused(session: Res<Session>) -> bool {
-    session.paused
+/// Orthogonal state: gameplay pause, independent of [`Screen`].
+#[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash, Reflect)]
+pub enum PauseState {
+    #[default]
+    Running,
+    Paused,
 }
 
-/// Run condition: true when the next state is [`Screen::GameOver`].
+pub fn is_paused(state: Res<State<PauseState>>) -> bool {
+    *state.get() == PauseState::Paused
+}
+
+/// Run condition: true when transitioning into [`Screen::GameOver`].
 /// Used to skip cleanup when transitioning from Gameplay to GameOver.
-pub fn is_entering_game_over(next: Res<NextState<Screen>>) -> bool {
-    matches!(next.as_ref(), NextState::Pending(Screen::GameOver))
+/// Checks `State<Screen>` because Bevy consumes `NextState` before `OnExit` runs.
+pub fn is_entering_game_over(state: Res<State<Screen>>) -> bool {
+    *state.get() == Screen::GameOver
 }
 
-/// The game's main screen states.
-/// See <https://bevy-cheatbook.github.io/programming/states.html>
-/// Or <https://github.com/bevyengine/bevy/blob/main/examples/ecs/state.rs>
+/// Run condition: true when transitioning into [`Screen::Connecting`] (restart).
+/// Used to skip networking teardown when restarting from GameOver.
+pub fn is_entering_connecting(state: Res<State<Screen>>) -> bool {
+    *state.get() == Screen::Connecting
+}
+
 #[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash, Reflect)]
 pub enum Screen {
-    #[cfg_attr(not(feature = "dev"), default)]
-    Splash,
-    #[cfg_attr(feature = "dev", default)]
+    #[default]
     Loading,
     Tutorial,
     Settings,

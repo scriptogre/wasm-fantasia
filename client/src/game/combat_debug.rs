@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
-use crate::models::{Player as LocalPlayer, Screen, Session};
+use crate::models::{PauseState, Player as LocalPlayer, Screen, Session};
 use crate::networking::ServerDiagnostics;
 use crate::models::combat::{Stat, Stats};
 use crate::ui::{colors, size};
@@ -132,6 +132,7 @@ fn toggle_overlay(
     input: Res<ButtonInput<KeyCode>>,
     mut session: ResMut<Session>,
     mut log: ResMut<DebugLog>,
+    pause: Res<State<PauseState>>,
     mut panel: Query<&mut Visibility, With<DebugPanel>>,
 ) {
     if input.just_pressed(KeyCode::F4) {
@@ -139,7 +140,7 @@ fn toggle_overlay(
         log.dirty = true;
     }
 
-    let should_show = session.diagnostics && !session.paused;
+    let should_show = session.diagnostics && *pause.get() != PauseState::Paused;
     if let Ok(mut vis) = panel.single_mut() {
         *vis = if should_show {
             Visibility::Visible

@@ -51,7 +51,7 @@ fn back(
     mut commands: Commands,
 ) {
     match screen.get() {
-        Screen::Splash | Screen::Title | Screen::Loading => {}
+        Screen::Title | Screen::Loading => {}
         _ => {
             let last = states.last_screen.clone();
             commands.trigger(Back {

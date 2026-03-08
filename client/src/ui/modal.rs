@@ -17,7 +17,7 @@ pub fn click_pop_modal(on: On<Pointer<Click>>, mut commands: Commands) {
 pub fn add_new_modal(
     on: On<NewModal>,
     screen: Res<State<Screen>>,
-    session: Res<Session>,
+    pause: Res<State<PauseState>>,
     mut commands: Commands,
     mut modals: ResMut<Modals>,
 ) {
@@ -29,7 +29,7 @@ pub fn add_new_modal(
     if modals.is_empty() {
         target.insert(ModalCtx);
         if Modal::Main == on.modal {
-            if !session.paused {
+            if *pause.get() != PauseState::Paused {
                 commands.trigger(TogglePause);
             }
             commands.trigger(CamCursorToggle);
