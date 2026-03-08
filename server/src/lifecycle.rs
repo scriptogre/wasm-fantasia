@@ -78,6 +78,52 @@ pub fn respawn(ctx: &spacetimedb::ReducerContext) {
     });
 }
 
+/// Full run restart: respawn the player and clear all enemies in their world.
+#[spacetimedb::reducer]
+pub fn restart_run(ctx: &spacetimedb::ReducerContext) {
+    let Some(player) = ctx.db.player().identity().find(ctx.sender()) else {
+        return;
+    };
+
+    let world_id = player.world_id;
+    let now = ctx.timestamp.to_micros_since_unix_epoch();
+
+    // Clear stacking buffs
+    let effect_ids: Vec<u64> = ctx
+        .db
+        .active_effect()
+        .iter()
+        .filter(|e| e.owner == ctx.sender())
+        .map(|e| e.id)
+        .collect();
+    for id in effect_ids {
+        ctx.db.active_effect().id().delete(id);
+    }
+
+    // Reset player health and position
+    ctx.db.player().identity().update(Player {
+        health: player.max_health,
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+        attack_speed: 1.0,
+        last_update: now,
+        ..player
+    });
+
+    // Clear all enemies in this world
+    let enemy_ids: Vec<u64> = ctx
+        .db
+        .enemy()
+        .iter()
+        .filter(|e| e.world_id == world_id)
+        .map(|e| e.id)
+        .collect();
+    for id in enemy_ids {
+        ctx.db.enemy().id().delete(id);
+    }
+}
+
 #[spacetimedb::reducer]
 pub fn leave_game(ctx: &spacetimedb::ReducerContext) {
     set_player_offline(ctx);

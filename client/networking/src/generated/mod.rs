@@ -24,6 +24,7 @@ pub mod pause_world_reducer;
 pub mod player_table;
 pub mod player_type;
 pub mod respawn_reducer;
+pub mod restart_run_reducer;
 pub mod resume_world_reducer;
 pub mod spawn_enemies_reducer;
 pub mod tick_schedule_type;
@@ -49,6 +50,7 @@ pub use pause_world_reducer::pause_world;
 pub use player_table::*;
 pub use player_type::Player;
 pub use respawn_reducer::respawn;
+pub use restart_run_reducer::restart_run;
 pub use resume_world_reducer::resume_world;
 pub use spawn_enemies_reducer::spawn_enemies;
 pub use tick_schedule_type::TickSchedule;
@@ -84,6 +86,7 @@ pub enum Reducer {
     LeaveGame,
     PauseWorld,
     Respawn,
+    RestartRun,
     ResumeWorld,
     SpawnEnemies {
         x: f32,
@@ -118,6 +121,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::LeaveGame => "leave_game",
             Reducer::PauseWorld => "pause_world",
             Reducer::Respawn => "respawn",
+            Reducer::RestartRun => "restart_run",
             Reducer::ResumeWorld => "resume_world",
             Reducer::SpawnEnemies { .. } => "spawn_enemies",
             Reducer::UpdatePosition { .. } => "update_position",
@@ -158,6 +162,9 @@ impl __sdk::Reducer for Reducer {
             Reducer::LeaveGame => __sats::bsatn::to_vec(&leave_game_reducer::LeaveGameArgs {}),
             Reducer::PauseWorld => __sats::bsatn::to_vec(&pause_world_reducer::PauseWorldArgs {}),
             Reducer::Respawn => __sats::bsatn::to_vec(&respawn_reducer::RespawnArgs {}),
+            Reducer::RestartRun => {
+                __sats::bsatn::to_vec(&restart_run_reducer::RestartRunArgs {})
+            }
             Reducer::ResumeWorld => {
                 __sats::bsatn::to_vec(&resume_world_reducer::ResumeWorldArgs {})
             }

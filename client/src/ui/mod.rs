@@ -14,6 +14,7 @@ use bevy::{
 };
 use serde::{Deserialize, Serialize};
 
+mod death_screen;
 pub mod hud;
 mod interaction;
 mod modal;
@@ -36,6 +37,7 @@ pub fn plugin(app: &mut App) {
         interaction::plugin,
         modal::plugin,
         hud::plugin,
+        death_screen::plugin,
     ));
 
     app.add_plugins(server_status::plugin);

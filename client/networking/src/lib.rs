@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use game_client_models::{GameplayCleanup, Screen, ServerTarget};
+use game_client_models::{GameplayCleanup, Screen, ServerTarget, is_entering_game_over};
 
 pub mod combat;
 mod connection;
@@ -125,6 +125,20 @@ impl Plugin for NetworkingPlugin {
                         connection::disconnect_from_spacetimedb,
                         connection::remove_server_target,
                     )
+                        .run_if(is_server_connected)
+                        .run_if(not(is_entering_game_over)),
+                    reconcile::reset_entity_map
+                        .run_if(not(is_entering_game_over)),
+                )
+                    .before(GameplayCleanup),
+            )
+            .add_systems(
+                OnExit(Screen::GameOver),
+                (
+                    (
+                        connection::disconnect_from_spacetimedb,
+                        connection::remove_server_target,
+                    )
                         .run_if(is_server_connected),
                     reconcile::reset_entity_map,
                 )
@@ -147,8 +161,6 @@ impl Plugin for NetworkingPlugin {
                         .after(reconcile::drain_db_events)
                         .run_if(resource_exists::<SpacetimeDbConnection>),
                     sync::send_local_position.run_if(resource_exists::<SpacetimeDbConnection>),
-                    combat::request_respawn_on_death
-                        .run_if(resource_exists::<SpacetimeDbConnection>),
                     sync::measure_ping.run_if(resource_exists::<SpacetimeDbConnection>),
                     diagnostics::update_server_diagnostics
                         .run_if(resource_exists::<SpacetimeDbConnection>),

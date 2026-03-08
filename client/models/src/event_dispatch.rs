@@ -40,6 +40,8 @@ pub struct ChangeMood {
 pub struct Press;
 #[derive(Event)]
 pub struct SettingsChanged;
+#[derive(Event)]
+pub struct RestartRun;
 
 // ================== trigger events on input ========================
 fn back(

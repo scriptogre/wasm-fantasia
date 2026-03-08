@@ -78,6 +78,12 @@ pub fn is_paused(session: Res<Session>) -> bool {
     session.paused
 }
 
+/// Run condition: true when the next state is [`Screen::GameOver`].
+/// Used to skip cleanup when transitioning from Gameplay to GameOver.
+pub fn is_entering_game_over(next: Res<NextState<Screen>>) -> bool {
+    matches!(next.as_ref(), NextState::Pending(Screen::GameOver))
+}
+
 /// The game's main screen states.
 /// See <https://bevy-cheatbook.github.io/programming/states.html>
 /// Or <https://github.com/bevyengine/bevy/blob/main/examples/ecs/state.rs>
@@ -95,6 +101,8 @@ pub enum Screen {
     Connecting,
     // During this State the actual game logic is executed
     Gameplay,
+    // Player died — show death overlay with restart option
+    GameOver,
 }
 
 #[derive(Component, Reflect, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

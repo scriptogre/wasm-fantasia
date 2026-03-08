@@ -93,14 +93,21 @@ fn apply_pending_knockback(
 
 /// Observer: handle entity death.
 /// Server-owned entities are handled by the reconciler, not despawned locally.
+/// If the dead entity is the local player, transition to the GameOver screen.
 fn on_death(
     on: On<Died>,
     server_entities: Query<(), With<crate::networking::ServerId>>,
+    player_query: Query<(), With<PlayerCombatant>>,
     mut commands: Commands,
 ) {
     let event = on.event();
 
     if server_entities.get(event.entity).is_ok() {
+        return;
+    }
+
+    if player_query.get(event.entity).is_ok() {
+        commands.trigger(GoTo(Screen::GameOver));
         return;
     }
 

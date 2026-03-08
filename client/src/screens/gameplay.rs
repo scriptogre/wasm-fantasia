@@ -15,6 +15,13 @@ pub(super) fn plugin(app: &mut App) {
             OnExit(Screen::Gameplay),
             (unpause_server_on_exit, cleanup_gameplay_entities)
                 .chain()
+                .run_if(not(is_entering_game_over))
+                .in_set(GameplayCleanup),
+        )
+        .add_systems(
+            OnExit(Screen::GameOver),
+            (unpause_server_on_exit, cleanup_gameplay_entities)
+                .chain()
                 .in_set(GameplayCleanup),
         )
         .add_systems(

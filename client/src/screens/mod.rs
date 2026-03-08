@@ -46,7 +46,7 @@ fn on_back(
     screen: Res<State<Screen>>,
 ) {
     // Do not go to the title on back, we'd rather handle it in gameplay observers
-    if *screen.get() == Screen::Gameplay {
+    if *screen.get() == Screen::Gameplay || *screen.get() == Screen::GameOver {
         return;
     }
 
