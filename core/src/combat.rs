@@ -33,6 +33,11 @@ pub mod defaults {
     /// Mass for enemy physics bodies (kg). Used for impulse-to-velocity
     /// conversion in knockback. Shared between server physics and combat.
     pub const ENEMY_MASS: f32 = 50.0;
+
+    /// Y position for spawned enemies. Must match the physics-settled capsule
+    /// center height so enemies stand on the ground, not sink into it.
+    /// The server physics capsule(0.5, 1.0) settles at ~Y=1.0 on the floor plane.
+    pub const ENEMY_SPAWN_Y: f32 = 1.0;
 }
 
 /// Pure decision function for enemy AI state machine.

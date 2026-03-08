@@ -1,4 +1,4 @@
-use game_core::combat::{enemy_defaults, enemy_types, EnemyBehaviorKind};
+use game_core::combat::{defaults, enemy_defaults, enemy_types, EnemyBehaviorKind};
 use spacetimedb::Table;
 
 use crate::schema::*;
@@ -36,7 +36,16 @@ pub fn stop_horde(ctx: &spacetimedb::ReducerContext, world_id: u32) {
 }
 
 /// Advance the horde spawner for one tick, spawning enemies as needed.
-pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, players: &[Player]) {
+///
+/// `enemy_count` is passed in from the caller (game_tick) to avoid a redundant
+/// full table scan — game_tick already collects all enemies by world.
+pub fn tick_horde(
+    ctx: &spacetimedb::ReducerContext,
+    world_id: u32,
+    dt: f32,
+    players: &[Player],
+    enemy_count: usize,
+) {
     let Some(state) = ctx.db.horde_state().world_id().find(world_id) else {
         return;
     };
@@ -47,7 +56,6 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
     let elapsed = state.elapsed_secs + dt;
 
     // Cap enemy count to prevent unbounded accumulation.
-    let enemy_count = ctx.db.enemy().iter().filter(|e| e.world_id == world_id).count();
     if enemy_count >= MAX_ENEMIES {
         ctx.db.horde_state().world_id().update(HordeState {
             world_id,
@@ -68,7 +76,9 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
         accumulator -= 1.0;
 
         // Pick a random player to spawn near
-        let player_hash = seed.wrapping_mul(spawn_index.wrapping_add(1)).wrapping_mul(2654435761);
+        let player_hash = seed
+            .wrapping_mul(spawn_index.wrapping_add(1))
+            .wrapping_mul(2654435761);
         let player = &players[(player_hash as usize) % players.len()];
 
         // Pick enemy type based on elapsed time
@@ -108,8 +118,8 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
             .wrapping_add(spawn_index)
             .wrapping_mul(6364136223846793005);
         let angle = (h & 0xFFFF) as f32 / 65535.0 * std::f32::consts::TAU;
-        let radius =
-            SPAWN_RADIUS_MIN + ((h >> 16) & 0xFFFF) as f32 / 65535.0 * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
+        let radius = SPAWN_RADIUS_MIN
+            + ((h >> 16) & 0xFFFF) as f32 / 65535.0 * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
 
         let stats = enemy_defaults(enemy_type);
 
@@ -118,7 +128,7 @@ pub fn tick_horde(ctx: &spacetimedb::ReducerContext, world_id: u32, dt: f32, pla
             enemy_type,
             world_id,
             x: player.x + angle.cos() * radius,
-            y: 0.0,
+            y: defaults::ENEMY_SPAWN_Y,
             z: player.z + angle.sin() * radius,
             rotation_y: 0.0,
             velocity_x: 0.0,

@@ -15,7 +15,7 @@ use crate::TICK_INTERVAL_MICROS;
 pub fn spawn_enemies(
     ctx: &spacetimedb::ReducerContext,
     x: f32,
-    y: f32,
+    _y: f32,
     z: f32,
     _forward_x: f32,
     _forward_z: f32,
@@ -44,7 +44,7 @@ pub fn spawn_enemies(
             enemy_type: enemy_types::BASIC,
             world_id,
             x: x + angle.cos() * radius,
-            y,
+            y: defaults::ENEMY_SPAWN_Y,
             z: z + angle.sin() * radius,
             rotation_y: 0.0,
             velocity_x: 0.0,
@@ -491,12 +491,14 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
         }
     }
 
-    // Tick horde spawner for each active world with players
+    // Tick horde spawner for each active world with players.
+    // Pass the already-collected enemy count to avoid a second full table scan.
     for (&world_id, players) in &players_by_world {
         if ctx.db.world_pause().world_id().find(world_id).is_some() {
             continue;
         }
-        crate::horde::tick_horde(ctx, world_id, dt, players);
+        let enemy_count = enemies_by_world.get(&world_id).map_or(0, |v| v.len());
+        crate::horde::tick_horde(ctx, world_id, dt, players, enemy_count);
     }
 
     // Delete consumed knockback impulses
