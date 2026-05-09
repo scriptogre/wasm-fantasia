@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "client", "client/models", "client/networking", "server", "crates/spacetimedb-sdk"]
+members = ["core", "client", "client/models", "client/networking", "server"]
 resolver = "2"
 
 [workspace.dependencies]

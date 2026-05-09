@@ -75,16 +75,12 @@ check:
 web-size *args:
     python3 client/web_size.py {{args}}
 
-# Regenerate SpacetimeDB client bindings (patches WASM-incompatible methods)
+# Regenerate SpacetimeDB client bindings
 generate:
     #!/usr/bin/env bash
     set -euo pipefail
     "{{spacetime}}" generate --lang rust --module-path server --out-dir client/networking/src/generated --yes
-    # The codegen emits advance_one_message_blocking() and run_threaded() which
-    # don't exist in our WASM-patched SDK fork. Gate them to native-only.
-    sed -i '' 's/    pub fn advance_one_message_blocking/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn advance_one_message_blocking/' client/networking/src/generated/mod.rs
-    sed -i '' 's/    pub fn run_threaded/    #[cfg(not(target_arch = "wasm32"))]\n    pub fn run_threaded/' client/networking/src/generated/mod.rs
-    echo "Bindings regenerated and WASM-patched."
+    echo "Bindings regenerated."
 
 
 # Deploy to production

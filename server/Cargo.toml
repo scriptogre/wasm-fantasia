@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-spacetimedb = "=2.0.2"
+spacetimedb = "=2.2.0"
 game-core = { path = "../core" }
 glam = { workspace = true }
 avian3d = { path = "../crates/avian/crates/avian3d", default-features = false, features = ["3d", "f32", "parry-f32", "enhanced-determinism"] }

@@ -13,7 +13,10 @@ pub mod local_server;
 mod reconcile;
 mod sync;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use connection::{ReconnectTimer, try_connect};
+#[cfg(target_arch = "wasm32")]
+pub use connection::ReconnectTimer;
 pub use diagnostics::ServerDiagnostics;
 pub use generated::{DbConnection, Player, Reducer};
 pub use reconcile::{

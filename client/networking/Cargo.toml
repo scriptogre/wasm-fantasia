@@ -9,7 +9,7 @@ web = []
 [dependencies]
 game-client-models = { path = "../models" }
 game-core = { path = "../../core" }
-spacetimedb-sdk = { path = "../../crates/spacetimedb-sdk" }
+spacetimedb-sdk = "=2.2.0"
 bevy = { version = "^0.18", default-features = false }
 web-time = "1.1"
 
@@ -17,7 +17,8 @@ web-time = "1.1"
 home = "0.5"
 
 [target.wasm32-unknown-unknown.dependencies]
-spacetimedb-sdk = { path = "../../crates/spacetimedb-sdk", features = ["web"] }
+spacetimedb-sdk = { version = "=2.2.0", features = ["browser"] }
+wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Window", "Location"] }
 
 [lints]

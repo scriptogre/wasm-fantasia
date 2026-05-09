@@ -16,6 +16,9 @@ use game_client_models::{GameMode, Screen, ServerTarget};
 #[cfg(not(target_arch = "wasm32"))]
 use super::local_server;
 
+#[cfg(target_arch = "wasm32")]
+use std::sync::{Arc, Mutex};
+
 const HANDSHAKE_TIMEOUT_SECS: f32 = 5.0;
 const RECONNECT_INTERVAL_SECS: f32 = 2.0;
 
@@ -39,6 +42,12 @@ impl Default for ReconnectTimer {
 
 #[derive(Resource)]
 pub(super) struct HandshakeStart(Instant);
+
+/// On WASM, `.build()` is async. This resource holds the pending result
+/// so `auto_connect` can poll it each frame.
+#[cfg(target_arch = "wasm32")]
+#[derive(Resource)]
+pub(super) struct PendingConnection(pub Arc<Mutex<Option<super::DbConnection>>>);
 
 // =============================================================================
 // Systems
@@ -157,6 +166,7 @@ macro_rules! connection_builder {
     }};
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn try_connect(
     uri: &str,
     module_name: &str,
@@ -175,6 +185,34 @@ pub fn try_connect(
             None
         }
     }
+}
+
+/// On WASM, `.build()` is async. Spawn the connection attempt and return a
+/// [`PendingConnection`] that `auto_connect` polls each frame.
+#[cfg(target_arch = "wasm32")]
+pub fn try_connect_async(
+    uri: &str,
+    module_name: &str,
+    token: &SpacetimeDbToken,
+    is_solo: bool,
+    queue: &DbEventQueue,
+) -> PendingConnection {
+    info!("Attempting async SpacetimeDB connection to {uri}...");
+    let result = Arc::new(Mutex::new(None));
+    let result_clone = result.clone();
+    let builder = connection_builder!(uri, module_name, token.0, is_solo, queue.0.clone());
+    wasm_bindgen_futures::spawn_local(async move {
+        match builder.build().await {
+            Ok(conn) => {
+                info!("Connection initiated — waiting for handshake");
+                *result_clone.lock().unwrap() = Some(conn);
+            }
+            Err(e) => {
+                warn!("SpacetimeDB connection failed: {e:?}");
+            }
+        }
+    });
+    PendingConnection(result)
 }
 
 pub(super) fn reset_reconnect_timer(mut timer: ResMut<ReconnectTimer>) {
@@ -199,6 +237,8 @@ pub(super) fn cleanup_connecting_exit(
         commands.remove_resource::<SpacetimeDbConnection>();
         commands.remove_resource::<HandshakeStart>();
     }
+    #[cfg(target_arch = "wasm32")]
+    commands.remove_resource::<PendingConnection>();
 
     // Preserve a Ready server so the player can resume from the title screen.
     // Only remove the server if it failed or is still starting — stale state
@@ -259,9 +299,24 @@ pub(super) fn auto_connect(
     #[cfg(not(target_arch = "wasm32"))] local_server_state: Option<
         Res<local_server::LocalServerState>,
     >,
+    #[cfg(target_arch = "wasm32")] pending: Option<Res<PendingConnection>>,
 ) {
     let Some(target) = server_target else { return };
     if !matches!(state.get(), Screen::Connecting | Screen::Gameplay) || conn.is_some() {
+        return;
+    }
+
+    // On WASM, check if a pending async connection has resolved
+    #[cfg(target_arch = "wasm32")]
+    if let Some(pending) = &pending {
+        if let Some(conn) = pending.0.lock().unwrap().take() {
+            commands.insert_resource(SpacetimeDbConnection { conn });
+            commands.insert_resource(HandshakeStart(Instant::now()));
+            commands.remove_resource::<PendingConnection>();
+            info!("auto_connect: async connection resolved");
+            return;
+        }
+        // Still waiting for the async build — don't start another one
         return;
     }
 
@@ -284,12 +339,24 @@ pub(super) fn auto_connect(
         ServerTarget::Remote { uri } => uri.clone(),
     };
     let is_solo = *mode != GameMode::Multiplayer;
-    if let Some(conn) = try_connect(&uri, &config.database_name, &token, is_solo, &queue) {
-        commands.insert_resource(conn);
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if let Some(conn) = try_connect(&uri, &config.database_name, &token, is_solo, &queue) {
+            commands.insert_resource(conn);
+            commands.insert_resource(HandshakeStart(Instant::now()));
+            info!("auto_connect: connection initiated");
+        } else {
+            warn!("auto_connect: try_connect returned None");
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let pending = try_connect_async(&uri, &config.database_name, &token, is_solo, &queue);
+        commands.insert_resource(pending);
         commands.insert_resource(HandshakeStart(Instant::now()));
-        info!("auto_connect: connection initiated");
-    } else {
-        warn!("auto_connect: try_connect returned None");
+        info!("auto_connect: async connection initiated");
     }
 }
 
