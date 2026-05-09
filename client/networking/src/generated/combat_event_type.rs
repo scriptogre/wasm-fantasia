@@ -66,5 +66,3 @@ impl __sdk::__query_builder::HasIxCols for CombatEvent {
         }
     }
 }
-
-impl __sdk::__query_builder::CanBeLookupTable for CombatEvent {}

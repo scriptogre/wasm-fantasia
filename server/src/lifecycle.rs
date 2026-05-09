@@ -111,8 +111,8 @@ pub fn restart_run(ctx: &spacetimedb::ReducerContext) {
         let enemy_ids: Vec<u64> = ctx
             .db
             .enemy()
-            .iter()
-            .filter(|e| e.world_id == world_id)
+            .world_id()
+            .filter(&world_id)
             .map(|e| e.id)
             .collect();
         for id in enemy_ids {
@@ -148,27 +148,18 @@ fn set_player_offline(ctx: &spacetimedb::ReducerContext) {
 
         // Clean up solo world data to prevent abandoned state accumulating.
         // "shared" is the multiplayer world — never delete its entities.
+        // CombatEvent is an event table — auto-deleted after broadcast, no cleanup needed.
         if is_solo {
             crate::horde::stop_horde(ctx, world_id);
             let enemy_ids: Vec<u64> = ctx
                 .db
                 .enemy()
-                .iter()
-                .filter(|e| e.world_id == world_id)
+                .world_id()
+                .filter(&world_id)
                 .map(|e| e.id)
                 .collect();
             for id in enemy_ids {
                 ctx.db.enemy().id().delete(id);
-            }
-            let event_ids: Vec<u64> = ctx
-                .db
-                .combat_event()
-                .iter()
-                .filter(|e| e.world_id == world_id)
-                .map(|e| e.id)
-                .collect();
-            for id in event_ids {
-                ctx.db.combat_event().id().delete(id);
             }
         }
     }

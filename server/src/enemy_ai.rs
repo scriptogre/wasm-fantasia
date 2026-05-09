@@ -75,8 +75,8 @@ pub fn clear_enemies(ctx: &spacetimedb::ReducerContext) {
     let enemy_ids: Vec<u64> = ctx
         .db
         .enemy()
-        .iter()
-        .filter(|e| e.world_id == world_id)
+        .world_id()
+        .filter(&world_id)
         .map(|e| e.id)
         .collect();
 

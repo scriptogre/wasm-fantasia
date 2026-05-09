@@ -15,10 +15,8 @@ pub mod combat_event_type;
 pub mod enemy_table;
 pub mod enemy_type;
 pub mod ground_pound_hit_reducer;
-pub mod horde_state_table;
 pub mod horde_state_type;
 pub mod join_game_reducer;
-pub mod knockback_impulse_table;
 pub mod knockback_impulse_type;
 pub mod landing_aoe_hit_reducer;
 pub mod leave_game_reducer;
@@ -43,10 +41,8 @@ pub use combat_event_type::CombatEvent;
 pub use enemy_table::*;
 pub use enemy_type::Enemy;
 pub use ground_pound_hit_reducer::ground_pound_hit;
-pub use horde_state_table::*;
 pub use horde_state_type::HordeState;
 pub use join_game_reducer::join_game;
-pub use knockback_impulse_table::*;
 pub use knockback_impulse_type::KnockbackImpulse;
 pub use landing_aoe_hit_reducer::landing_aoe_hit;
 pub use leave_game_reducer::leave_game;
@@ -212,8 +208,6 @@ pub struct DbUpdate {
     active_effect: __sdk::TableUpdate<ActiveEffect>,
     combat_event: __sdk::TableUpdate<CombatEvent>,
     enemy: __sdk::TableUpdate<Enemy>,
-    horde_state: __sdk::TableUpdate<HordeState>,
-    knockback_impulse: __sdk::TableUpdate<KnockbackImpulse>,
     player: __sdk::TableUpdate<Player>,
     world_pause: __sdk::TableUpdate<WorldPause>,
 }
@@ -233,12 +227,6 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "enemy" => db_update
                     .enemy
                     .append(enemy_table::parse_table_update(table_update)?),
-                "horde_state" => db_update
-                    .horde_state
-                    .append(horde_state_table::parse_table_update(table_update)?),
-                "knockback_impulse" => db_update
-                    .knockback_impulse
-                    .append(knockback_impulse_table::parse_table_update(table_update)?),
                 "player" => db_update
                     .player
                     .append(player_table::parse_table_update(table_update)?),
@@ -274,17 +262,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.active_effect = cache
             .apply_diff_to_table::<ActiveEffect>("active_effect", &self.active_effect)
             .with_updates_by_pk(|row| &row.id);
-        diff.combat_event = cache
-            .apply_diff_to_table::<CombatEvent>("combat_event", &self.combat_event)
-            .with_updates_by_pk(|row| &row.id);
+        diff.combat_event = self.combat_event.into_event_diff();
         diff.enemy = cache
             .apply_diff_to_table::<Enemy>("enemy", &self.enemy)
-            .with_updates_by_pk(|row| &row.id);
-        diff.horde_state = cache
-            .apply_diff_to_table::<HordeState>("horde_state", &self.horde_state)
-            .with_updates_by_pk(|row| &row.world_id);
-        diff.knockback_impulse = cache
-            .apply_diff_to_table::<KnockbackImpulse>("knockback_impulse", &self.knockback_impulse)
             .with_updates_by_pk(|row| &row.id);
         diff.player = cache
             .apply_diff_to_table::<Player>("player", &self.player)
@@ -307,12 +287,6 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "enemy" => db_update
                     .enemy
-                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
-                "horde_state" => db_update
-                    .horde_state
-                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
-                "knockback_impulse" => db_update
-                    .knockback_impulse
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "player" => db_update
                     .player
@@ -342,12 +316,6 @@ impl __sdk::DbUpdate for DbUpdate {
                 "enemy" => db_update
                     .enemy
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
-                "horde_state" => db_update
-                    .horde_state
-                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
-                "knockback_impulse" => db_update
-                    .knockback_impulse
-                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "player" => db_update
                     .player
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -372,8 +340,6 @@ pub struct AppliedDiff<'r> {
     active_effect: __sdk::TableAppliedDiff<'r, ActiveEffect>,
     combat_event: __sdk::TableAppliedDiff<'r, CombatEvent>,
     enemy: __sdk::TableAppliedDiff<'r, Enemy>,
-    horde_state: __sdk::TableAppliedDiff<'r, HordeState>,
-    knockback_impulse: __sdk::TableAppliedDiff<'r, KnockbackImpulse>,
     player: __sdk::TableAppliedDiff<'r, Player>,
     world_pause: __sdk::TableAppliedDiff<'r, WorldPause>,
     __unused: std::marker::PhantomData<&'r ()>,
@@ -400,12 +366,6 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Enemy>("enemy", &self.enemy, event);
-        callbacks.invoke_table_row_callbacks::<HordeState>("horde_state", &self.horde_state, event);
-        callbacks.invoke_table_row_callbacks::<KnockbackImpulse>(
-            "knockback_impulse",
-            &self.knockback_impulse,
-            event,
-        );
         callbacks.invoke_table_row_callbacks::<Player>("player", &self.player, event);
         callbacks.invoke_table_row_callbacks::<WorldPause>("world_pause", &self.world_pause, event);
     }
@@ -1071,8 +1031,6 @@ impl __sdk::SpacetimeModule for RemoteModule {
         active_effect_table::register_table(client_cache);
         combat_event_table::register_table(client_cache);
         enemy_table::register_table(client_cache);
-        horde_state_table::register_table(client_cache);
-        knockback_impulse_table::register_table(client_cache);
         player_table::register_table(client_cache);
         world_pause_table::register_table(client_cache);
     }
@@ -1080,8 +1038,6 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "active_effect",
         "combat_event",
         "enemy",
-        "horde_state",
-        "knockback_impulse",
         "player",
         "world_pause",
     ];

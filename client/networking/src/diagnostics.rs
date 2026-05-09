@@ -5,7 +5,6 @@ use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Table};
 
 use super::SpacetimeDbConnection;
-use super::generated::combat_event_table::CombatEventTableAccess;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::player_table::PlayerTableAccess;
 use game_client_models::combat::{Health, PlayerCombatant};
@@ -19,20 +18,11 @@ pub struct PlayerDiagnostic {
     pub max_health: f32,
 }
 
-#[derive(Default)]
-pub struct EventDiagnostic {
-    pub damage: f32,
-    pub is_crit: bool,
-    pub x: f32,
-    pub z: f32,
-}
-
 #[derive(Resource, Default)]
 pub struct ServerDiagnostics {
     pub players: Vec<PlayerDiagnostic>,
     pub enemy_alive: usize,
     pub enemy_dead: usize,
-    pub recent_events: Vec<EventDiagnostic>,
     /// (local_health, server_health) when desynced by > 0.1
     pub health_desync: Option<(f32, f32)>,
     pub connected: bool,
@@ -87,26 +77,6 @@ pub(super) fn update_server_diagnostics(
         }
         diag.enemy_alive = alive;
         diag.enemy_dead = total - alive;
-
-        // Recent combat events — track last 3 by max id without sorting all
-        let mut max_id = [0u64; 3];
-        let mut top3: [Option<EventDiagnostic>; 3] = [None, None, None];
-        for e in conn.conn.db.combat_event().iter() {
-            // Find the slot with the smallest id that this event can replace
-            if let Some(i) = (0..3)
-                .filter(|&i| e.id > max_id[i])
-                .min_by_key(|&i| max_id[i])
-            {
-                max_id[i] = e.id;
-                top3[i] = Some(EventDiagnostic {
-                    damage: e.damage,
-                    is_crit: e.is_crit,
-                    x: e.x,
-                    z: e.z,
-                });
-            }
-        }
-        diag.recent_events = top3.into_iter().flatten().collect();
     }
 
     // Desync check — cheap single-player lookup, runs every frame

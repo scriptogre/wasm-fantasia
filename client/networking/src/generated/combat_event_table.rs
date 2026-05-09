@@ -38,9 +38,8 @@ impl CombatEventTableAccess for super::RemoteTables {
 }
 
 pub struct CombatEventInsertCallbackId(__sdk::CallbackId);
-pub struct CombatEventDeleteCallbackId(__sdk::CallbackId);
 
-impl<'ctx> __sdk::Table for CombatEventTableHandle<'ctx> {
+impl<'ctx> __sdk::EventTable for CombatEventTableHandle<'ctx> {
     type Row = CombatEvent;
     type EventContext = super::EventContext;
 
@@ -62,66 +61,6 @@ impl<'ctx> __sdk::Table for CombatEventTableHandle<'ctx> {
 
     fn remove_on_insert(&self, callback: CombatEventInsertCallbackId) {
         self.imp.remove_on_insert(callback.0)
-    }
-
-    type DeleteCallbackId = CombatEventDeleteCallbackId;
-
-    fn on_delete(
-        &self,
-        callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
-    ) -> CombatEventDeleteCallbackId {
-        CombatEventDeleteCallbackId(self.imp.on_delete(Box::new(callback)))
-    }
-
-    fn remove_on_delete(&self, callback: CombatEventDeleteCallbackId) {
-        self.imp.remove_on_delete(callback.0)
-    }
-}
-
-pub struct CombatEventUpdateCallbackId(__sdk::CallbackId);
-
-impl<'ctx> __sdk::TableWithPrimaryKey for CombatEventTableHandle<'ctx> {
-    type UpdateCallbackId = CombatEventUpdateCallbackId;
-
-    fn on_update(
-        &self,
-        callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row) + Send + 'static,
-    ) -> CombatEventUpdateCallbackId {
-        CombatEventUpdateCallbackId(self.imp.on_update(Box::new(callback)))
-    }
-
-    fn remove_on_update(&self, callback: CombatEventUpdateCallbackId) {
-        self.imp.remove_on_update(callback.0)
-    }
-}
-
-/// Access to the `id` unique index on the table `combat_event`,
-/// which allows point queries on the field of the same name
-/// via the [`CombatEventIdUnique::find`] method.
-///
-/// Users are encouraged not to explicitly reference this type,
-/// but to directly chain method calls,
-/// like `ctx.db.combat_event().id().find(...)`.
-pub struct CombatEventIdUnique<'ctx> {
-    imp: __sdk::UniqueConstraintHandle<CombatEvent, u64>,
-    phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
-}
-
-impl<'ctx> CombatEventTableHandle<'ctx> {
-    /// Get a handle on the `id` unique index on the table `combat_event`.
-    pub fn id(&self) -> CombatEventIdUnique<'ctx> {
-        CombatEventIdUnique {
-            imp: self.imp.get_unique_constraint::<u64>("id"),
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<'ctx> CombatEventIdUnique<'ctx> {
-    /// Find the subscribed row whose `id` column value is equal to `col_val`,
-    /// if such a row is present in the client cache.
-    pub fn find(&self, col_val: &u64) -> Option<CombatEvent> {
-        self.imp.find(col_val)
     }
 }
 

@@ -86,6 +86,7 @@ impl __sdk::__query_builder::HasCols for Enemy {
 /// Provides typed access to indexed columns for query building.
 pub struct EnemyIxCols {
     pub id: __sdk::__query_builder::IxCol<Enemy, u64>,
+    pub world_id: __sdk::__query_builder::IxCol<Enemy, u32>,
 }
 
 impl __sdk::__query_builder::HasIxCols for Enemy {
@@ -93,6 +94,7 @@ impl __sdk::__query_builder::HasIxCols for Enemy {
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         EnemyIxCols {
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            world_id: __sdk::__query_builder::IxCol::new(table_name, "world_id"),
         }
     }
 }

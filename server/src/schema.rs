@@ -41,6 +41,7 @@ pub struct Enemy {
     #[auto_inc]
     pub id: u64,
     pub enemy_type: u8,
+    #[index(btree)]
     pub world_id: u32,
 
     // Position
@@ -70,8 +71,8 @@ pub struct Enemy {
     pub last_attack_time: i64,
 }
 
-/// Ephemeral hit notification. Inserted by attack_hit, consumed by clients for VFX.
-#[spacetimedb::table(accessor = combat_event, public)]
+/// Ephemeral hit notification — broadcast to subscribed clients, then auto-deleted.
+#[spacetimedb::table(accessor = combat_event, public, event)]
 pub struct CombatEvent {
     #[primary_key]
     #[auto_inc]
@@ -111,11 +112,12 @@ pub struct TickSchedule {
 
 /// Knockback impulse to be applied to an enemy during the next physics tick.
 /// Inserted by combat reducers, consumed by game_tick.
-#[spacetimedb::table(accessor = knockback_impulse, public)]
+#[spacetimedb::table(accessor = knockback_impulse)]
 pub struct KnockbackImpulse {
     #[primary_key]
     #[auto_inc]
     pub id: u64,
+    #[index(btree)]
     pub enemy_id: u64,
     pub world_id: u32,
     pub impulse_x: f32,
@@ -131,7 +133,7 @@ pub struct WorldPause {
 }
 
 /// Horde spawner state — one row per world, drives automatic enemy spawning.
-#[spacetimedb::table(accessor = horde_state, public)]
+#[spacetimedb::table(accessor = horde_state)]
 pub struct HordeState {
     #[primary_key]
     pub world_id: u32,

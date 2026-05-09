@@ -362,26 +362,6 @@ fn update_overlay(
             spawn_title(&mut commands, panel_entity, &fonts, "Enemies  none");
         }
 
-        // Server events
-        if !server_diag.recent_events.is_empty() {
-            spawn_title(
-                &mut commands,
-                panel_entity,
-                &fonts,
-                format!("Server Events  ({})", server_diag.recent_events.len()),
-            );
-            let mut body = String::new();
-            for evt in &server_diag.recent_events {
-                let crit = if evt.is_crit { " CRIT" } else { "" };
-                let _ = writeln!(
-                    body,
-                    "{:.0} dmg at ({:.1}, {:.1}){crit}",
-                    evt.damage, evt.x, evt.z
-                );
-            }
-            spawn_body(&mut commands, panel_entity, body.trim_end());
-        }
-
         // Desync warning
         if let Some((local, server)) = server_diag.health_desync {
             spawn_title(

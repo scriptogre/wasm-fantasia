@@ -27,19 +27,6 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         return;
     }
 
-    // Cleanup old combat events in this world (older than 5 seconds)
-    let stale_threshold = now - 5_000_000;
-    let stale_ids: Vec<u64> = ctx
-        .db
-        .combat_event()
-        .iter()
-        .filter(|e| e.world_id == attacker.world_id && e.timestamp < stale_threshold)
-        .map(|e| e.id)
-        .collect();
-    for id in stale_ids {
-        ctx.db.combat_event().id().delete(id);
-    }
-
     // Cooldown check
     if !combat::can_attack(attacker.last_attack_time, now, attacker.attack_speed) {
         return;
@@ -92,12 +79,13 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         speed: 0.0,
     };
 
-    // Build target list from enemies in the same world
+    // Build target list from enemies in the same world (indexed lookup)
     let enemy_targets: Vec<Enemy> = ctx
         .db
         .enemy()
-        .iter()
-        .filter(|e| e.health > 0.0 && e.world_id == attacker.world_id)
+        .world_id()
+        .filter(&attacker.world_id)
+        .filter(|e| e.health > 0.0)
         .collect();
 
     let targets: Vec<Combatant> = enemy_targets
@@ -278,9 +266,10 @@ fn aoe_hit(
     let enemy_targets: Vec<Enemy> = ctx
         .db
         .enemy()
-        .iter()
+        .world_id()
+        .filter(&attacker.world_id)
         .filter(|e| {
-            if e.health <= 0.0 || e.world_id != attacker.world_id {
+            if e.health <= 0.0 {
                 return false;
             }
             let dx = e.x - impact_x;

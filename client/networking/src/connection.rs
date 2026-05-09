@@ -1,7 +1,7 @@
 //! Connection lifecycle: connect, reconnect, handshake, disconnect, cleanup.
 
 use bevy::prelude::*;
-use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{DbContext, EventTable, Table, TableWithPrimaryKey};
 use web_time::Instant;
 
 use super::generated::combat_event_table::CombatEventTableAccess;

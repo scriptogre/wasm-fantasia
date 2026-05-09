@@ -49,6 +49,7 @@ impl __sdk::__query_builder::HasCols for KnockbackImpulse {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct KnockbackImpulseIxCols {
+    pub enemy_id: __sdk::__query_builder::IxCol<KnockbackImpulse, u64>,
     pub id: __sdk::__query_builder::IxCol<KnockbackImpulse, u64>,
 }
 
@@ -56,6 +57,7 @@ impl __sdk::__query_builder::HasIxCols for KnockbackImpulse {
     type IxCols = KnockbackImpulseIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         KnockbackImpulseIxCols {
+            enemy_id: __sdk::__query_builder::IxCol::new(table_name, "enemy_id"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
         }
     }
