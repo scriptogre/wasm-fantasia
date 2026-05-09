@@ -89,13 +89,24 @@ generate:
 
 # Deploy to production
 deploy: build-web
-    rsync -az --delete target/bevy_web/web-release/game-client/ pi:~/game/web/
-    scp -q target/wasm32-unknown-unknown/release/game-server.wasm thinkcentre:/tmp/
-    ssh thinkcentre "docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/game-server.wasm --yes game-server"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Client: copy into the Caddy Docker volume
+    ssh thinkcentre "sudo rm -rf /var/lib/docker/volumes/caddy_game_web/_data/*"
+    rsync -az --delete target/bevy_web/web-release/game-client/ thinkcentre:/srv/game/
+    ssh thinkcentre "sudo cp -r /srv/game/* /var/lib/docker/volumes/caddy_game_web/_data/"
+    # Server: docker cp into container, then publish
+    scp -q target/wasm32-unknown-unknown/release/game_server.wasm thinkcentre:/tmp/game-server.wasm
+    ssh thinkcentre "docker cp /tmp/game-server.wasm spacetimedb:/tmp/game-server.wasm && docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/game-server.wasm --yes game-server"
 
-# Build WASM client + server module
+# Build WASM client + server module (server without thread flags for SpacetimeDB)
 build-web:
-    cargo build -p game-server --target wasm32-unknown-unknown --release
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Server must be built WITHOUT atomics/threads (SpacetimeDB doesn't support them)
+    mv .cargo/config.toml .cargo/config.toml.bak
+    cargo +stable build -p game-server --target wasm32-unknown-unknown --release
+    mv .cargo/config.toml.bak .cargo/config.toml
     cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
 
 # Wipe SpacetimeDB data and redeploy module

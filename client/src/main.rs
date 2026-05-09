@@ -11,6 +11,7 @@ pub mod audio;
 pub mod camera;
 pub mod combat;
 pub mod game;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod gpu_pass_profiler;
 pub use game_client_models as models;
 pub use game_client_networking as networking;
@@ -35,7 +36,8 @@ fn main() {
         primary_window: Some(Window {
             title: "WASM Fantasia".to_string(),
             fit_canvas_to_parent: true,
-..default()
+            visible: false,
+            ..default()
         }),
         ..default()
     };
@@ -75,6 +77,7 @@ fn main() {
     };
 
     app.insert_resource(ClearColor(ui::colors::VOID));
+    app.insert_resource(WindowRevealCountdown(3));
     app.add_plugins(
         DefaultPlugins
             .set(window)
@@ -89,6 +92,8 @@ fn main() {
     app.add_plugins(bevy_hanabi::HanabiPlugin);
     app.add_plugins(bevy_open_vat::prelude::OpenVatPlugin);
 
+    app.add_systems(Update, reveal_window.run_if(resource_exists::<WindowRevealCountdown>));
+
     // custom plugins. the order is important
     // be sure you use resources/types AFTER you add plugins that insert them
     app.add_plugins((
@@ -98,8 +103,9 @@ fn main() {
         ui::plugin,
         scripting::plugin,
         game::plugin,
-        gpu_pass_profiler::plugin,
     ));
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_plugins(gpu_pass_profiler::plugin);
 
     app.add_plugins(networking::NetworkingPlugin);
 
@@ -111,4 +117,24 @@ fn main() {
         |bytes: &[u8], _path: String| { Font::try_from_bytes(bytes.to_vec()).unwrap() }
     );
     app.run();
+}
+
+/// Wait a few frames before showing the window so shaders compile and the
+/// magenta fallback never appears on screen (Bevy bug #20756).
+#[derive(Resource)]
+struct WindowRevealCountdown(u8);
+
+fn reveal_window(
+    mut countdown: ResMut<WindowRevealCountdown>,
+    mut windows: Query<&mut Window>,
+    mut commands: Commands,
+) {
+    if countdown.0 > 0 {
+        countdown.0 -= 1;
+        return;
+    }
+    if let Ok(mut window) = windows.single_mut() {
+        window.visible = true;
+    }
+    commands.remove_resource::<WindowRevealCountdown>();
 }
