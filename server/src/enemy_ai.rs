@@ -1,5 +1,7 @@
 use avian3d::prelude::*;
-use game_core::combat::{self, defaults, enemy_ai_decision, enemy_types, EnemyBehaviorKind};
+use game_core::combat::{
+    self, EnemyBehaviorKind, defaults, enemy_ai_decision, enemy_animation_state, enemy_types,
+};
 use spacetimedb::Table;
 use std::collections::HashMap;
 
@@ -7,8 +9,8 @@ use std::collections::HashMap;
 /// Each pair (i, j) is visited exactly once — no `j <= i` skip needed.
 const HALF_NEIGHBORS: [(i32, i32); 5] = [(0, 0), (1, 0), (-1, 1), (0, 1), (1, 1)];
 
-use crate::schema::*;
 use crate::TICK_INTERVAL_MICROS;
+use crate::schema::*;
 
 /// Spawn a pack of enemies at the given position and facing direction.
 #[spacetimedb::reducer]
@@ -115,8 +117,6 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     if players_by_world.is_empty() {
         return;
     }
-
-
 
     // Group alive enemies by world_id
     let mut enemies_by_world: HashMap<u32, Vec<Enemy>> = HashMap::new();
@@ -346,13 +346,19 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             let current_state = EnemyBehaviorKind::from_u8(enemy.animation_state);
             let state_elapsed = (now - enemy.state_start_time) as f32 / 1_000_000.0;
             let attack_cooldown_ready = (now - enemy.last_attack_time) >= cooldown_micros;
-            let decision = enemy_ai_decision(current_state, state_elapsed, nearest_dist, attack_cooldown_ready);
-
+            let decision = enemy_ai_decision(
+                current_state,
+                state_elapsed,
+                nearest_dist,
+                attack_cooldown_ready,
+            );
 
             // Check if enemy is at the hit frame of its attack
             if current_state == EnemyBehaviorKind::Attack {
                 let prev_elapsed = state_elapsed - dt;
-                if prev_elapsed < defaults::ENEMY_ATTACK_HIT && state_elapsed >= defaults::ENEMY_ATTACK_HIT {
+                if prev_elapsed < defaults::ENEMY_ATTACK_HIT
+                    && state_elapsed >= defaults::ENEMY_ATTACK_HIT
+                {
                     if nearest_dist <= defaults::ENEMY_ATTACK_RANGE {
                         pending_player_damage.push((nearest_player_identity, enemy.attack_damage));
                     }
@@ -377,7 +383,11 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
             // that would push the enemy toward the player. Without this, a horde
             // converging on the player stacks separation forces and pushes front
             // enemies straight through the player.
-            let sep_scale = if decision == EnemyBehaviorKind::Attack { 0.3 } else { 1.0 };
+            let sep_scale = if decision == EnemyBehaviorKind::Attack {
+                0.3
+            } else {
+                1.0
+            };
             let mut sep_x = separation[idx].0 * sep_scale;
             let mut sep_z = separation[idx].1 * sep_scale;
 
@@ -512,7 +522,8 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
                 enemy.last_attack_time
             };
 
-            let new_anim = update.decision.as_u8();
+            let planar_speed = update.new_vx.hypot(update.new_vz);
+            let new_anim = enemy_animation_state(update.decision, planar_speed).as_u8();
 
             // Update state_start_time only when the state actually changes
             let state_start_time = if new_anim != enemy.animation_state {
@@ -571,5 +582,4 @@ pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
     for id in impulse_ids {
         ctx.db.knockback_impulse().id().delete(id);
     }
-
 }

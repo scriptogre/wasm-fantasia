@@ -29,6 +29,10 @@ pub mod defaults {
     pub const ENEMY_ATTACK_DURATION: f32 = 1.0;
     /// Hysteresis: must exceed this distance to leave attack idle (> ATTACK_RANGE).
     pub const ENEMY_ATTACK_DISENGAGE: f32 = 2.5;
+    /// Minimum planar speed before enemies should visibly play locomotion.
+    /// Filters out tiny settle jitter while keeping separation-driven shuffling
+    /// on the walk clip instead of idle.
+    pub const ENEMY_ANIMATION_SPEED_EPSILON: f32 = 0.1;
 
     /// Enemies within this radius push each other apart.
     pub const ENEMY_SEPARATION_RADIUS: f32 = 1.2;
@@ -93,6 +97,21 @@ pub fn enemy_ai_decision(
         EnemyBehaviorKind::Chase
     } else {
         // In attack range, cooldown not ready — wait.
+        EnemyBehaviorKind::Idle
+    }
+}
+
+/// Choose the replicated visual state for an enemy.
+///
+/// Attack is authoritative. For non-attack states, derive locomotion from
+/// actual planar movement instead of the AI decision so separation/knockback
+/// cannot produce visible idle-sliding or rapid Idle<->Chase clip resets.
+pub fn enemy_animation_state(decision: EnemyBehaviorKind, planar_speed: f32) -> EnemyBehaviorKind {
+    if decision == EnemyBehaviorKind::Attack {
+        EnemyBehaviorKind::Attack
+    } else if planar_speed > defaults::ENEMY_ANIMATION_SPEED_EPSILON {
+        EnemyBehaviorKind::Chase
+    } else {
         EnemyBehaviorKind::Idle
     }
 }
@@ -320,6 +339,31 @@ pub fn can_attack(last_attack_micros: i64, now_micros: i64, attack_speed: f32) -
     let cooldown_micros =
         (defaults::ATTACK_COOLDOWN_SECS as f64 * 1_000_000.0 / attack_speed as f64) as i64;
     now_micros - last_attack_micros >= cooldown_micros
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enemy_animation_state_keeps_attack_authoritative() {
+        assert_eq!(
+            enemy_animation_state(EnemyBehaviorKind::Attack, 0.0),
+            EnemyBehaviorKind::Attack
+        );
+    }
+
+    #[test]
+    fn enemy_animation_state_uses_motion_for_non_attack_states() {
+        assert_eq!(
+            enemy_animation_state(EnemyBehaviorKind::Idle, 0.5),
+            EnemyBehaviorKind::Chase
+        );
+        assert_eq!(
+            enemy_animation_state(EnemyBehaviorKind::Chase, 0.0),
+            EnemyBehaviorKind::Idle
+        );
+    }
 }
 
 // ============================================================================
