@@ -8,6 +8,10 @@
 
 **Everything composes.** Small blocks build into larger blocks. The same scripting API that defines abilities also defines environment transitions and enemy behaviors.
 
+## Scripting runtime
+
+Rune scripts mutate cloned `Combatant` snapshots through semantic primitives (`apply_damage`, `heal`, `set_stat`), so a script can read the result of its own writes. Each primitive logs an `Intent`; presentation calls (`vfx`, sound) log an `Effect`. After the script returns, the engine applies intents to real state (ECS on client, SpacetimeDB tables on server) and the client drains effects. Server runs no-op effect bodies.
+
 ## Multiplayer model
 
 SpacetimeDB is the authority for all game modes. Singleplayer = local SpacetimeDB instance. The shared `core/` crate contains pure logic (combat resolution, rules, RNG) with no Bevy or IO dependencies.
