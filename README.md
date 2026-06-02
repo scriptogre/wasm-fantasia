@@ -1,8 +1,10 @@
-# wasm-fantasia
+# WASM Fantasia
 
 Session-based MMO prototype. Bevy 0.17 + SpacetimeDB multiplayer, targeting native and WebAssembly.
 
-**Status:** Early prototype. Expect rough edges.
+<img width="500" alt="wasm fantasia" src="https://github.com/user-attachments/assets/e1182eb1-bc7b-43da-93ab-e51b36979e69" />
+
+**Status:** Very early prototype.
 
 ## What's here
 
@@ -11,11 +13,6 @@ Session-based MMO prototype. Bevy 0.17 + SpacetimeDB multiplayer, targeting nati
 - Combat system with attacks, targeting, damage numbers, hit VFX, screen shake
 - Animated zombie enemies with chase-and-attack AI (server-side)
 - Data-driven rules engine (stats, conditions, effects, triggers)
-- Dual-platform SpacetimeDB: local server for native SP, remote for web/MP, world isolation via `world_id`
-- Day/night skybox cycle
-- Audio system with music crossfading (native only)
-- Screen flow: splash, loading, title, connecting, settings, gameplay
-- Blender scene integration via bevy_skein
 - Self-contained native distribution (`just build`)
 
 ## Prerequisites
@@ -36,23 +33,3 @@ just build        # Native release bundle (dist/native/)
 just web-build    # Full web release bundle
 just check        # Clippy + fmt + machete + web compilation check
 ```
-
-## Project structure
-
-| Path | Description |
-|------|-------------|
-| `client/` | Bevy game client — all gameplay, rendering, UI, audio |
-| `shared/` | Pure functions shared between client and server (combat, rules, RNG) |
-| `server/` | SpacetimeDB server module — authoritative game state, reducers |
-| `crates/` | Local dependency forks (spacetimedb-sdk, tokio-tungstenite-wasm) |
-| `docs/` | Design and architecture documents |
-
-## Feature flags
-
-| Flag | Description |
-|------|-------------|
-| `dev_native` | Dev tools, inspector, asset hot-reloading (default) |
-| `audio` | bevy_seedling audio, native only (included in `dev_native`) |
-| `third_person` | Third-person orbit camera (default) |
-| `multiplayer` | SpacetimeDB networking |
-| `web` | WebGPU/WASM target |
