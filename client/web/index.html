@@ -10,40 +10,61 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #10131a; color: white; font: 16px system-ui; }
     canvas { display: block; width: 100% !important; height: 100% !important; outline: none; touch-action: none; }
-    #loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+    #loading { position: fixed; inset: 0; z-index: 1; display: grid; place-content: center; padding: 24px; text-align: center; pointer-events: none; }
   </style>
 </head>
 <body>
   <div id="loading">Loading WASM Fantasia...</div>
   <noscript>This game needs JavaScript.</noscript>
   <script type="module">
-    const contexts = [];
-    window.AudioContext = new Proxy(window.AudioContext, {
-      construct(target, args) {
-        const context = new target(...args);
-        contexts.push(context);
-        return context;
-      }
-    });
-    for (const event of ["pointerdown", "touchend", "keydown"]) {
-      document.addEventListener(event, () => {
-        for (const context of contexts) {
-          if (context.state === "suspended") context.resume();
-        }
-      }, { passive: true });
-    }
-    import init from "{% entrypoint %}.js";
     const loading = document.getElementById("loading");
     const observer = new MutationObserver(() => {
-      if (document.querySelector("canvas")) { loading.remove(); observer.disconnect(); }
+      const canvas = document.querySelector("canvas");
+      if (canvas && getComputedStyle(canvas).display !== "none") {
+        loading.remove();
+        observer.disconnect();
+      }
     });
-    observer.observe(document.body, { childList: true });
-    init().catch(error => {
-      if (error.message?.startsWith("Using exceptions for control flow")) return;
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style"] });
+
+    function showError(error) {
+      const message = error?.message || String(error);
+      if (message.startsWith("Using exceptions for control flow")) return;
+      observer.disconnect();
       document.body.append(loading);
-      loading.textContent = "Could not start the game. Reload in a browser with WebGPU support.";
+      loading.textContent = `Could not start the game. ${message}`;
       console.error(error);
-    });
+    }
+    window.addEventListener("error", event => showError(event.error || event.message));
+    window.addEventListener("unhandledrejection", event => showError(event.reason));
+
+    try {
+      if (!crossOriginIsolated) {
+        throw new Error("Open this page directly in Safari or Chrome. This browser has blocked shared memory.");
+      }
+      if (!navigator.gpu || !await navigator.gpu.requestAdapter()) {
+        throw new Error("WebGPU is unavailable. Try an updated Safari or Chrome browser. On iPhone, WebGPU needs iOS 26 or later.");
+      }
+      const contexts = [];
+      window.AudioContext = new Proxy(window.AudioContext, {
+        construct(target, args) {
+          const context = new target(...args);
+          contexts.push(context);
+          return context;
+        }
+      });
+      for (const event of ["pointerdown", "touchend", "keydown"]) {
+        document.addEventListener(event, () => {
+          for (const context of contexts) {
+            if (context.state === "suspended") context.resume();
+          }
+        }, { passive: true });
+      }
+      const { default: init } = await import("{% entrypoint %}.js");
+      await init();
+    } catch (error) {
+      showError(error);
+    }
   </script>
 </body>
 </html>
