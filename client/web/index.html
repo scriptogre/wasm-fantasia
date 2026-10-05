@@ -2,19 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#10131a">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#030303">
   <title>WASM Fantasia</title>
   <link rel="icon" href="data:,">
   <style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #10131a; color: white; font: 16px system-ui; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #030303; color: #a3a3a3; font: 600 13px/1.5 system-ui, sans-serif; letter-spacing: 0.04em; }
     canvas { display: block; width: 100% !important; height: 100% !important; outline: none; touch-action: none; }
-    #loading { position: fixed; inset: 0; z-index: 1; display: grid; place-content: center; padding: 24px; text-align: center; pointer-events: none; }
+    #loading { position: fixed; inset: 0; z-index: 1; display: grid; place-content: center; padding: 24px; max-width: 420px; margin: auto; text-align: center; pointer-events: none; }
   </style>
 </head>
 <body>
-  <div id="loading">Loading WASM Fantasia...</div>
+  <div id="loading">Loading</div>
   <noscript>This game needs JavaScript.</noscript>
   <script type="module">
     const loading = document.getElementById("loading");
@@ -36,7 +36,14 @@
       console.error(error);
     }
     window.addEventListener("error", event => showError(event.error || event.message));
-    window.addEventListener("unhandledrejection", event => showError(event.reason));
+    window.addEventListener("unhandledrejection", event => {
+      // Desktop pointer lock retries on the next click if loading outlasts the user gesture.
+      if (event.reason?.name === "NotAllowedError" && /pointer\s*lock/i.test(event.reason.message)) {
+        event.preventDefault();
+        return;
+      }
+      showError(event.reason);
+    });
 
     try {
       if (!crossOriginIsolated) {

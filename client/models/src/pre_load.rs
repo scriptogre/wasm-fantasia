@@ -41,7 +41,6 @@ pub struct PlayerPreset {
     pub movement: MovementPreset,
     pub hitbox: HitboxPreset,
     pub zoom: (f32, f32),
-    pub fov: f32,
     pub spawn_pos: (f32, f32, f32),
 }
 

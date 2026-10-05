@@ -1,4 +1,5 @@
 use super::*;
+use bevy::text::LineHeight;
 
 /// This plugin is responsible for the game menu
 /// The menu is only drawn during the State [`Screen::Title`] and is removed when that state is exited
@@ -9,6 +10,7 @@ pub fn plugin(app: &mut App) {
 fn setup_menu(
     mut commands: Commands,
     mut state: ResMut<Session>,
+    fonts: Res<crate::asset_loading::Fonts>,
     #[cfg(not(target_arch = "wasm32"))] server_state: Option<
         Res<crate::networking::local_server::LocalServerState>,
     >,
@@ -18,24 +20,45 @@ fn setup_menu(
             DespawnOnExit(Screen::Title),
             GlobalZIndex(1),
             ui_root("Title UI"),
-            BackgroundColor(colors::NEUTRAL950),
+            BackgroundColor(colors::VOID),
         ))
         .with_children(|root| {
+            // Thumb-reachable column: bottom-left on desktop, full width on phones
             root.spawn(Node {
                 position_type: PositionType::Absolute,
                 flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexStart,
-                row_gap: Vh(1.5),
-                bottom: Vw(5.0),
-                left: Vw(5.0),
+                row_gap: Px(12.0),
+                left: Vw(8.0),
+                right: Vw(8.0),
+                bottom: Vh(10.0),
+                max_width: Px(360.0),
                 ..default()
             })
-            .with_children(|buttons| {
-                let menu = || {
-                    Props::default()
-                        .min_width(Vw(30.0))
-                        .padding(UiRect::axes(Vw(8.0), Vh(2.0)))
-                };
+            .with_children(|menu| {
+                menu.spawn((
+                    Node {
+                        width: Px(40.0),
+                        height: Px(4.0),
+                        ..default()
+                    },
+                    BackgroundColor(colors::AMBER),
+                ));
+                menu.spawn((
+                    Text::new("WASM\nFANTASIA"),
+                    TextFont {
+                        font: fonts.bold.clone(),
+                        font_size: size::DISPLAY_SIZE,
+                        ..default()
+                    },
+                    LineHeight::RelativeToFont(1.0),
+                    TextColor(colors::NEUTRAL50),
+                    Node {
+                        margin: UiRect::bottom(Px(20.0)),
+                        ..default()
+                    },
+                ));
+
+                let primary = || Props::default().palette_set(PaletteSet::primary());
 
                 // Native: Resume existing or start new singleplayer session
                 #[cfg(not(target_arch = "wasm32"))]
@@ -48,45 +71,33 @@ fn setup_menu(
                     });
 
                     if has_running_server {
-                        let half = || Props::default().padding(UiRect::axes(Vw(2.0), Vh(2.0)));
-                        let half_slot = || Node {
-                            flex_grow: 1.0,
-                            flex_basis: Percent(0.0),
-                            flex_direction: FlexDirection::Column,
-                            ..default()
-                        };
-                        buttons.spawn((
+                        menu.spawn((
                             Node {
-                                min_width: Vw(30.0),
-                                column_gap: Vh(1.5),
+                                display: Display::Grid,
+                                grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
+                                column_gap: Px(12.0),
                                 ..default()
                             },
                             children![
-                                (
-                                    half_slot(),
-                                    children![btn(half().text("Resume"), to::singleplayer)]
-                                ),
-                                (
-                                    half_slot(),
-                                    children![btn(half().text("New Game"), to::new_singleplayer)]
-                                ),
+                                btn(primary().text("Resume"), to::singleplayer),
+                                btn("New Game", to::new_singleplayer),
                             ],
                         ));
                     } else {
-                        buttons.spawn(btn(menu().text("Singleplayer"), to::singleplayer));
+                        menu.spawn(btn(primary().text("Singleplayer"), to::singleplayer));
                     }
                 }
 
                 // Web: "Solo" creates a private session on the remote server
                 #[cfg(target_arch = "wasm32")]
-                buttons.spawn(btn(menu().text("Solo"), to::solo));
+                menu.spawn(btn(primary().text("Solo"), to::solo));
 
-                buttons.spawn(btn(menu().text("Multiplayer"), to::multiplayer));
+                menu.spawn(btn("Multiplayer", to::multiplayer));
 
-                buttons.spawn(btn(menu().text("Settings"), to::settings));
+                menu.spawn(btn("Settings", to::settings));
 
                 #[cfg(not(target_arch = "wasm32"))]
-                buttons.spawn(btn(menu().text("Exit"), exit_app));
+                menu.spawn(btn("Exit", exit_app));
             });
         });
 

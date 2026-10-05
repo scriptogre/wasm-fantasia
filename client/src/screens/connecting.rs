@@ -4,9 +4,9 @@
 //! Handles both local server startup (native SP) and remote connections (MP / web solo).
 
 use super::*;
+use bevy::text::LineHeight;
 
 use crate::networking::{ReconnectTimer, SpacetimeDbConfig, SpacetimeDbConnection};
-use crate::ui::hud::HudFont;
 use spacetimedb_sdk::DbContext;
 
 const CONNECTION_TIMEOUT_SECS: f32 = 10.0;
@@ -64,7 +64,6 @@ pub fn plugin(app: &mut App) {
 
 fn spawn_connecting_screen(
     mut commands: Commands,
-    font: Res<HudFont>,
     server_target: Option<Res<ServerTarget>>,
     config: Res<SpacetimeDbConfig>,
 ) {
@@ -77,7 +76,10 @@ fn spawn_connecting_screen(
             log.push("Starting local SpacetimeDB server...");
         }
         Some(ServerTarget::Remote { uri }) => {
-            log.push(format!("Connecting to {} ({})...", uri, config.database_name));
+            log.push(format!(
+                "Connecting to {} ({})...",
+                uri, config.database_name
+            ));
         }
         None => {
             log.push(format!(
@@ -93,59 +95,31 @@ fn spawn_connecting_screen(
         TimerMode::Once,
     )));
 
-    let log_font = TextFont {
-        font: font.0.clone(),
-        font_size: 14.0,
-        ..default()
-    };
-
     commands
         .spawn((
             DespawnOnExit(Screen::Connecting),
             GlobalZIndex(1),
             ui_root("Connecting Screen"),
-            BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),
+            BackgroundColor(colors::VOID),
         ))
         .with_children(|root| {
-            // Title
-            root.spawn((
-                Text::new("CONNECTING"),
-                TextFont {
-                    font: font.0.clone(),
-                    font_size: 24.0,
-                    ..default()
-                },
-                TextColor(colors::NEUTRAL300),
-            ));
-
-            // Console log area
-            root.spawn((
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::FlexStart,
-                    padding: UiRect::all(Px(16.0)),
-                    min_width: Vw(50.0),
-                    min_height: Vh(15.0),
-                    border_radius: BorderRadius::all(Px(4.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.3)),
-            ))
-            .with_children(|log_area| {
-                log_area.spawn((
+            root.spawn(panel(420.0)).with_children(|panel| {
+                panel.spawn(header("Connecting"));
+                panel.spawn((
                     LogText,
                     Text::new(""),
-                    log_font,
-                    TextColor(Color::srgb(0.4, 0.8, 0.4)),
+                    TextFont::from_font_size(size::CAPTION_SIZE),
+                    LineHeight::RelativeToFont(1.5),
+                    TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
+                    TextColor(colors::NEUTRAL400),
+                    Node {
+                        min_height: Px(96.0),
+                        margin: UiRect::vertical(Px(8.0)),
+                        ..default()
+                    },
                 ));
+                panel.spawn(btn("Cancel", cancel_connecting));
             });
-
-            root.spawn(btn(
-                Props::new("Cancel")
-                    .margin(UiRect::ZERO)
-                    .padding(UiRect::axes(Vw(1.0), Px(6.0))),
-                cancel_connecting,
-            ));
         });
 }
 
@@ -226,16 +200,16 @@ fn track_connection_state(
     if !log.showed_target {
         log.showed_target = true;
         let has_conn = conn.is_some();
-        log.push(format!(
-            "state={:?} mode={:?} conn={} timer={:.2}/{:.2}",
+        info!(
+            "[connect] state={:?} mode={:?} conn={} timer={:.2}/{:.2}",
             screen.get(),
             *mode,
             has_conn,
             timer.0.elapsed_secs(),
             timer.0.duration().as_secs_f32(),
-        ));
+        );
         if has_conn {
-            log.push("WARNING: stale SpacetimeDbConnection resource exists");
+            warn!("[connect] stale SpacetimeDbConnection resource exists");
         }
     }
 

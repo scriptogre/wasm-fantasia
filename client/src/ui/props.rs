@@ -5,9 +5,6 @@ use std::borrow::Cow;
 pub struct Props {
     pub content: WidgetContent,
     pub palette_set: PaletteSet,
-    // layout
-    pub border_color: BorderColor,
-    pub bg_color: BackgroundColor,
     pub node: Node,
 }
 
@@ -23,13 +20,12 @@ impl Props {
                 align_content: AlignContent::Center,
                 justify_items: JustifyItems::Center,
                 justify_content: JustifyContent::Center,
-                border: UiRect::all(Px(2.0)),
-                padding: UiRect::horizontal(Vw(3.0)),
+                border: UiRect::all(Px(1.0)),
+                padding: UiRect::axes(Px(24.0), Px(10.0)),
+                min_height: size::BUTTON_HEIGHT,
                 border_radius: BorderRadius::all(size::BORDER_RADIUS),
                 ..Default::default()
             },
-            bg_color: BackgroundColor(colors::NEUTRAL900),
-            border_color: BorderColor::all(colors::NEUTRAL850),
         }
     }
 
@@ -49,14 +45,6 @@ impl Props {
         if let WidgetContent::Text(ref mut t) = self.content {
             *t.color = c;
         }
-        self
-    }
-    pub fn bg_color(mut self, color: Color) -> Self {
-        self.bg_color = BackgroundColor(color);
-        self
-    }
-    pub fn border_color(mut self, color: Color) -> Self {
-        self.border_color = BorderColor::all(color);
         self
     }
     pub fn border_radius(mut self, r: Val) -> Self {
@@ -155,7 +143,6 @@ pub struct TextContent {
     pub color: TextColor,
     pub layout: TextLayout,
     pub font: TextFont,
-    pub border: BorderColor,
 }
 
 impl From<Cow<'static, str>> for TextContent {
@@ -170,13 +157,9 @@ impl Default for TextContent {
     fn default() -> Self {
         Self {
             text: "".into(),
-            color: colors::NEUTRAL300.into(),
+            color: colors::NEUTRAL200.into(),
             layout: TextLayout::new_with_justify(Justify::Center),
             font: TextFont::from_font_size(size::FONT_SIZE),
-            border: BorderColor {
-                bottom: colors::NEUTRAL100,
-                ..BorderColor::DEFAULT
-            },
         }
     }
 }

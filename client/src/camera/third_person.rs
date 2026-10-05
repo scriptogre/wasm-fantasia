@@ -15,6 +15,8 @@ pub fn plugin(app: &mut App) {
 
 fn add_tpv_cam(
     cfg: Res<Config>,
+    settings: Res<Settings>,
+    touch: Res<crate::player::touch::TouchControls>,
     mut commands: Commands,
     mut camera: Query<(Entity, &mut Transform), With<SceneCamera>>,
     mut tpv_cam: Query<Entity, With<ThirdPersonCamera>>,
@@ -34,6 +36,7 @@ fn add_tpv_cam(
 
     commands.entity(cam).insert((
         ThirdPersonCamera {
+            cursor_lock_active: !touch.enabled,
             zoom_enabled: true,
             zoom: Zoom::new(cfg.player.zoom.0, cfg.player.zoom.1),
             zoom_sensitivity: 0.2, // Reduced from default ~1.0 for trackpad
@@ -43,7 +46,7 @@ fn add_tpv_cam(
             ..default()
         },
         Projection::from(PerspectiveProjection {
-            fov: cfg.player.fov.to_radians(),
+            fov: settings.fov.to_radians(),
             ..Default::default()
         }),
     ));
@@ -66,10 +69,11 @@ fn toggle_cam_cursor(
     _: On<CamCursorToggle>,
     mut cam: Query<&mut ThirdPersonCamera>,
     modals: Res<Modals>,
+    touch: Res<crate::player::touch::TouchControls>,
 ) {
     let Ok(mut cam) = cam.single_mut() else {
         return;
     };
     // Explicitly set based on modal state — avoids desync from double-fires
-    cam.cursor_lock_active = modals.is_empty();
+    cam.cursor_lock_active = modals.is_empty() && !touch.enabled;
 }

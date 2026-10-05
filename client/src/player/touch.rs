@@ -2,6 +2,7 @@ use bevy::{input::InputSystems, prelude::*, window::PrimaryWindow};
 use bevy_enhanced_input::prelude::*;
 
 use crate::models::{Attack, Jump, Navigate, PlayerCtx, SceneCamera, Screen};
+use crate::ui::{Modal, NewModal, colors, size};
 
 #[derive(Resource, Default)]
 pub struct TouchControls {
@@ -16,7 +17,17 @@ enum TouchButton {
     Move,
     Attack,
     Jump,
+    Pause,
 }
+
+/// Joystick thumb, follows the move drag
+#[derive(Component)]
+struct TouchKnob;
+
+/// Knob offset in px at full stick deflection
+const KNOB_TRAVEL: f32 = 36.0;
+/// Dark glass so controls read on any background without hiding it
+const IDLE: Color = Color::oklcha(0.145, 0.0, 0.0, 0.35);
 
 pub fn plugin(app: &mut App) {
     #[cfg(not(target_arch = "wasm32"))]
@@ -34,71 +45,113 @@ pub fn plugin(app: &mut App) {
 }
 
 fn spawn_controls(mut commands: Commands) {
-    commands
-        .spawn((
-            TouchUi,
-            DespawnOnExit(Screen::Gameplay),
+    let edge = size::EDGE;
+    let rim = colors::NEUTRAL50.with_alpha(0.2);
+    let circle = |diameter: f32| Node {
+        position_type: PositionType::Absolute,
+        width: px(diameter),
+        height: px(diameter),
+        border: UiRect::all(px(1.5)),
+        border_radius: BorderRadius::MAX,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        ..default()
+    };
+    let caption = |text: &'static str| {
+        (
+            Text::new(text),
+            TextFont::from_font_size(size::CAPTION_SIZE),
+            TextColor(colors::NEUTRAL50.with_alpha(0.85)),
+            Pickable::IGNORE,
+        )
+    };
+    let pause_bar = || {
+        (
             Node {
-                width: percent(100),
-                height: percent(100),
-                position_type: PositionType::Absolute,
+                width: px(4),
+                height: px(14),
+                border_radius: BorderRadius::all(px(1)),
                 ..default()
             },
-            Visibility::Hidden,
-            GlobalZIndex(100),
+            BackgroundColor(colors::NEUTRAL50.with_alpha(0.85)),
             Pickable::IGNORE,
-        ))
-        .with_children(|parent| {
-            for (button, label, size, right, bottom) in [
-                (TouchButton::Move, "MOVE", 144.0, false, 24.0),
-                (TouchButton::Attack, "HIT", 88.0, true, 24.0),
-                (TouchButton::Jump, "JUMP", 64.0, true, 132.0),
-            ] {
-                parent
-                    .spawn((
-                        button,
-                        Node {
-                            position_type: PositionType::Absolute,
-                            width: px(size),
-                            height: px(size),
-                            left: if right { Val::Auto } else { px(24) },
-                            right: if right { px(24) } else { Val::Auto },
-                            bottom: px(bottom),
-                            border: UiRect::all(px(2)),
-                            border_radius: BorderRadius::MAX,
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::Center,
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgba(0.07, 0.1, 0.15, 0.55)),
-                        BorderColor::all(Color::srgba(0.8, 0.9, 1.0, 0.65)),
-                        Pickable::IGNORE,
-                    ))
-                    .with_child((
-                        Text::new(label),
-                        TextFont {
-                            font_size: 16.0,
-                            ..default()
-                        },
-                        Pickable::IGNORE,
-                    ));
-            }
-            parent.spawn((
-                Text::new("Drag to look. Hold HIT to attack. Jump + HIT to slam."),
-                TextFont {
-                    font_size: 14.0,
-                    ..default()
-                },
+        )
+    };
+
+    commands.spawn((
+        TouchUi,
+        DespawnOnExit(Screen::Gameplay),
+        Node {
+            width: percent(100),
+            height: percent(100),
+            position_type: PositionType::Absolute,
+            ..default()
+        },
+        Visibility::Hidden,
+        GlobalZIndex(100),
+        Pickable::IGNORE,
+        children![
+            (
+                TouchButton::Move,
                 Node {
-                    position_type: PositionType::Absolute,
-                    top: px(130),
-                    left: px(24),
-                    right: px(24),
-                    ..default()
+                    left: px(edge),
+                    bottom: px(edge),
+                    ..circle(132.0)
                 },
+                BackgroundColor(IDLE),
+                BorderColor::all(rim),
                 Pickable::IGNORE,
-            ));
-        });
+                children![(
+                    TouchKnob,
+                    Node {
+                        width: px(52),
+                        height: px(52),
+                        border_radius: BorderRadius::MAX,
+                        ..default()
+                    },
+                    BackgroundColor(colors::NEUTRAL50.with_alpha(0.25)),
+                    Pickable::IGNORE,
+                )],
+            ),
+            (
+                TouchButton::Attack,
+                Node {
+                    right: px(edge),
+                    bottom: px(edge + 8.0),
+                    ..circle(84.0)
+                },
+                BackgroundColor(IDLE),
+                BorderColor::all(colors::AMBER.with_alpha(0.7)),
+                Pickable::IGNORE,
+                children![caption("HIT")],
+            ),
+            (
+                TouchButton::Jump,
+                Node {
+                    right: px(edge + 100.0),
+                    bottom: px(edge + 80.0),
+                    ..circle(60.0)
+                },
+                BackgroundColor(IDLE),
+                BorderColor::all(rim),
+                Pickable::IGNORE,
+                children![caption("JUMP")],
+            ),
+            (
+                TouchButton::Pause,
+                Node {
+                    right: px(edge),
+                    top: px(edge),
+                    column_gap: px(4),
+                    ..circle(44.0)
+                },
+                BackgroundColor(IDLE),
+                BorderColor::all(rim),
+                Pickable::IGNORE,
+                children![pause_bar(), pause_bar()],
+            ),
+        ],
+    ));
 }
 
 fn touch_input(
@@ -106,8 +159,9 @@ fn touch_input(
     mut controls: ResMut<TouchControls>,
     window: Single<&Window, With<PrimaryWindow>>,
     screen: Res<State<Screen>>,
-    players: Query<(), With<PlayerCtx>>,
+    players: Query<Entity, With<PlayerCtx>>,
     mut ui: Query<&mut Visibility, With<TouchUi>>,
+    mut knob: Query<&mut UiTransform, With<TouchKnob>>,
     mut buttons: Query<(
         &TouchButton,
         &ComputedNode,
@@ -121,6 +175,7 @@ fn touch_input(
         Has<Action<Jump>>,
     )>,
     mut camera: Query<&mut Transform, With<SceneCamera>>,
+    mut commands: Commands,
 ) {
     controls.enabled |= touches.iter_just_pressed().next().is_some();
     let active = controls.enabled
@@ -159,6 +214,7 @@ fn touch_input(
     let mut movement = Vec2::ZERO;
     let mut attack = false;
     let mut jump = false;
+    let mut pause = false;
     let mut look = Vec2::ZERO;
     if active {
         for touch in touches.iter() {
@@ -175,6 +231,7 @@ fn touch_input(
                 }
                 Some((TouchButton::Attack, _)) => attack = true,
                 Some((TouchButton::Jump, _)) => jump = true,
+                Some((TouchButton::Pause, _)) => pause |= touches.just_pressed(touch.id()),
                 None if start.x > window.physical_width() as f32 * 0.45 => look += touch.delta(),
                 _ => {}
             }
@@ -200,17 +257,30 @@ fn touch_input(
             MockSpan::Manual,
         );
     }
+    if pause && let Ok(player) = players.single() {
+        commands.trigger(NewModal {
+            entity: player,
+            modal: Modal::Main,
+        });
+    }
     for (button, _, _, mut color) in &mut buttons {
         let pressed = match button {
             TouchButton::Move => movement.length_squared() > 0.01,
             TouchButton::Attack => attack,
             TouchButton::Jump => jump,
+            TouchButton::Pause => pause,
         };
         color.0 = if pressed {
-            Color::srgba(0.2, 0.6, 0.85, 0.8)
+            colors::AMBER.with_alpha(0.35)
         } else {
-            Color::srgba(0.07, 0.1, 0.15, 0.55)
+            IDLE
         };
+    }
+    let thumb = Val2::px(movement.x * KNOB_TRAVEL, -movement.y * KNOB_TRAVEL);
+    for mut knob in &mut knob {
+        if knob.translation != thumb {
+            knob.translation = thumb;
+        }
     }
     if look != Vec2::ZERO
         && let Ok(mut camera) = camera.single_mut()

@@ -15,7 +15,12 @@ fn spawn_loading_screen(mut commands: Commands) {
     commands.spawn((
         DespawnOnExit(Screen::Loading),
         ui_root("loading screen"),
-        children![label("Loading...")],
+        BackgroundColor(colors::VOID),
+        children![label(
+            Props::new("Loading")
+                .font_size(size::CAPTION_SIZE)
+                .color(colors::NEUTRAL500)
+        )],
     ));
 }
 

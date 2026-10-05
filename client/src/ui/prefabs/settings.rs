@@ -10,7 +10,8 @@ pub(super) fn plugin(app: &mut App) {
             update_music_volume_label,
             update_sfx_volume_label,
             update_fov_label,
-            update_tab_content.run_if(resource_changed::<ActiveTab>),
+            update_tab_content
+                .run_if(resource_changed::<ActiveTab>.or(any_match_filter::<Added<TabBar>>)),
         ),
     );
 }
@@ -24,10 +25,11 @@ markers!(
     FovLabel,
     TabBar,
     TabContent,
-    ScreenShakeLabel
+    ScreenShakeLabel,
+    DiagnosticsLabel
 );
 #[cfg(feature = "dev")]
-markers!(DiagnosticsLabel, DebugUiLabel);
+markers!(DebugUiLabel);
 
 // ============================ CONTROL KNOBS OBSERVERS ============================
 
@@ -38,23 +40,28 @@ pub fn save_settings(
     root: Query<&Children, With<SaveSettingsLabel>>,
     mut text_q: Query<&mut Text>,
 ) {
-    // TODO: this is an insane nesting, improve it
-    match settings.save() {
+    let status = match settings.save() {
         Ok(()) => {
-            info!("writing settings to '{SETTINGS_PATH}'");
-            if let Ok(children) = root.single() {
-                for child in children.iter() {
-                    if let Ok(grandchildren) = children_q.get(child) {
-                        for gc in grandchildren.iter() {
-                            if let Ok(mut label) = text_q.get_mut(gc) {
-                                label.0 = "Saved!".to_string();
-                            }
-                        }
-                    }
-                }
-            }
+            info!("Saved settings to {SETTINGS_LOCATION}");
+            "Saved"
         }
-        Err(e) => error!("unable to write settings to '{SETTINGS_PATH}': {e}"),
+        Err(e) => {
+            error!("Unable to save settings to {SETTINGS_LOCATION}: {e}");
+            "Save failed"
+        }
+    };
+
+    let Ok(children) = root.single() else {
+        return;
+    };
+    for gc in children
+        .iter()
+        .filter_map(|child| children_q.get(child).ok())
+        .flat_map(|grandchildren| grandchildren.iter())
+    {
+        if let Ok(mut label) = text_q.get_mut(gc) {
+            label.0 = status.to_string();
+        }
     }
 }
 
@@ -63,7 +70,7 @@ fn update_tab_content(
     session: Res<Session>,
     active_tab: Res<ActiveTab>,
     tab_bar: Query<&Children, With<TabBar>>,
-    mut tab_content: Query<(Entity, &Children), With<TabContent>>,
+    tab_content: Query<Entity, With<TabContent>>,
     buttons: Query<(&UiTab, &Children)>,
     mut style_q: Query<(
         &mut PaletteSet,
@@ -82,56 +89,29 @@ fn update_tab_content(
             };
             let is_active = *tab == active_tab.0;
 
-            // Update PaletteSet + immediate colors on the "Button Content" child
+            // Selected tab uses the filled accent, the other stays ghost
             for &btn_child in btn_children {
                 if let Ok((mut palette, mut bg, mut border, content_children)) =
                     style_q.get_mut(btn_child)
                 {
-                    let new_palette = if is_active {
-                        PaletteSet {
-                            none: Palette::new(
-                                colors::NEUTRAL100,
-                                colors::NEUTRAL800,
-                                BorderColor::all(colors::NEUTRAL700),
-                            ),
-                            hovered: Palette::new(
-                                colors::NEUTRAL100,
-                                colors::NEUTRAL750,
-                                BorderColor::all(colors::NEUTRAL650),
-                            ),
-                            pressed: Palette::new(
-                                colors::NEUTRAL100,
-                                colors::NEUTRAL700,
-                                BorderColor::all(colors::NEUTRAL600),
-                            ),
-                            disabled: Palette::new(
-                                colors::NEUTRAL400,
-                                colors::NEUTRAL800,
-                                BorderColor::all(colors::NEUTRAL700),
-                            ),
-                        }
+                    *palette = if is_active {
+                        PaletteSet::primary()
                     } else {
                         PaletteSet::default()
                     };
-
-                    bg.0 = new_palette.none.bg;
-                    *border = new_palette.none.border;
-                    let text_color = new_palette.none.text;
-                    *palette = new_palette;
-
+                    bg.0 = palette.none.bg;
+                    *border = palette.none.border;
                     for &text_child in content_children {
                         if let Ok(mut tc) = text_color_q.get_mut(text_child) {
-                            tc.0 = text_color;
+                            tc.0 = palette.none.text;
                         }
                     }
                 }
             }
 
             if is_active {
-                let (e, content) = tab_content.single_mut()?;
-                for child in content.iter() {
-                    commands.entity(child).despawn();
-                }
+                let e = tab_content.single()?;
+                commands.entity(e).despawn_children();
                 match tab {
                     UiTab::Audio => {
                         commands.spawn(audio_grid()).insert(ChildOf(e));
@@ -309,9 +289,9 @@ fn click_toggle_vsync(
         info!(" window present_mode changed to: {:?}", window.present_mode);
 
         let label = if matches!(window.present_mode, PresentMode::AutoVsync) {
-            "on"
+            "On"
         } else {
-            "off"
+            "Off"
         };
         for entity in &buttons {
             update_button_text(entity, label, &children_q, &mut text_q);
@@ -341,7 +321,6 @@ fn update_button_text(
     }
 }
 
-#[cfg(feature = "dev")]
 fn click_toggle_diagnostics(
     _: On<Pointer<Click>>,
     mut state: ResMut<Session>,
@@ -350,7 +329,7 @@ fn click_toggle_diagnostics(
     mut text_q: Query<&mut Text>,
 ) {
     state.diagnostics = !state.diagnostics;
-    let label = if state.diagnostics { "on" } else { "off" };
+    let label = if state.diagnostics { "On" } else { "Off" };
 
     for button in buttons.iter() {
         update_button_text(button, label, &children_q, &mut text_q);
@@ -368,7 +347,7 @@ fn click_toggle_debug_ui(
 ) {
     state.debug_ui = !state.debug_ui;
     commands.trigger(ToggleDebugUi);
-    let label = if state.debug_ui { "on" } else { "off" };
+    let label = if state.debug_ui { "On" } else { "Off" };
 
     for button in buttons.iter() {
         update_button_text(button, label, &children_q, &mut text_q);
@@ -383,7 +362,7 @@ fn click_toggle_screen_shake(
     mut text_q: Query<&mut Text>,
 ) {
     state.screen_shake = !state.screen_shake;
-    let label = if state.screen_shake { "on" } else { "off" };
+    let label = if state.screen_shake { "On" } else { "Off" };
 
     for button in buttons.iter() {
         update_button_text(button, label, &children_q, &mut text_q);
@@ -405,22 +384,26 @@ fn click_toggle_settings(
 
 // ============================ UI ============================
 
+/// Right column width: matches the -/+ spinner (44 + 4 + 48 + 4 + 44), so toggles line up with it
+const CONTROL_WIDTH: Val = Px(144.0);
+
 pub fn settings_ui() -> impl Bundle {
     (
         ui_root("Settings Screen"),
         GlobalZIndex(200),
         children![(
-            Node {
-                width: Percent(80.0),
-                height: Percent(80.0),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
+            panel(480.0),
+            // No header: the tabs say where you are, and landscape phones need the height
             children![
                 tab_bar(),
-                (TabContent, Node::default(), children![audio_grid()]),
+                (
+                    TabContent,
+                    Node {
+                        // Four rows, so switching tabs doesn't resize the panel
+                        min_height: Px(188.0),
+                        ..default()
+                    },
+                ),
                 bottom_row()
             ]
         )],
@@ -430,37 +413,14 @@ pub fn settings_ui() -> impl Bundle {
 fn tab_bar() -> impl Bundle {
     let r = size::BORDER_RADIUS;
     let z = Px(0.0);
-    let left_tab = Props::default()
-        .text("Audio")
-        .border_radius_custom(BorderRadius::new(r, z, z, r));
-    let right_tab = Props::default()
-        .text("Video")
-        .border_radius_custom(BorderRadius::new(z, r, r, z));
+    let left_tab = Props::new("Audio").border_radius_custom(BorderRadius::new(r, z, z, r));
+    let right_tab = Props::new("Video").border_radius_custom(BorderRadius::new(z, r, r, z));
     (
-        Node {
-            flex_direction: FlexDirection::Column,
-            justify_content: JustifyContent::Center,
-            position_type: PositionType::Absolute,
-            width: Percent(100.0),
-            top: Vh(2.0),
-            row_gap: Vh(2.0),
-            ..default()
-        },
+        TabBar,
+        two_columns(),
         children![
-            header("Settings"),
-            (
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::Center,
-                    width: Percent(100.0),
-                    ..default()
-                },
-                TabBar,
-                children![
-                    (btn(left_tab, switch_to_tab(UiTab::Audio)), UiTab::Audio),
-                    (btn(right_tab, switch_to_tab(UiTab::Video)), UiTab::Video),
-                ],
-            ),
+            (btn(left_tab, switch_to_tab(UiTab::Audio)), UiTab::Audio),
+            (btn(right_tab, switch_to_tab(UiTab::Video)), UiTab::Video),
         ],
     )
 }
@@ -468,70 +428,97 @@ fn tab_bar() -> impl Bundle {
 fn bottom_row() -> impl Bundle {
     (
         Node {
-            position_type: PositionType::Absolute,
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::Center,
-            column_gap: Px(16.0),
-            bottom: Vh(1.0),
-            ..default()
+            column_gap: Px(12.0),
+            ..two_columns()
         },
         children![
             (btn("Save", save_settings), SaveSettingsLabel),
-            btn("Back", click_toggle_settings),
+            btn(
+                Props::new("Back").palette_set(PaletteSet::primary()),
+                click_toggle_settings
+            ),
         ],
     )
 }
 
-fn video_grid(state: &Session, vsync_on: bool) -> impl Bundle {
-    let vsync_label = if vsync_on { "on" } else { "off" };
-    let screen_shake_label = if state.screen_shake { "on" } else { "off" };
+fn two_columns() -> Node {
+    Node {
+        display: Display::Grid,
+        grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
+        ..default()
+    }
+}
 
+/// Label on the left, control on the right
+fn settings_grid() -> Node {
+    Node {
+        width: Percent(100.0),
+        display: Display::Grid,
+        grid_template_columns: vec![GridTrack::flex(1.0), GridTrack::auto()],
+        row_gap: Px(4.0),
+        column_gap: Px(12.0),
+        align_items: AlignItems::Center,
+        justify_items: JustifyItems::Start,
+        ..default()
+    }
+}
+
+fn row(text: &'static str) -> impl Bundle {
+    label(Props::new(text).color(colors::NEUTRAL300))
+}
+
+fn toggle(text: &'static str) -> Props {
+    Props::new(text).width(CONTROL_WIDTH)
+}
+
+fn video_grid(state: &Session, vsync_on: bool) -> impl Bundle {
+    let vsync_label = if vsync_on { "On" } else { "Off" };
+    let screen_shake_label = if state.screen_shake { "On" } else { "Off" };
+    let diagnostics_label = if state.diagnostics { "On" } else { "Off" };
     #[cfg(feature = "dev")]
-    let diagnostics_label = if state.diagnostics { "on" } else { "off" };
-    #[cfg(feature = "dev")]
-    let debug_ui_label = if state.debug_ui { "on" } else { "off" };
+    let debug_ui_label = if state.debug_ui { "On" } else { "Off" };
 
     (
         Name::new("Settings Video Grid"),
-        Node {
-            row_gap: Px(14.0),
-            column_gap: Px(30.0),
-            display: Display::Grid,
-            grid_template_columns: RepeatedGridTrack::px(2, 240.0),
-            align_items: AlignItems::Center,
-            justify_items: JustifyItems::Center,
-            ..default()
-        },
+        settings_grid(),
         #[cfg(not(feature = "dev"))]
         children![
-            label("FOV"),
+            row("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
-            label("VSync"),
-            (btn(vsync_label, click_toggle_vsync), VsyncLabel),
-            label("Screen Shake"),
+            row("VSync"),
+            (btn(toggle(vsync_label), click_toggle_vsync), VsyncLabel),
+            row("Screen Shake"),
             (
-                btn(screen_shake_label, click_toggle_screen_shake),
+                btn(toggle(screen_shake_label), click_toggle_screen_shake),
                 ScreenShakeLabel
+            ),
+            row("Diagnostics"),
+            (
+                btn(toggle(diagnostics_label), click_toggle_diagnostics),
+                DiagnosticsLabel
             ),
         ],
         #[cfg(feature = "dev")]
         children![
-            label("FOV"),
+            row("FOV"),
             plus_minus_bar(FovLabel, fov_lower, fov_raise),
-            label("VSync"),
-            (btn(vsync_label, click_toggle_vsync), VsyncLabel),
-            label("Screen Shake"),
+            row("VSync"),
+            (btn(toggle(vsync_label), click_toggle_vsync), VsyncLabel),
+            row("Screen Shake"),
             (
-                btn(screen_shake_label, click_toggle_screen_shake),
+                btn(toggle(screen_shake_label), click_toggle_screen_shake),
                 ScreenShakeLabel
             ),
-            label("Diagnostics"),
+            row("Diagnostics"),
             (
-                btn(diagnostics_label, click_toggle_diagnostics),
+                btn(toggle(diagnostics_label), click_toggle_diagnostics),
                 DiagnosticsLabel
             ),
-            label("Debug UI"),
-            (btn(debug_ui_label, click_toggle_debug_ui), DebugUiLabel),
+            row("Debug UI"),
+            (
+                btn(toggle(debug_ui_label), click_toggle_debug_ui),
+                DebugUiLabel
+            ),
         ],
     )
 }
@@ -539,21 +526,13 @@ fn video_grid(state: &Session, vsync_on: bool) -> impl Bundle {
 fn audio_grid() -> impl Bundle {
     (
         Name::new("Settings Audio Grid"),
-        Node {
-            row_gap: Px(14.0),
-            column_gap: Px(30.0),
-            display: Display::Grid,
-            grid_template_columns: RepeatedGridTrack::px(2, 240.0),
-            align_items: AlignItems::Center,
-            justify_items: JustifyItems::Center,
-            ..default()
-        },
+        settings_grid(),
         children![
-            label("General"),
+            row("Master"),
             plus_minus_bar(GeneralVolumeLabel, general_lower, general_raise),
-            label("Music"),
+            row("Music"),
             plus_minus_bar(MusicVolumeLabel, music_lower, music_raise),
-            label("SFX"),
+            row("Effects"),
             plus_minus_bar(SfxVolumeLabel, sfx_lower, sfx_raise),
         ],
     )

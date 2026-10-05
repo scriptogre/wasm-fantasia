@@ -6,7 +6,7 @@ use crate::combat::{DamageDealt, Died};
 use crate::combat::{Enemy, Health};
 use crate::models::SceneCamera;
 use crate::networking::CombatEvent;
-use crate::ui::colors::{GRASS_GREEN, NEUTRAL450, NEUTRAL850, RED, SAND_YELLOW};
+use crate::ui::colors::{AMBER, NEUTRAL100, VOID};
 
 /// Cached mesh height above the entity origin, computed once from descendant AABBs.
 #[derive(Component)]
@@ -67,7 +67,7 @@ pub struct DamageNumber {
 }
 
 pub const DAMAGE_COLOR: Color = crate::ui::colors::NEUTRAL10;
-pub const CRIT_COLOR: Color = Color::oklcha(0.905, 0.182, 98.111, 1.0);
+pub const CRIT_COLOR: Color = AMBER;
 
 const DISPLAY_DURATION: f32 = 0.8;
 const POP_DURATION: f32 = 0.15;
@@ -114,14 +114,10 @@ fn on_server_damage_number(
         rand::Rng::random_range(&mut rng, -20.0..20.0),
     );
 
-    let (font_size, font) = if is_crit {
-        (28.0, fonts.as_ref().map(|f| f.bold.clone()))
-    } else {
-        (20.0, fonts.as_ref().map(|f| f.regular.clone()))
-    };
-    let mut text_font = TextFont::from_font_size(font_size);
-    if let Some(handle) = font {
-        text_font.font = handle;
+    // Regular hits use the default font so the glyph cache prewarm applies
+    let mut text_font = TextFont::from_font_size(if is_crit { 28.0 } else { 20.0 });
+    if is_crit && let Some(fonts) = fonts {
+        text_font.font = fonts.bold.clone();
     }
 
     commands.spawn((
@@ -134,6 +130,10 @@ fn on_server_damage_number(
         Text::new(format!("{}", damage)),
         text_font,
         TextColor(if is_crit { CRIT_COLOR } else { DAMAGE_COLOR }),
+        TextShadow {
+            offset: Vec2::new(0.0, 2.0),
+            color: Color::BLACK.with_alpha(0.6),
+        },
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(-9999.0),
@@ -149,7 +149,13 @@ fn tick_damage_numbers(
     time: Res<Time>,
     mut commands: Commands,
     camera: Query<(&Camera, &GlobalTransform), With<SceneCamera>>,
-    mut numbers: Query<(Entity, &mut DamageNumber, &mut Node, &mut TextColor)>,
+    mut numbers: Query<(
+        Entity,
+        &mut DamageNumber,
+        &mut Node,
+        &mut TextColor,
+        &mut TextShadow,
+    )>,
 ) {
     let delta = time.delta_secs();
 
@@ -157,7 +163,7 @@ fn tick_damage_numbers(
         return;
     };
 
-    for (entity, mut dmg, mut node, mut color) in numbers.iter_mut() {
+    for (entity, mut dmg, mut node, mut color, mut shadow) in numbers.iter_mut() {
         dmg.timer += delta;
         let t = (dmg.timer / DISPLAY_DURATION).min(1.0);
 
@@ -203,24 +209,16 @@ fn tick_damage_numbers(
             DAMAGE_COLOR
         };
         color.0 = base_color.with_alpha(alpha);
+        shadow.color = Color::BLACK.with_alpha(0.6 * alpha);
     }
 }
 
 // ── Enemy Health Bars ───────────────────────────────────────────────
 
-const ENEMY_BAR_WIDTH: f32 = 60.0;
-const ENEMY_BAR_HEIGHT: f32 = 6.0;
+const ENEMY_BAR_WIDTH: f32 = 44.0;
+const ENEMY_BAR_HEIGHT: f32 = 4.0;
 const VISIBILITY_DURATION: f32 = 3.0;
-
-fn health_color(fraction: f32) -> Color {
-    if fraction > 0.6 {
-        GRASS_GREEN
-    } else if fraction > 0.3 {
-        SAND_YELLOW
-    } else {
-        RED
-    }
-}
+const TRACK_ALPHA: f32 = 0.6;
 
 #[derive(Component)]
 pub struct EnemyHealthBar {
@@ -262,12 +260,10 @@ fn on_enemy_damaged(
                 height: Val::Px(ENEMY_BAR_HEIGHT),
                 left: Val::Px(-9999.0),
                 top: Val::Px(-9999.0),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(3.0)),
+                border_radius: BorderRadius::all(Val::Px(ENEMY_BAR_HEIGHT / 2.0)),
                 ..default()
             },
-            BorderColor::all(NEUTRAL450.with_alpha(0.6)),
-            BackgroundColor(NEUTRAL850.with_alpha(0.7)),
+            BackgroundColor(VOID.with_alpha(TRACK_ALPHA)),
             GlobalZIndex(90),
             Pickable::IGNORE,
         ))
@@ -277,10 +273,10 @@ fn on_enemy_damaged(
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
-                    border_radius: BorderRadius::all(Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(ENEMY_BAR_HEIGHT / 2.0)),
                     ..default()
                 },
-                BackgroundColor(GRASS_GREEN),
+                BackgroundColor(NEUTRAL100),
             ));
         });
 }
@@ -351,13 +347,13 @@ fn tick_enemy_health_bars(
         } else {
             1.0
         };
-        bg.0 = NEUTRAL850.with_alpha(0.7 * alpha);
+        bg.0 = VOID.with_alpha(TRACK_ALPHA * alpha);
 
         let fraction = health.fraction();
         for child in children.iter() {
             if let Ok((mut fill_node, mut fill_bg)) = fills.get_mut(child) {
                 fill_node.width = Val::Percent(fraction * 100.0);
-                fill_bg.0 = health_color(fraction).with_alpha(alpha);
+                fill_bg.0 = NEUTRAL100.with_alpha(alpha);
             }
         }
     }

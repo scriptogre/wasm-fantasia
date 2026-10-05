@@ -1,3 +1,4 @@
+use crate::player::touch::TouchControls;
 use bevy_enhanced_input::prelude::Actions;
 
 use super::*;
@@ -18,6 +19,7 @@ pub fn add_new_modal(
     on: On<NewModal>,
     screen: Res<State<Screen>>,
     pause: Res<State<PauseState>>,
+    touch: Res<TouchControls>,
     mut commands: Commands,
     mut modals: ResMut<Modals>,
 ) {
@@ -39,14 +41,14 @@ pub fn add_new_modal(
             ModalBackdrop,
             ui_root("Modal Backdrop"),
             GlobalZIndex(199),
-            BackgroundColor(colors::NEUTRAL950.with_alpha(0.95)),
+            BackgroundColor(colors::VOID.with_alpha(0.7)),
         ));
     }
 
     // despawn all previous modal entities to avoid clattering
     commands.entity(on.entity).trigger(ClearModals);
     match on.event().modal {
-        Modal::Main => commands.spawn(menu_modal()),
+        Modal::Main => commands.spawn(menu_modal(touch.enabled)),
         Modal::Settings => commands.spawn(settings_modal()),
     };
 
@@ -60,6 +62,7 @@ pub fn pop_modal(
     settings_marker: Query<Entity, With<SettingsModal>>,
     backdrop: Query<Entity, With<ModalBackdrop>>,
     modal_ctx_holder: Query<Entity, With<ModalCtx>>,
+    touch: Res<TouchControls>,
     mut commands: Commands,
     mut modals: ResMut<Modals>,
 ) {
@@ -87,7 +90,7 @@ pub fn pop_modal(
     // respawn next in the modal stack
     if let Some(modal) = modals.last() {
         match modal {
-            Modal::Main => commands.spawn(menu_modal()),
+            Modal::Main => commands.spawn(menu_modal(touch.enabled)),
             Modal::Settings => commands.spawn(settings_modal()),
         };
     }

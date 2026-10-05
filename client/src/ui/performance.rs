@@ -77,19 +77,21 @@ struct StatsOverlayText;
 #[derive(Resource)]
 struct StatsTimer(Timer);
 
+/// Developer stats under the HUD. Empty unless [`Session::diagnostics`] is on (F4 or Settings).
 fn spawn_stats_overlay(mut commands: Commands) {
     commands.spawn((
         StatsOverlayText,
         Text::new(""),
-        TextFont {
-            font_size: 14.0,
-            ..default()
-        },
+        TextFont::from_font_size(size::CAPTION_SIZE),
         TextColor(colors::NEUTRAL400),
+        TextShadow {
+            offset: Vec2::new(0.0, 1.0),
+            color: Color::BLACK.with_alpha(0.6),
+        },
         Node {
             position_type: PositionType::Absolute,
-            left: Val::Px(16.0),
-            top: Val::Px(16.0),
+            left: Val::Px(size::EDGE),
+            top: Val::Px(size::EDGE + 52.0),
             ..default()
         },
         GlobalZIndex(i32::MAX - 32),
@@ -98,6 +100,7 @@ fn spawn_stats_overlay(mut commands: Commands) {
 }
 
 fn tick_stats_overlay(
+    session: Res<Session>,
     time: Res<Time<Real>>,
     mut timer: ResMut<StatsTimer>,
     diag: Option<Res<ServerDiagnostics>>,
@@ -106,6 +109,15 @@ fn tick_stats_overlay(
     cpu_timer: Res<CpuFrameTimer>,
     mut texts: Query<&mut Text, With<StatsOverlayText>>,
 ) {
+    let Ok(mut text) = texts.single_mut() else {
+        return;
+    };
+    if !session.diagnostics {
+        if !text.0.is_empty() {
+            text.0.clear();
+        }
+        return;
+    }
     timer.0.tick(time.delta());
     if !timer.0.just_finished() {
         return;
@@ -141,16 +153,14 @@ fn tick_stats_overlay(
     };
 
     let mut line = format!(
-        "{fps:.0} FPS  {frame_ms:.1}ms (cpu {cpu_ms:.1}ms) [{bottleneck}]  |  {entity_count} ent  {enemies} enemies  {players} players"
+        "{fps:.0} FPS  {frame_ms:.1} ms  cpu {cpu_ms:.1} ms  {bottleneck}\n{entity_count} ent  {enemies} enemies  {players} players"
     );
     if ping_ms > 0.0 {
-        line.push_str(&format!("  |  {ping_ms:.0} ms"));
+        line.push_str(&format!("  {ping_ms:.0} ms ping"));
     }
 
-    if let Ok(mut text) = texts.single_mut() {
-        if text.0 != line {
-            text.0 = line;
-        }
+    if text.0 != line {
+        text.0 = line;
     }
 }
 

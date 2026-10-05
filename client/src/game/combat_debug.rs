@@ -4,9 +4,9 @@ use std::fmt::Write;
 
 use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
+use crate::models::combat::{Stat, Stats};
 use crate::models::{PauseState, Player as LocalPlayer, Screen, Session};
 use crate::networking::ServerDiagnostics;
-use crate::models::combat::{Stat, Stats};
 use crate::ui::{colors, size};
 
 const MAX_ENTRIES: usize = 10;
@@ -110,8 +110,9 @@ fn spawn_panel(mut commands: Commands) {
         DebugPanel,
         Node {
             position_type: PositionType::Absolute,
-            right: Val::Px(10.0),
-            top: Val::Px(10.0),
+            right: Val::Px(size::EDGE),
+            // Clears the touch pause button and frame stats on narrow screens
+            top: Val::Px(size::EDGE + 96.0),
             max_height: Val::Vh(70.0),
             min_width: Val::Px(220.0),
             padding: UiRect::axes(Val::Px(16.0), Val::Px(12.0)),

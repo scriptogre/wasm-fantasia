@@ -11,6 +11,7 @@ fn setup_death_screen(
     mut commands: Commands,
     mut next_pause: ResMut<NextState<PauseState>>,
     mut cam: Query<&mut ThirdPersonCamera>,
+    fonts: Res<crate::asset_loading::Fonts>,
 ) {
     next_pause.set(PauseState::Paused);
 
@@ -19,31 +20,40 @@ fn setup_death_screen(
         cam.cursor_lock_active = false;
     }
 
-    commands
-        .spawn((
-            DespawnOnExit(Screen::GameOver),
-            GlobalZIndex(10),
-            ui_root("Death Screen"),
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
-        ))
-        .with_children(|root| {
-            root.spawn(
-                Props::new("You Died")
-                    .font_size(64.0)
-                    .color(colors::NEUTRAL100)
-                    .bg_color(Color::NONE)
-                    .border(UiRect::ZERO)
-                    .into_text_bundle(),
-            );
-
-            root.spawn(btn(
-                Props::default()
-                    .text("Try Again")
-                    .min_width(Vw(20.0))
-                    .padding(UiRect::axes(Vw(4.0), Vh(2.0))),
-                try_again,
-            ));
-        });
+    commands.spawn((
+        DespawnOnExit(Screen::GameOver),
+        // Above the HUD, below modals
+        GlobalZIndex(150),
+        ui_root("Death Screen"),
+        BackgroundColor(colors::VOID.with_alpha(0.75)),
+        children![
+            (
+                Text::new("YOU DIED"),
+                TextFont {
+                    font: fonts.bold.clone(),
+                    font_size: size::DISPLAY_SIZE,
+                    ..default()
+                },
+                TextColor(colors::RED),
+            ),
+            (
+                Node {
+                    width: Percent(90.0),
+                    max_width: Px(320.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Px(12.0),
+                    ..default()
+                },
+                children![
+                    btn(
+                        Props::new("Try Again").palette_set(PaletteSet::primary()),
+                        try_again
+                    ),
+                    btn("Main Menu", click_to_menu),
+                ],
+            ),
+        ],
+    ));
 }
 
 fn try_again(_: On<Pointer<Click>>, mut commands: Commands) {

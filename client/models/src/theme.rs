@@ -13,32 +13,29 @@ pub mod fonts {
 pub mod size {
     use bevy::ui::Val;
 
-    /// Default font size
-    pub const FONT_SIZE: f32 = 20.0;
+    /// Body and button text
+    pub const FONT_SIZE: f32 = 18.0;
+    /// Panel and screen titles
+    pub const HEADER_SIZE: f32 = 28.0;
+    /// Hero text: game title, death screen
+    pub const DISPLAY_SIZE: f32 = 52.0;
+    /// Small captions, hints, status
+    pub const CAPTION_SIZE: f32 = 13.0;
 
     /// Default border radius for buttons, panels, sliders, spinners, etc.
-    pub const BORDER_RADIUS: Val = Val::Vw(0.6);
+    pub const BORDER_RADIUS: Val = Val::Px(4.0);
 
-    /// Common row size for buttons, sliders, spinners, etc.
-    pub const ROW_HEIGHT: Val = Val::Px(24.0);
+    /// Minimum touch target height for buttons
+    pub const BUTTON_HEIGHT: Val = Val::Px(44.0);
 
-    /// Width and height of a checkbox
-    pub const CHECKBOX_SIZE: Val = Val::Px(18.0);
-
-    /// Width and height of a radio button
-    pub const RADIO_SIZE: Val = Val::Px(18.0);
-
-    /// Width of a toggle switch
-    pub const TOGGLE_WIDTH: Val = Val::Px(32.0);
-
-    /// Height of a toggle switch
-    pub const TOGGLE_HEIGHT: Val = Val::Px(18.0);
+    /// Screen edge inset in px for HUD and touch controls
+    pub const EDGE: f32 = 20.0;
 
     /// Health bar width
-    pub const HEALTH_BAR_WIDTH: f32 = 288.0;
+    pub const HEALTH_BAR_WIDTH: f32 = 180.0;
 
     /// Health bar height
-    pub const HEALTH_BAR_HEIGHT: f32 = 16.0;
+    pub const HEALTH_BAR_HEIGHT: f32 = 6.0;
 }
 
 /// Tailwind CSS neutral palette (oklch, zero chroma)
@@ -75,10 +72,12 @@ pub mod colors {
 
     // ── Semantic aliases ────────────────────────────────────────────
     pub const TRANSPARENT: Color = Color::srgba(0.0, 0.0, 0.0, 0.0);
+    /// Panel glass over the scene
+    pub const GLASS: Color = Color::oklcha(0.145, 0.0, 0.0, 0.82);
     // ── Accent colors ───────────────────────────────────────────────
-    pub const SAND_YELLOW: Color = Color::srgb(205. / 255., 170. / 255., 109. / 255.);
+    /// UI accent, matches the player's warm yellow
+    pub const AMBER: Color = Color::oklcha(0.82, 0.15, 78.0, 1.0);
     pub const ACID_GREEN: Color = Color::srgb(0.286, 0.878, 0.373);
-    pub const GRASS_GREEN: Color = Color::oklcha(0.5866, 0.1543, 129.84, 1.0);
     pub const RED: Color = Color::oklcha(0.5232, 0.1404, 13.84, 1.0);
     pub const HEALTH_RED: Color = Color::srgb(0.816, 0.125, 0.125);
 
@@ -87,7 +86,7 @@ pub mod colors {
     pub const VOID: Color = Color::oklcha(0.100, 0.0, 0.0, 1.0);
 }
 
-/// TODO: text is not working at the moment due to a button ECS hierarchy being tricky
+/// Colors for one interaction state
 #[derive(Component, Clone, Debug, Reflect)]
 pub struct Palette {
     pub text: Color,
@@ -111,28 +110,43 @@ pub struct PaletteSet {
     pub disabled: Palette,
 }
 impl Default for PaletteSet {
+    /// Ghost button: quiet until touched, amber when engaged
     fn default() -> Self {
         Self {
             none: Palette::new(
-                colors::NEUTRAL300,
-                colors::NEUTRAL900,
-                BorderColor::all(colors::NEUTRAL850),
-            ),
-            hovered: Palette::new(
-                colors::NEUTRAL300,
-                colors::NEUTRAL850,
-                BorderColor::all(colors::NEUTRAL800),
-            ),
-            pressed: Palette::new(
-                colors::NEUTRAL300,
-                colors::NEUTRAL800,
+                colors::NEUTRAL200,
+                colors::NEUTRAL900.with_alpha(0.7),
                 BorderColor::all(colors::NEUTRAL750),
             ),
+            hovered: Palette::new(
+                colors::NEUTRAL50,
+                colors::NEUTRAL850.with_alpha(0.9),
+                BorderColor::all(colors::AMBER),
+            ),
+            pressed: Palette::new(
+                colors::NEUTRAL950,
+                colors::AMBER,
+                BorderColor::all(colors::AMBER),
+            ),
             disabled: Palette::new(
-                colors::NEUTRAL500,
-                colors::NEUTRAL900,
+                colors::NEUTRAL600,
+                colors::NEUTRAL900.with_alpha(0.4),
                 BorderColor::all(colors::NEUTRAL850),
             ),
+        }
+    }
+}
+
+impl PaletteSet {
+    /// Filled amber button for the main action and the selected tab
+    pub fn primary() -> Self {
+        let text = colors::NEUTRAL950;
+        let fill = |c: Color| Palette::new(text, c, BorderColor::all(c));
+        Self {
+            none: fill(colors::AMBER),
+            hovered: fill(colors::AMBER.lighter(0.06)),
+            pressed: fill(colors::AMBER.darker(0.1)),
+            disabled: Self::default().disabled,
         }
     }
 }

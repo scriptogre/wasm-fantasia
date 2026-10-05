@@ -6,8 +6,8 @@ use spacetimedb_sdk::{DbContext, Table};
 use crate::models::{Screen, is_multiplayer_mode};
 use crate::networking::generated::player_table::PlayerTableAccess;
 use crate::networking::{PingTracker, STALE_THRESHOLD_SECS, SpacetimeDbConnection};
-use crate::ui::colors::NEUTRAL300;
-use crate::ui::hud::HudFont;
+use crate::ui::colors::{ACID_GREEN as GREEN, AMBER as YELLOW, NEUTRAL300, RED};
+use crate::ui::size::{CAPTION_SIZE, EDGE};
 
 // ── Components ──────────────────────────────────────────────────────
 
@@ -37,80 +37,49 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-// ── Colors ──────────────────────────────────────────────────────────
-
-const GREEN: Color = Color::srgb(0.286, 0.878, 0.373);
-const RED: Color = Color::srgb(0.816, 0.125, 0.125);
-const YELLOW: Color = Color::srgb(0.878, 0.780, 0.286);
-
 // ── Spawn ───────────────────────────────────────────────────────────
 
-fn spawn_status_hud(mut commands: Commands, font: Res<HudFont>) {
-    let font = font.0.clone();
-    let text_style = TextFont {
-        font: font.clone(),
-        font_size: 14.0,
-        ..default()
+/// One caption row under the health bar: dot, status, players, ping.
+fn spawn_status_hud(mut commands: Commands) {
+    let text = || {
+        (
+            TextFont::from_font_size(CAPTION_SIZE),
+            TextColor(NEUTRAL300),
+            TextShadow {
+                offset: Vec2::new(0.0, 1.0),
+                color: Color::BLACK.with_alpha(0.6),
+            },
+        )
     };
 
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(32.0),
-                right: Val::Px(32.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexEnd,
-                row_gap: Val::Px(4.0),
-                ..default()
-            },
-            GlobalZIndex(90),
-            Pickable::IGNORE,
-        ))
-        .with_children(|parent| {
-            // Row 1: status dot + "ONLINE" / "OFFLINE"
-            parent
-                .spawn(Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(6.0),
+    commands.spawn((
+        Name::new("Server Status"),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(EDGE + 26.0),
+            left: Val::Px(EDGE),
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(8.0),
+            ..default()
+        },
+        GlobalZIndex(90),
+        Pickable::IGNORE,
+        children![
+            (
+                StatusDot,
+                Node {
+                    width: Val::Px(6.0),
+                    height: Val::Px(6.0),
+                    border_radius: BorderRadius::MAX,
                     ..default()
-                })
-                .with_children(|row| {
-                    row.spawn((
-                        StatusText,
-                        Text::new("OFFLINE"),
-                        text_style.clone(),
-                        TextColor(NEUTRAL300),
-                    ));
-                    row.spawn((
-                        StatusDot,
-                        Node {
-                            width: Val::Px(8.0),
-                            height: Val::Px(8.0),
-                            border_radius: BorderRadius::all(Val::Px(4.0)),
-                            ..default()
-                        },
-                        BackgroundColor(RED),
-                    ));
-                });
-
-            // Row 2: player count
-            parent.spawn((
-                PlayersText,
-                Text::new("0 / 0"),
-                text_style.clone(),
-                TextColor(NEUTRAL300),
-            ));
-
-            // Row 3: ping
-            parent.spawn((
-                PingText,
-                Text::new("-- ms"),
-                text_style,
-                TextColor(NEUTRAL300),
-            ));
-        });
+                },
+                BackgroundColor(RED),
+            ),
+            (StatusText, Text::new("OFFLINE"), text()),
+            (PlayersText, Text::new("-- / --"), text()),
+            (PingText, Text::new("-- ms"), text()),
+        ],
+    ));
 }
 
 // ── Tick systems ────────────────────────────────────────────────────

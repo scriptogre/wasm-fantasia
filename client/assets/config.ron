@@ -10,7 +10,6 @@
     ),
     player:(
         spawn_pos: (0.0, 1.5, 0.0),
-        fov: 75,
         zoom: (4.0, 16.0),  // More zoomed out for better combat visibility
         movement: (
             speed: 6.5,

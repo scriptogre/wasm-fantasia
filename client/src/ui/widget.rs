@@ -21,6 +21,33 @@ pub fn ui_root(name: impl Into<Cow<'static, str>>) -> impl Bundle {
     )
 }
 
+/// A centered glass card for menus. Children stack and stretch to its width.
+pub fn panel(max_width: f32) -> impl Bundle {
+    (
+        Name::new("Panel"),
+        Node {
+            width: Percent(92.0),
+            max_width: Px(max_width),
+            flex_direction: FlexDirection::Column,
+            row_gap: Px(12.0),
+            // Slimmer sides leave room for label + control rows on 320px phones
+            padding: UiRect::axes(Px(20.0), Px(24.0)),
+            border: UiRect::all(Px(1.0)),
+            border_radius: BorderRadius::all(size::BORDER_RADIUS),
+            ..default()
+        },
+        BackgroundColor(colors::GLASS),
+        BorderColor::all(colors::NEUTRAL800),
+        BoxShadow::new(
+            Color::BLACK.with_alpha(0.5),
+            Px(0.0),
+            Px(12.0),
+            Px(0.0),
+            Px(32.0),
+        ),
+    )
+}
+
 pub fn icon(opts: impl Into<Props>) -> impl Bundle {
     let opts = opts.into();
     (
@@ -31,40 +58,34 @@ pub fn icon(opts: impl Into<Props>) -> impl Bundle {
         Pickable::IGNORE,
     )
 }
+
+/// Plain text. Takes layout from [`Props`] but never the button chrome.
 pub fn label(opts: impl Into<Props>) -> impl Bundle {
     let opts = opts.into();
+    let node = Node {
+        border: UiRect::ZERO,
+        padding: UiRect::ZERO,
+        min_height: Auto,
+        ..opts.node.clone()
+    };
     (
         Label,
         Name::new("Label"),
-        opts.node.clone(),
+        node,
         opts.into_text_bundle(),
         Pickable::IGNORE,
     )
 }
 
-/// A simple header label. Bigger than [`label`].
+/// Panel title. Bigger and brighter than [`label`].
 pub fn header(opts: impl Into<Props>) -> impl Bundle {
-    let opts = opts.into();
+    let opts: Props = opts.into();
+    let opts = opts.font_size(size::HEADER_SIZE).color(colors::NEUTRAL50);
     (Label, Name::new("Header"), opts.into_text_bundle())
 }
 
-/// Non-interactive button with disabled styling. Layout is fully controlled by Props.
-pub fn btn_disabled(opts: impl Into<Props>) -> impl Bundle {
-    let opts: Props = opts.into();
-    let disabled = PaletteSet::default().disabled;
-    let text = opts.clone().color(disabled.text).into_text_bundle();
-    (
-        Name::new("Button (Disabled)"),
-        opts.node,
-        BackgroundColor(disabled.bg),
-        disabled.border,
-        Pickable::IGNORE,
-        children![(text, Pickable::IGNORE)],
-    )
-}
-
-/// A simple button with text and an action defined as an [`Observer`]. The button's layout is provided by `button_bundle`.
-/// Background color is set by [`UiPalette`]
+/// A button with text and an action defined as an [`Observer`]. Layout comes from [`Props`],
+/// colors from its [`PaletteSet`].
 pub fn btn<E, B, M, I>(opts: impl Into<Props>, action: I) -> impl Bundle
 where
     E: EntityEvent,
@@ -73,30 +94,54 @@ where
 {
     let mut opts: Props = opts.into();
     let action = IntoObserverSystem::into_system(action);
+    // The wrapper takes the outer layout, the content fills it
+    let n = &opts.node;
+    let wrapper = Node {
+        width: n.width,
+        height: n.height,
+        min_width: n.min_width,
+        min_height: n.min_height,
+        max_width: n.max_width,
+        max_height: n.max_height,
+        flex_grow: n.flex_grow,
+        flex_shrink: n.flex_shrink,
+        flex_basis: n.flex_basis,
+        align_self: n.align_self,
+        justify_self: n.justify_self,
+        margin: n.margin,
+        ..default()
+    };
 
     (
         Button,
         Name::new("Button"),
-        Node::default(),
+        wrapper,
         Pickable::IGNORE,
         Children::spawn(SpawnWith(move |parent: &mut ChildSpawner| {
+            let idle = opts.palette_set.none.clone();
             let content = match &opts.content {
                 WidgetContent::Image(_) => parent
                     .spawn((opts.clone().into_image_bundle(), Pickable::IGNORE))
                     .id(),
                 WidgetContent::Text(_) => parent
-                    .spawn((opts.clone().into_text_bundle(), Pickable::IGNORE))
+                    .spawn((
+                        opts.clone().color(idle.text).into_text_bundle(),
+                        Pickable::IGNORE,
+                    ))
                     .id(),
             };
             opts.node.width = Percent(100.0);
             opts.node.height = Percent(100.0);
+            opts.node.max_width = Auto;
+            opts.node.max_height = Auto;
+            opts.node.margin = UiRect::ZERO;
 
             parent
                 .spawn((
                     Name::new("Button Content"),
-                    opts.bg_color,
-                    opts.border_color,
-                    opts.palette_set.clone(),
+                    BackgroundColor(idle.bg),
+                    idle.border,
+                    opts.palette_set,
                 ))
                 .insert(opts.node)
                 .add_children(&[content])
@@ -119,21 +164,22 @@ where
 {
     let spinner = |text: &'static str| {
         Props::new(text)
-            .font_size(14.0)
-            .margin(UiRect::ZERO)
-            .padding(UiRect::axes(Px(8.0), Px(2.0)))
+            .width(size::BUTTON_HEIGHT)
+            .min_width(size::BUTTON_HEIGHT)
+            .padding(UiRect::ZERO)
     };
 
     (
         Node {
             align_items: AlignItems::Center,
+            column_gap: Px(4.0),
             ..default()
         },
         children![
             btn(spinner("-"), lower),
             (
-                label(Props::new("").node(Node {
-                    width: Px(80.0),
+                label(Props::new("").color(colors::NEUTRAL50).node(Node {
+                    width: Px(48.0),
                     justify_content: JustifyContent::Center,
                     ..default()
                 })),

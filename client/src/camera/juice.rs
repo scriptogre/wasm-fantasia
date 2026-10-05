@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::models::{Config, Player, SceneCamera, Screen};
+use crate::models::{Player, SceneCamera, Screen, Settings};
 use crate::player::control::Sprinting;
 
 pub fn plugin(app: &mut App) {
@@ -9,7 +9,7 @@ pub fn plugin(app: &mut App) {
 
 fn dynamic_fov(
     time: Res<Time>,
-    cfg: Res<Config>,
+    settings: Res<Settings>,
     player: Query<Has<Sprinting>, With<Player>>,
     mut camera: Query<&mut Projection, With<SceneCamera>>,
 ) {
@@ -18,7 +18,7 @@ fn dynamic_fov(
     };
     if let Projection::Perspective(perspective) = &mut *projection {
         let sprinting = player.single().unwrap_or(false);
-        let target = (cfg.player.fov + if sprinting { 5.0 } else { 0.0 }).to_radians();
+        let target = (settings.fov + if sprinting { 5.0 } else { 0.0 }).to_radians();
         perspective.fov += (target - perspective.fov) * (1.0 - (-10.0 * time.delta_secs()).exp());
     }
 }

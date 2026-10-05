@@ -16,5 +16,8 @@ serde = { workspace = true }
 ron = "^0.10"
 easy-ext = "1.0.2"
 
+[target.wasm32-unknown-unknown.dependencies]
+web-sys = { version = "0.3", features = ["Window", "Storage"] }
+
 [lints]
 workspace = true
