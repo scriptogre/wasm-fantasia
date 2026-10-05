@@ -1,3 +1,5 @@
+web_toolchain := "nightly-2026-05-01"
+
 # Run native dev build
 default: spacetimedb
     cargo run -p game-client
@@ -7,9 +9,9 @@ default: spacetimedb
 web: spacetimedb
     #!/usr/bin/env bash
     set -euo pipefail
-    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
+    rustup toolchain install {{web_toolchain}} --profile minimal -c rust-src -t wasm32-unknown-unknown
     command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
-    cd client && rustup run nightly bevy run --yes --no-default-features --features web,dev web -U multi-threading --host 0.0.0.0 --open
+    cd client && rustup run {{web_toolchain}} bevy run --yes --no-default-features --features web,dev web -U multi-threading --host 0.0.0.0 --open
 
 
 spacetime := env('HOME') / ".local/bin/spacetime"
@@ -55,9 +57,9 @@ build:
     cp -r client/assets dist/native/
     echo "Native bundle ready at dist/native/"
     echo "Building WASM client..."
-    rustup toolchain install nightly --profile minimal -c rust-src 2>/dev/null || true
+    rustup toolchain install {{web_toolchain}} --profile minimal -c rust-src -t wasm32-unknown-unknown
     command -v bevy &>/dev/null || cargo install --git https://github.com/TheBevyFlock/bevy_cli --locked bevy_cli
-    cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
+    cd client && rustup run {{web_toolchain}} bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
     echo "WASM bundle ready at dist/web/"
 
 # Per-system profiling — press F9 in-game for timing breakdown
@@ -87,23 +89,47 @@ generate:
 deploy: build-web
     #!/usr/bin/env bash
     set -euo pipefail
-    # Client: copy into the Caddy Docker volume
-    ssh thinkcentre "sudo rm -rf /var/lib/docker/volumes/caddy_game_web/_data/*"
-    rsync -az --delete target/bevy_web/web-release/game-client/ thinkcentre:/srv/game/
-    ssh thinkcentre "sudo cp -r /srv/game/* /var/lib/docker/volumes/caddy_game_web/_data/"
+    just deploy-client
     # Server: docker cp into container, then publish
-    scp -q target/wasm32-unknown-unknown/release/game_server.wasm thinkcentre:/tmp/game-server.wasm
-    ssh thinkcentre "docker cp /tmp/game-server.wasm spacetimedb:/tmp/game-server.wasm && docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/game-server.wasm --yes game-server"
+    if [[ "$(hostname)" == thinkcentre ]]; then
+        docker cp target/wasm32-unknown-unknown/release/game_server.wasm spacetimedb:/tmp/game-server.wasm
+        docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/game-server.wasm --yes game-server
+    else
+        scp -q target/wasm32-unknown-unknown/release/game_server.wasm thinkcentre:/tmp/game-server.wasm
+        ssh thinkcentre "docker cp /tmp/game-server.wasm spacetimedb:/tmp/game-server.wasm && docker exec spacetimedb spacetime publish --server http://localhost:3000 --bin-path /tmp/game-server.wasm --yes game-server"
+    fi
+
+# Publish a built client without rebuilding the server
+deploy-client:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "$(hostname)" == thinkcentre ]]; then
+        game_source="$PWD/target/bevy_web/web-release/game-client"
+        game_publish=(bash)
+    else
+        rsync -az --delete target/bevy_web/web-release/game-client/ thinkcentre:/srv/game/
+        game_source=/srv/game
+        game_publish=(ssh thinkcentre bash)
+    fi
+    "${game_publish[@]}" -s -- "$game_source" <<'REMOTE'
+    set -euo pipefail
+    game_source="$1"
+    game_volume="$(docker volume inspect caddy_game_web | jq -r '.[0].Mountpoint')"
+    game_release="$(sha256sum "$game_source/build/game-client_bg.wasm" | cut -c1-12)"
+    sudo mkdir -p "$game_volume/build/$game_release"
+    sudo rsync -a "$game_source/build/" "$game_volume/build/$game_release/"
+    sudo rsync -a "$game_source/assets/" "$game_volume/assets/"
+    sed "s|./build/|./build/$game_release/|g" "$game_source/index.html" | sudo tee "$game_volume/index.html.next" >/dev/null
+    sudo mv "$game_volume/index.html.next" "$game_volume/index.html"
+    REMOTE
 
 # Build WASM client + server module (server without thread flags for SpacetimeDB)
 build-web:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Server must be built WITHOUT atomics/threads (SpacetimeDB doesn't support them)
-    mv .cargo/config.toml .cargo/config.toml.bak
-    cargo +stable build -p game-server --target wasm32-unknown-unknown --release
-    mv .cargo/config.toml.bak .cargo/config.toml
-    cd client && rustup run nightly bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
+    CARGO_ENCODED_RUSTFLAGS="" cargo +stable build -p game-server --target wasm32-unknown-unknown --release
+    rustup toolchain install {{web_toolchain}} --profile minimal -c rust-src -t wasm32-unknown-unknown
+    cd client && rustup run {{web_toolchain}} bevy build --yes --no-default-features --features web --release web -U multi-threading --bundle
 
 # Wipe SpacetimeDB data and redeploy module
 db-reset:

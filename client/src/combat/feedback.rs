@@ -5,9 +5,9 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 
 use crate::combat::HitLanded;
+use crate::models::combat::{Stat, Stats};
 use crate::models::{Player, SceneCamera, Session};
 use crate::player::control::{JumpLaunched, LandingImpact};
-use crate::models::combat::{Stat, Stats};
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(HitStop::default())
@@ -185,18 +185,13 @@ fn on_jump_rumble(
     gamepads: Query<Entity, With<Gamepad>>,
     mut rumble: MessageWriter<GamepadRumbleRequest>,
 ) {
-    let t = 0.0_f32; // charge removed — always minimum
-    let strong = 0.2 + 0.6 * t;
-    let weak = 0.1 + 0.4 * t;
-    let duration_ms = 80 + (70.0 * t) as u64; // 80ms tap, 150ms full
-
     for gamepad in gamepads.iter() {
         rumble.write(GamepadRumbleRequest::Add {
             gamepad,
-            duration: Duration::from_millis(duration_ms),
+            duration: Duration::from_millis(80),
             intensity: GamepadRumbleIntensity {
-                strong_motor: strong,
-                weak_motor: weak,
+                strong_motor: 0.2,
+                weak_motor: 0.1,
             },
         });
     }
@@ -211,8 +206,8 @@ fn on_landing_shake(on: On<LandingImpact>, mut shake: ResMut<ScreenShake>) {
     let event = on.event();
     // Scale: 3 m/s → big shake, 25+ m/s → massive ground-shaking impact
     let t = ((event.velocity_y - 3.0) / (LANDING_MAX_VELOCITY - 3.0)).clamp(0.0, 1.0);
-    let trauma = 0.4 + 0.6 * t;
-    shake.trauma = (shake.trauma + trauma).min(1.0);
+    let trauma = 0.12 + 0.25 * t;
+    shake.trauma = (shake.trauma + trauma).min(0.7);
 }
 
 fn on_landing_rumble(

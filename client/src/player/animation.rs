@@ -1,9 +1,9 @@
 use super::*;
 use crate::combat::AttackState;
 use crate::models::Animation;
-use crate::models::player::{FootContact, JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
-use crate::player::control::{GroundPoundState, LandingStun, RollingState};
 use crate::models::combat::{Stat, Stats};
+use crate::models::player::{FootContact, JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
+use crate::player::control::GroundPoundState;
 use bevy_tnua::{TnuaAnimatingState, TnuaAnimatingStateDirective};
 
 mod anim_knobs {
@@ -171,11 +171,15 @@ pub fn animating(
         Option<&AttackState>,
         Option<&Stats>,
         &mut AttackAnimationState,
-        Option<&RollingState>,
-        Option<&LandingStun>,
         Option<&GroundPoundState>,
     )>,
-    mut animation_query: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
+    graphs: Res<Assets<AnimationGraph>>,
+    clips: Res<Assets<AnimationClip>>,
+    mut animation_query: Query<(
+        &mut AnimationPlayer,
+        &mut AnimationTransitions,
+        &AnimationGraphHandle,
+    )>,
 ) {
     let Ok((
         controller,
@@ -184,8 +188,6 @@ pub fn animating(
         attack_state,
         stats,
         mut attack_anim,
-        rolling_state,
-        landing_stun,
         ground_pound,
     )) = player_q.single_mut()
     else {
@@ -204,7 +206,9 @@ pub fn animating(
     let Some(anim_entity) = player.anim_player_entity else {
         return;
     };
-    let Ok((mut animation_player, mut transitions)) = animation_query.get_mut(anim_entity) else {
+    let Ok((mut animation_player, mut transitions, graph_handle)) =
+        animation_query.get_mut(anim_entity)
+    else {
         return;
     };
 
@@ -220,57 +224,35 @@ pub fn animating(
             // Keep TnuaAnimatingState in sync (for when attack ends)
             animating_state.update_by_discriminant(AnimationState::Attack);
 
-            // Select animation: hook for crits, alternate jab/cross for normal attacks
-            let anim = if attack.is_crit {
-                Animation::MeleeHook
-            } else if attack.attack_count % 2 == 1 {
+            let anim = if attack.attack_count % 2 == 1 {
                 Animation::PunchJab
             } else {
                 Animation::PunchCross
             };
-
-            // Detect new attack by comparing attack_count (gameplay truth)
-            let is_new_attack = attack.attack_count != attack_anim.last_attack_count;
-
-            if is_new_attack {
-                attack_anim.last_attack_count = attack.attack_count;
-
-                if let Some(index) = player.animations.get(&anim) {
-                    let start_speed = if attack.is_crit { 1.1 } else { 1.3 };
+            if let Some(index) = player.animations.get(&anim) {
+                let duration = graphs
+                    .get(&graph_handle.0)
+                    .and_then(|graph| match &graph.graph[*index].node_type {
+                        bevy::animation::graph::AnimationNodeType::Clip(handle) => {
+                            clips.get(handle).map(AnimationClip::duration)
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or(game_core::combat::attack_timing::PUNCH_DURATION);
+                let speed =
+                    duration / game_core::combat::attack_timing::PUNCH_DURATION * speed_mult;
+                if attack.attack_count != attack_anim.last_attack_count {
+                    attack_anim.last_attack_count = attack.attack_count;
                     transitions
-                        .play(&mut animation_player, *index, BLEND_DURATION)
-                        .set_speed(start_speed);
-                }
-            } else {
-                // Speed curve: keep wind-up/impact readable, speed up recovery
-                let progress = attack.progress();
-                let base_speed = if attack.is_crit { 1.1 } else { 1.3 };
-                let anim_speed = if progress < 0.55 {
-                    base_speed + (speed_mult - 1.0) * 0.25
-                } else {
-                    base_speed * speed_mult
-                };
-
-                for (_, anim) in animation_player.playing_animations_mut() {
-                    anim.set_speed(anim_speed);
+                        .play(&mut animation_player, *index, Duration::from_millis(40))
+                        .set_speed(speed)
+                        .replay();
+                } else if let Some(active) = animation_player.animation_mut(*index) {
+                    active.set_speed(speed);
                 }
             }
             return;
         }
-    }
-
-    // Dodge roll: force Roll animation while rolling.
-    if rolling_state.is_some() {
-        player.animation_state = AnimationState::Roll;
-        let directive = animating_state.update_by_discriminant(AnimationState::Roll);
-        if let TnuaAnimatingStateDirective::Alter { .. } = directive {
-            if let Some(index) = player.animations.get(&Animation::Roll) {
-                transitions
-                    .play(&mut animation_player, *index, Duration::from_millis(120))
-                    .set_speed(1.3);
-            }
-        }
-        return;
     }
 
     // Ground pound: diving animation while slamming down.
@@ -282,30 +264,6 @@ pub fn animating(
                 transitions
                     .play(&mut animation_player, *index, Duration::from_millis(80))
                     .set_speed(1.5);
-            }
-        }
-        return;
-    }
-
-    // Landing stun: force landing animation on impact — slow crouch-in, fast snap-out.
-    if let Some(stun) = landing_stun {
-        player.animation_state = AnimationState::LandingStun;
-        let directive = animating_state.update_by_discriminant(AnimationState::LandingStun);
-        match directive {
-            TnuaAnimatingStateDirective::Alter { .. } => {
-                if let Some(index) = player.animations.get(&Animation::NinjaJumpLand) {
-                    transitions
-                        .play(&mut animation_player, *index, Duration::from_millis(50))
-                        .set_speed(0.6);
-                }
-            }
-            TnuaAnimatingStateDirective::Maintain { .. } => {
-                // Ramp from 0.6x (dramatic impact) to 1.8x (fast recovery)
-                let frac = stun.timer.fraction();
-                let speed = 0.6 + 1.2 * frac;
-                for (_, active_animation) in animation_player.playing_animations_mut() {
-                    active_animation.set_speed(speed);
-                }
             }
         }
         return;

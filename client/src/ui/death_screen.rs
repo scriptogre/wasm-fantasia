@@ -1,7 +1,6 @@
 use crate::*;
 use bevy::ui::Val::*;
 use bevy_third_person_camera::ThirdPersonCamera;
-use spacetimedb_sdk::DbContext;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::GameOver), setup_death_screen)
@@ -58,14 +57,7 @@ fn on_restart_run(
 ) {
     if let Some(conn) = conn {
         crate::networking::combat::send_restart_run(&conn);
-        // Force disconnect so the Connecting screen gets a fresh subscription
-        // with full state resync. Without this, the server thinks we already
-        // know about all entities and won't re-send them.
-        let _ = conn.conn.disconnect();
-        commands.remove_resource::<crate::networking::SpacetimeDbConnection>();
+    } else {
+        commands.trigger(GoTo(Screen::Connecting));
     }
-
-    // Go through Connecting — keeps ServerTarget and GameMode alive,
-    // reconnects with a fresh subscription, then enters Gameplay.
-    commands.trigger(GoTo(Screen::Connecting));
 }

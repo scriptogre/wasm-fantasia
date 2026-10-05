@@ -1,7 +1,7 @@
 use super::*;
 use crate::player::ControlScheme;
 use bevy_tnua::builtins::TnuaBuiltinKnockback;
-use bevy_tnua::prelude::{TnuaController, TnuaUserControlsSystems};
+use bevy_tnua::prelude::{TnuaController, TnuaPipelineSystems, TnuaUserControlsSystems};
 use game_client_models::player::RemotePlayer;
 
 /// Scale applied to the knockback vector before passing it to Tnua as a shove.
@@ -14,12 +14,15 @@ pub fn plugin(app: &mut App) {
     app.add_observer(on_damage)
         .add_observer(on_death)
         .add_systems(
-            Update,
-            (
-                apply_pending_knockback.after(TnuaUserControlsSystems),
-                detect_local_player_death,
-            )
+            FixedUpdate,
+            apply_pending_knockback
+                .after(TnuaUserControlsSystems)
+                .before(TnuaPipelineSystems::Logic)
                 .run_if(in_state(Screen::Gameplay)),
+        )
+        .add_systems(
+            Update,
+            sync_life_state.run_if(in_state(Screen::Gameplay).or(in_state(Screen::GameOver))),
         );
 }
 
@@ -97,13 +100,23 @@ fn apply_pending_knockback(
 /// Detect when the server sets local player health to 0 and trigger game over.
 /// The reconciler syncs health from the DB — this system watches for the
 /// transition via Bevy change detection, keeping concerns separated.
-fn detect_local_player_death(
-    query: Query<&Health, (With<PlayerCombatant>, Without<RemotePlayer>, Changed<Health>)>,
+fn sync_life_state(
+    screen: Res<State<Screen>>,
+    query: Query<
+        &Health,
+        (
+            With<PlayerCombatant>,
+            Without<RemotePlayer>,
+            Changed<Health>,
+        ),
+    >,
     mut commands: Commands,
 ) {
     if let Ok(health) = query.single() {
-        if health.current <= 0.0 {
+        if *screen.get() == Screen::Gameplay && health.current <= 0.0 {
             commands.trigger(GoTo(Screen::GameOver));
+        } else if *screen.get() == Screen::GameOver && health.current > 0.0 {
+            commands.trigger(GoTo(Screen::Connecting));
         }
     }
 }

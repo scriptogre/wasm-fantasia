@@ -13,14 +13,22 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Gameplay), spawn_gameplay_ui)
         .add_systems(
             OnExit(Screen::Gameplay),
-            (unpause_server_on_exit, strip_input_contexts, cleanup_gameplay_entities)
+            (
+                unpause_server_on_exit,
+                strip_input_contexts,
+                cleanup_gameplay_entities,
+            )
                 .chain()
                 .run_if(not(is_entering_game_over))
                 .in_set(GameplayCleanup),
         )
         .add_systems(
             OnExit(Screen::GameOver),
-            (unpause_server_on_exit, strip_input_contexts, cleanup_gameplay_entities)
+            (
+                unpause_server_on_exit,
+                strip_input_contexts,
+                cleanup_gameplay_entities,
+            )
                 .chain()
                 .in_set(GameplayCleanup),
         )
@@ -109,20 +117,21 @@ fn strip_input_contexts(
 fn sync_gameplay_lock(
     blockers: Query<(), With<BlocksGameplay>>,
     pause: Res<State<PauseState>>,
-    player: Query<Entity, With<Player>>,
+    player: Query<(Entity, Has<PlayerCtx>), With<Player>>,
+    touch: Res<crate::player::touch::TouchControls>,
     mut cam: Query<&mut ThirdPersonCamera>,
     mut commands: Commands,
 ) {
     let should_lock = *pause.get() != PauseState::Paused && blockers.is_empty();
 
     if let Ok(mut cam) = cam.single_mut() {
-        cam.cursor_lock_active = should_lock;
+        cam.cursor_lock_active = should_lock && !touch.enabled;
     }
 
-    if let Ok(entity) = player.single() {
-        if should_lock {
+    if let Ok((entity, has_context)) = player.single() {
+        if should_lock && !has_context {
             commands.entity(entity).insert(PlayerCtx);
-        } else {
+        } else if !should_lock && has_context {
             commands.entity(entity).remove::<PlayerCtx>();
         }
     }

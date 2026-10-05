@@ -184,7 +184,6 @@ pub fn add_player_ctx(add: On<Add, PlayerCtx>, mut commands: Commands) {
         (
             Action::<Navigate>::new(),
             DeadZone::default(),
-            Scale::splat(0.3),
             Bindings::spawn(( Cardinal::wasd_keys(), Cardinal::arrows(), Axial::left_stick() )),
         ),
         (

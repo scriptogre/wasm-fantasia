@@ -63,10 +63,10 @@ impl Commands<'_, '_> {
 impl Transform {
     pub fn movement_direction(&self, input: Vec2) -> Vec3 {
         let forward = self.forward();
-        let forward_flat = Vec3::new(forward.x, 0.0, forward.z);
-        let right = forward_flat.cross(Vec3::Y).normalize();
+        let forward_flat = Vec3::new(forward.x, 0.0, forward.z).normalize_or_zero();
+        let right = forward_flat.cross(Vec3::Y);
         let direction = (right * input.x) + (forward_flat * input.y);
-        direction.normalize_or_zero()
+        direction.clamp_length_max(1.0)
     }
 }
 

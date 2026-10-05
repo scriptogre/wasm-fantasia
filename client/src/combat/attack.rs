@@ -1,13 +1,13 @@
 use super::*;
+use crate::models::combat::{Stat, Stats};
 use crate::player::ControlScheme;
 use crate::player::control::{GroundPoundImpact, GroundPoundState, InputBuffer};
-use crate::models::combat::{Stat, Stats};
 use crate::scripting::{ActiveAbility, EntityBehaviors, ScriptRegistryRes};
 use bevy_enhanced_input::prelude::{Fire, Start};
 use bevy_tnua::prelude::TnuaController;
 use game_core::combat::{HitFeedback, defaults, ground_pound};
-use game_core::runtime::{Intent, Effect};
 use game_core::runtime::types::Combatant as ScriptCombatant;
+use game_core::runtime::{Effect, Intent};
 use std::collections::HashMap;
 
 /// Visual constants for attack effects
@@ -21,7 +21,9 @@ pub fn plugin(app: &mut App) {
         .add_observer(on_ground_pound_hit)
         .add_systems(
             Update,
-            (tick_attack_state, process_buffered_attack).run_if(in_state(Screen::Gameplay)),
+            (tick_attack_state, process_buffered_attack)
+                .chain()
+                .run_if(in_state(Screen::Gameplay)),
         );
 }
 
@@ -69,17 +71,17 @@ fn handle_airborne_attack(
 /// Execute buffered attack when possible
 fn process_buffered_attack(
     mut buffer: ResMut<InputBuffer>,
-    mut query: Query<&mut AttackState, With<PlayerCombatant>>,
+    mut query: Query<(&mut AttackState, &TnuaController<ControlScheme>), With<PlayerCombatant>>,
 ) {
     if buffer.attack.is_none() {
         return;
     }
 
-    let Ok(mut attack_state) = query.single_mut() else {
+    let Ok((mut attack_state, controller)) = query.single_mut() else {
         return;
     };
 
-    if attack_state.can_attack() {
+    if controller.basis_memory.standing_on_entity().is_some() && attack_state.can_attack() {
         buffer.attack = None;
         attack_state.start_attack(false);
     }
@@ -331,7 +333,12 @@ fn on_attack_hit(
     let vertical_reach = defaults::ATTACK_VERTICAL_REACH;
     let script_targets: Vec<ScriptCombatant> = targets
         .iter()
-        .filter(|(_, tf, _)| (tf.translation.y - attacker_pos.y).abs() <= vertical_reach)
+        .filter(|(_, tf, health)| {
+            let delta = tf.translation - attacker_pos;
+            !health.is_dead()
+                && delta.y.abs() <= vertical_reach
+                && delta.xz().length_squared() <= source.attack_range * source.attack_range
+        })
         .map(|(e, tf, h)| build_combatant(e, tf, h, None))
         .collect();
 

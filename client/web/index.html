@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10131a">
+  <title>WASM Fantasia</title>
+  <link rel="icon" href="data:,">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #10131a; color: white; font: 16px system-ui; }
+    canvas { display: block; width: 100% !important; height: 100% !important; outline: none; touch-action: none; }
+    #loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="loading">Loading WASM Fantasia...</div>
+  <noscript>This game needs JavaScript.</noscript>
+  <script type="module">
+    const contexts = [];
+    window.AudioContext = new Proxy(window.AudioContext, {
+      construct(target, args) {
+        const context = new target(...args);
+        contexts.push(context);
+        return context;
+      }
+    });
+    for (const event of ["pointerdown", "touchend", "keydown"]) {
+      document.addEventListener(event, () => {
+        for (const context of contexts) {
+          if (context.state === "suspended") context.resume();
+        }
+      }, { passive: true });
+    }
+    import init from "{% entrypoint %}.js";
+    const loading = document.getElementById("loading");
+    const observer = new MutationObserver(() => {
+      if (document.querySelector("canvas")) { loading.remove(); observer.disconnect(); }
+    });
+    observer.observe(document.body, { childList: true });
+    init().catch(error => {
+      if (error.message?.startsWith("Using exceptions for control flow")) return;
+      document.body.append(loading);
+      loading.textContent = "Could not start the game. Reload in a browser with WebGPU support.";
+      console.error(error);
+    });
+  </script>
+</body>
+</html>

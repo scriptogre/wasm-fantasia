@@ -1,6 +1,6 @@
 use crate::combat::{AttackState, Combatant, Health, PlayerCombatant};
-use crate::models::player::{JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
 use crate::models::combat::{Stat, Stats};
+use crate::models::player::{JOG_FOOT_CONTACTS, SPRINT_FOOT_CONTACTS};
 use crate::scene::GameLayer;
 use crate::scripting::{ActiveAbility, EntityBehaviors};
 use crate::*;
@@ -42,6 +42,7 @@ pub struct AirActionSlots {
 mod animation;
 pub mod control;
 mod sound;
+pub mod touch;
 
 pub use animation::*;
 
@@ -54,6 +55,7 @@ pub fn plugin(app: &mut App) {
         TnuaAirActionsPlugin::<AirActionSlots>::new(FixedUpdate),
         control::plugin,
         sound::plugin,
+        touch::plugin,
     ));
 
     app.add_plugins(ThirdPersonCameraPlugin).configure_sets(
@@ -184,6 +186,7 @@ pub fn spawn_player(
                 .with(Stat::MaxHealth, defaults::HEALTH)
                 .with(Stat::Health, defaults::HEALTH)
                 .with(Stat::AttackDamage, defaults::ATTACK_DAMAGE)
+                .with(Stat::AttackSpeed, defaults::ATTACK_SPEED)
                 .with(Stat::Knockback, defaults::KNOCKBACK)
                 .with(Stat::AttackRange, defaults::ATTACK_RANGE)
                 .with(Stat::AttackArc, defaults::ATTACK_ARC)

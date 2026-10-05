@@ -40,7 +40,11 @@ fn load_hud_font(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 // ── Spawn ───────────────────────────────────────────────────────────
 
-fn spawn_hud(mut commands: Commands, font: Res<HudFont>) {
+fn spawn_hud(
+    mut commands: Commands,
+    font: Res<HudFont>,
+    touch: Res<crate::player::touch::TouchControls>,
+) {
     let font = font.0.clone();
 
     commands
@@ -49,7 +53,16 @@ fn spawn_hud(mut commands: Commands, font: Res<HudFont>) {
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(32.0),
-                bottom: Val::Px(32.0),
+                top: if touch.enabled {
+                    Val::Px(48.0)
+                } else {
+                    Val::Auto
+                },
+                bottom: if touch.enabled {
+                    Val::Auto
+                } else {
+                    Val::Px(32.0)
+                },
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
