@@ -103,6 +103,7 @@ pub enum Screen {
     Loading,
     Tutorial,
     Settings,
+    Runes,
     // Here the menu is drawn and waiting for player interaction
     Title,
     // MP connection handshake — between Title and Gameplay

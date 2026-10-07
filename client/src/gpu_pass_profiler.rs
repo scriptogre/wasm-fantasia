@@ -4,8 +4,8 @@
 //! report to the terminal. Press F10 again to cancel early.
 
 use std::sync::{
-    mpsc::{self, Receiver, Sender},
     Mutex,
+    mpsc::{self, Receiver, Sender},
 };
 
 use bevy::core_pipeline::core_3d::graph::{Core3d, Node3d};
@@ -111,9 +111,7 @@ impl RenderNode for TimestampResolveNode {
         if !state.active {
             return Ok(());
         }
-        let (Some(query_set), Some(resolve_buf)) =
-            (&state.query_set, &state.resolve_buffer)
-        else {
+        let (Some(query_set), Some(resolve_buf)) = (&state.query_set, &state.resolve_buffer) else {
             return Ok(());
         };
 
@@ -201,10 +199,7 @@ pub fn plugin(app: &mut App) {
         Render,
         sync_profiler_control.in_set(RenderSystems::ExtractCommands),
     );
-    render_app.add_systems(
-        Render,
-        readback_timestamps.in_set(RenderSystems::Cleanup),
-    );
+    render_app.add_systems(Render, readback_timestamps.in_set(RenderSystems::Cleanup));
 
     // Register timestamp nodes directly in the Core3d sub-graph
     let render_world = render_app.world_mut();
@@ -260,8 +255,7 @@ pub fn plugin(app: &mut App) {
     );
 
     // GPU preprocess span: conditional — these nodes only exist with GPU-driven rendering
-    let has_gpu_preprocess =
-        core3d.get_node_state(NodePbr::EarlyGpuPreprocess).is_ok();
+    let has_gpu_preprocess = core3d.get_node_state(NodePbr::EarlyGpuPreprocess).is_ok();
     if has_gpu_preprocess {
         core3d.add_node_edge(
             TimestampLabel::BeforeGpuPreprocess,
@@ -271,7 +265,10 @@ pub fn plugin(app: &mut App) {
             NodePbr::LateGpuPreprocess,
             TimestampLabel::AfterGpuPreprocess,
         );
-        core3d.add_node_edge(TimestampLabel::FrameStart, TimestampLabel::BeforeGpuPreprocess);
+        core3d.add_node_edge(
+            TimestampLabel::FrameStart,
+            TimestampLabel::BeforeGpuPreprocess,
+        );
         core3d.add_node_edge(TimestampLabel::AfterGpuPreprocess, Node3d::StartMainPass);
     }
 
@@ -302,10 +299,7 @@ fn init_gpu_timestamp_resources(
 ) {
     let device = render_device.wgpu_device();
 
-    if !device
-        .features()
-        .contains(wgpu::Features::TIMESTAMP_QUERY)
-    {
+    if !device.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
         warn!("GPU pass profiler: TIMESTAMP_QUERY not supported — profiler disabled.");
         return;
     }
@@ -406,8 +400,7 @@ fn readback_timestamps(render_device: Res<RenderDevice>, mut state: ResMut<GpuTi
                 let end_offset = (i * 2 + 1) * size_of::<u64>();
                 let start =
                     u64::from_ne_bytes(bytes[start_offset..start_offset + 8].try_into().unwrap());
-                let end =
-                    u64::from_ne_bytes(bytes[end_offset..end_offset + 8].try_into().unwrap());
+                let end = u64::from_ne_bytes(bytes[end_offset..end_offset + 8].try_into().unwrap());
                 let duration_ms = if end >= start {
                     (end - start) as f64 * period / 1_000_000.0
                 } else {
@@ -459,12 +452,12 @@ fn toggle_pass_profiler(
 
     commands.spawn((
         PassProfilerOverlay,
-        Text::new("GPU PASS PROFILE  10s"),
+        Text::new("GPU pass profile 10 s"),
         TextFont {
             font_size: 18.0,
             ..default()
         },
-        TextColor(colors::ACID_GREEN),
+        TextColor(colors::PAPER),
         Node {
             position_type: PositionType::Absolute,
             top: Val::Px(16.0),
@@ -507,7 +500,7 @@ fn tick_pass_profiler(
     let remaining = (RECORD_SECONDS - recording.elapsed).max(0.0).ceil() as u32;
     for mut text in &mut overlay_text {
         text.0 = format!(
-            "GPU PASS PROFILE  {}s  ({} samples)",
+            "GPU pass profile {} s, {} samples",
             remaining,
             recording.samples.len()
         );
@@ -535,7 +528,9 @@ fn tick_pass_profiler(
 fn log_pass_report(samples: &[[f32; NUM_SPANS]], frame_count: u32, elapsed: f32) {
     let gpu_sample_count = samples.len();
     if gpu_sample_count == 0 {
-        info!("GPU pass profiler: no GPU samples collected. Timestamp queries may not be supported.");
+        info!(
+            "GPU pass profiler: no GPU samples collected. Timestamp queries may not be supported."
+        );
         return;
     }
 

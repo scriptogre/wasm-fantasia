@@ -2,7 +2,7 @@ use bevy::{input::InputSystems, prelude::*, window::PrimaryWindow};
 use bevy_enhanced_input::prelude::*;
 
 use crate::models::{Attack, Jump, Navigate, PlayerCtx, SceneCamera, Screen};
-use crate::ui::{Modal, NewModal, colors, size};
+use crate::ui::{Modal, NewModal, colors, fonts, size};
 
 #[derive(Resource, Default)]
 pub struct TouchControls {
@@ -27,7 +27,8 @@ struct TouchKnob;
 /// Knob offset in px at full stick deflection
 const KNOB_TRAVEL: f32 = 36.0;
 /// Dark glass so controls read on any background without hiding it
-const IDLE: Color = Color::oklcha(0.145, 0.0, 0.0, 0.35);
+const IDLE: Color = Color::oklcha(0.30, 0.015, 85.0, 0.35);
+const PRESSED: Color = Color::oklcha(0.905, 0.025, 92.0, 0.35);
 
 pub fn plugin(app: &mut App) {
     #[cfg(not(target_arch = "wasm32"))]
@@ -46,7 +47,7 @@ pub fn plugin(app: &mut App) {
 
 fn spawn_controls(mut commands: Commands) {
     let edge = size::EDGE;
-    let rim = colors::NEUTRAL50.with_alpha(0.2);
+    let rim = colors::INK.with_alpha(0.45);
     let circle = |diameter: f32| Node {
         position_type: PositionType::Absolute,
         width: px(diameter),
@@ -60,8 +61,14 @@ fn spawn_controls(mut commands: Commands) {
     let caption = |text: &'static str| {
         (
             Text::new(text),
-            TextFont::from_font_size(size::CAPTION_SIZE),
-            TextColor(colors::NEUTRAL50.with_alpha(0.85)),
+            TextFont {
+                font: fonts::SEMIBOLD,
+                weight: bevy::text::FontWeight::SEMIBOLD,
+                font_size: size::CAPTION_SIZE,
+                ..default()
+            },
+            TextColor(colors::INK),
+            crate::ui::hud::HUD_SHADOW,
             Pickable::IGNORE,
         )
     };
@@ -70,10 +77,9 @@ fn spawn_controls(mut commands: Commands) {
             Node {
                 width: px(4),
                 height: px(14),
-                border_radius: BorderRadius::all(px(1)),
                 ..default()
             },
-            BackgroundColor(colors::NEUTRAL50.with_alpha(0.85)),
+            BackgroundColor(colors::INK),
             Pickable::IGNORE,
         )
     };
@@ -109,7 +115,7 @@ fn spawn_controls(mut commands: Commands) {
                         border_radius: BorderRadius::MAX,
                         ..default()
                     },
-                    BackgroundColor(colors::NEUTRAL50.with_alpha(0.25)),
+                    BackgroundColor(colors::INK.with_alpha(0.3)),
                     Pickable::IGNORE,
                 )],
             ),
@@ -121,9 +127,9 @@ fn spawn_controls(mut commands: Commands) {
                     ..circle(84.0)
                 },
                 BackgroundColor(IDLE),
-                BorderColor::all(colors::AMBER.with_alpha(0.7)),
+                BorderColor::all(colors::INK.with_alpha(0.8)),
                 Pickable::IGNORE,
-                children![caption("HIT")],
+                children![caption("Attack")],
             ),
             (
                 TouchButton::Jump,
@@ -135,7 +141,7 @@ fn spawn_controls(mut commands: Commands) {
                 BackgroundColor(IDLE),
                 BorderColor::all(rim),
                 Pickable::IGNORE,
-                children![caption("JUMP")],
+                children![caption("Jump")],
             ),
             (
                 TouchButton::Pause,
@@ -143,6 +149,7 @@ fn spawn_controls(mut commands: Commands) {
                     right: px(edge),
                     top: px(edge),
                     column_gap: px(4),
+                    border_radius: BorderRadius::ZERO,
                     ..circle(44.0)
                 },
                 BackgroundColor(IDLE),
@@ -193,7 +200,9 @@ fn touch_input(
         return;
     }
 
-    let mut pointer_scale = Vec2::splat(window.scale_factor());
+    let pointer_scale = Vec2::splat(window.scale_factor());
+    #[cfg(target_arch = "wasm32")]
+    let mut pointer_scale = pointer_scale;
     #[cfg(target_arch = "wasm32")]
     if let Some(browser) = web_sys::window() {
         let width = browser
@@ -270,11 +279,7 @@ fn touch_input(
             TouchButton::Jump => jump,
             TouchButton::Pause => pause,
         };
-        color.0 = if pressed {
-            colors::AMBER.with_alpha(0.35)
-        } else {
-            IDLE
-        };
+        color.0 = if pressed { PRESSED } else { IDLE };
     }
     let thumb = Val2::px(movement.x * KNOB_TRAVEL, -movement.y * KNOB_TRAVEL);
     for mut knob in &mut knob {

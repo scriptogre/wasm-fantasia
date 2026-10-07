@@ -33,7 +33,13 @@ impl ConnectionLog {
     }
 
     fn display(&self) -> String {
-        self.lines.join("\n")
+        if self.saw_identity {
+            "Entering the arena…".into()
+        } else if self.saw_resource {
+            "Joining your session…".into()
+        } else {
+            "Connecting to the arena…".into()
+        }
     }
 }
 
@@ -95,35 +101,45 @@ fn spawn_connecting_screen(
         TimerMode::Once,
     )));
 
-    commands
-        .spawn((
-            DespawnOnExit(Screen::Connecting),
-            GlobalZIndex(1),
-            ui_root("Connecting Screen"),
-            BackgroundColor(colors::VOID),
-        ))
-        .with_children(|root| {
-            root.spawn(panel(420.0)).with_children(|panel| {
-                panel.spawn(header("Connecting"));
-                panel.spawn((
-                    LogText,
-                    Text::new(""),
-                    TextFont::from_font_size(size::CAPTION_SIZE),
-                    LineHeight::RelativeToFont(1.5),
-                    TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
-                    TextColor(colors::NEUTRAL400),
-                    Node {
-                        min_height: Px(96.0),
-                        margin: UiRect::vertical(Px(8.0)),
-                        ..default()
-                    },
-                ));
-                panel.spawn(btn("Cancel", cancel_connecting));
-            });
-        });
+    commands.spawn((
+        DespawnOnExit(Screen::Connecting),
+        GlobalZIndex(1),
+        sheet(
+            header("Connecting", size::HEADER_SIZE),
+            (
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Px(16.0),
+                    width: Percent(100.0),
+                    max_width: Px(640.0),
+                    align_self: AlignSelf::Center,
+                    ..default()
+                },
+                children![
+                    (
+                        LogText,
+                        Text::new(""),
+                        TextFont::from_font_size(size::CAPTION_SIZE + 1.0),
+                        LineHeight::RelativeToFont(1.6),
+                        TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
+                        TextColor(colors::INK),
+                    ),
+                    (
+                        Node {
+                            max_width: Px(360.0),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        children![btn("Cancel", cancel_connecting)],
+                    ),
+                ],
+            ),
+            "Returns to the title screen if the server does not answer.",
+        ),
+    ));
 }
 
-fn cancel_connecting(_: On<Pointer<Click>>, mut commands: Commands) {
+fn cancel_connecting(_: On<Activate>, mut commands: Commands) {
     commands.trigger(GoTo(Screen::Title));
 }
 

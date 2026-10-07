@@ -1,110 +1,117 @@
 use super::*;
-use bevy::text::LineHeight;
 
-/// This plugin is responsible for the game menu
-/// The menu is only drawn during the State [`Screen::Title`] and is removed when that state is exited
 pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Screen::Title), setup_menu);
 }
 
+pub(super) const GAME_TITLE: &str = "WASM Fantasia";
+
 fn setup_menu(
     mut commands: Commands,
-    mut state: ResMut<Session>,
-    fonts: Res<crate::asset_loading::Fonts>,
-    #[cfg(not(target_arch = "wasm32"))] server_state: Option<
+    mut session: ResMut<Session>,
+    settings: Res<Settings>,
+    #[cfg(not(target_arch = "wasm32"))] server: Option<
         Res<crate::networking::local_server::LocalServerState>,
     >,
 ) {
-    commands
-        .spawn((
-            DespawnOnExit(Screen::Title),
-            GlobalZIndex(1),
-            ui_root("Title UI"),
-            BackgroundColor(colors::VOID),
-        ))
-        .with_children(|root| {
-            // Thumb-reachable column: bottom-left on desktop, full width on phones
-            root.spawn(Node {
-                position_type: PositionType::Absolute,
-                flex_direction: FlexDirection::Column,
-                row_gap: Px(12.0),
-                left: Vw(8.0),
-                right: Vw(8.0),
-                bottom: Vh(10.0),
-                max_width: Px(360.0),
+    #[cfg(not(target_arch = "wasm32"))]
+    let running = server.is_some_and(|server| {
+        matches!(
+            *server,
+            crate::networking::local_server::LocalServerState::Ready
+        )
+    });
+    let play = |title| {
+        Props::new(title)
+            .height(Px(52.0))
+            .palette_set(PaletteSet::selected())
+            .font(TextFont {
+                font: fonts::SEMIBOLD,
+                weight: bevy::text::FontWeight::SEMIBOLD,
+                font_size: 18.0,
                 ..default()
             })
-            .with_children(|menu| {
-                menu.spawn((
-                    Node {
-                        width: Px(40.0),
-                        height: Px(4.0),
-                        ..default()
-                    },
-                    BackgroundColor(colors::AMBER),
-                ));
-                menu.spawn((
-                    Text::new("WASM\nFANTASIA"),
-                    TextFont {
-                        font: fonts.bold.clone(),
-                        font_size: size::DISPLAY_SIZE,
-                        ..default()
-                    },
-                    LineHeight::RelativeToFont(1.0),
-                    TextColor(colors::NEUTRAL50),
-                    Node {
-                        margin: UiRect::bottom(Px(20.0)),
-                        ..default()
-                    },
-                ));
-
-                let primary = || Props::default().palette_set(PaletteSet::primary());
-
-                // Native: Resume existing or start new singleplayer session
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let has_running_server = server_state.as_ref().is_some_and(|s| {
-                        matches!(
-                            s.as_ref(),
-                            crate::networking::local_server::LocalServerState::Ready
-                        )
-                    });
-
-                    if has_running_server {
-                        menu.spawn((
-                            Node {
-                                display: Display::Grid,
-                                grid_template_columns: RepeatedGridTrack::flex(2, 1.0),
-                                column_gap: Px(12.0),
-                                ..default()
-                            },
-                            children![
-                                btn(primary().text("Resume"), to::singleplayer),
-                                btn("New Game", to::new_singleplayer),
-                            ],
-                        ));
-                    } else {
-                        menu.spawn(btn(primary().text("Singleplayer"), to::singleplayer));
-                    }
-                }
-
-                // Web: "Solo" creates a private session on the remote server
-                #[cfg(target_arch = "wasm32")]
-                menu.spawn(btn(primary().text("Solo"), to::solo));
-
-                menu.spawn(btn("Multiplayer", to::multiplayer));
-
-                menu.spawn(btn("Settings", to::settings));
-
-                #[cfg(not(target_arch = "wasm32"))]
-                menu.spawn(btn("Exit", exit_app));
-            });
-        });
-
-    state.reset();
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn exit_app(_: On<Pointer<Click>>, mut app_exit: MessageWriter<AppExit>) {
-    app_exit.write(AppExit::Success);
+    };
+    commands.spawn((
+        DespawnOnExit(Screen::Title),
+        GlobalZIndex(1),
+        bevy::input_focus::tab_navigation::TabGroup::default(),
+        ui_root("Title"),
+        BackgroundColor(colors::PAPER),
+        children![
+            menu_background(),
+            (
+                Node {
+                    width: Percent(88.0),
+                    max_width: Px(560.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Px(20.0),
+                    ..default()
+                },
+                children![
+                    header(GAME_TITLE, size::DISPLAY_SIZE),
+                    label(
+                        Props::new("Strike. Build Fury. Keep moving.")
+                            .font_size(17.0)
+                            .color(colors::INK_SOFT)
+                    ),
+                    (
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Px(8.0),
+                            width: Percent(100.0),
+                            max_width: Px(360.0),
+                            margin: UiRect::top(Px(20.0)),
+                            ..default()
+                        },
+                        Children::spawn(SpawnWith(move |menu: &mut ChildSpawner| {
+                            #[cfg(target_arch = "wasm32")]
+                            menu.spawn(btn(play("Play solo"), to::solo));
+                            #[cfg(not(target_arch = "wasm32"))]
+                            {
+                                menu.spawn(btn(
+                                    play(if running { "Resume" } else { "Play solo" }),
+                                    to::singleplayer,
+                                ));
+                                if running {
+                                    menu.spawn(btn("New game", to::new_singleplayer));
+                                }
+                            }
+                            menu.spawn(btn(
+                                Props::new("Multiplayer").height(Px(52.0)),
+                                to::multiplayer,
+                            ));
+                        }))
+                    ),
+                    (
+                        Node {
+                            flex_wrap: FlexWrap::Wrap,
+                            column_gap: Px(8.0),
+                            margin: UiRect::top(Px(12.0)),
+                            ..default()
+                        },
+                        children![
+                            btn(
+                                Props::new("Runes")
+                                    .icon("runes")
+                                    .palette_set(PaletteSet::ghost()),
+                                |_: On<Activate>, mut commands: Commands| {
+                                    commands.trigger(GoTo(Screen::Runes));
+                                }
+                            ),
+                            btn(
+                                Props::new("Settings")
+                                    .icon("settings")
+                                    .palette_set(PaletteSet::ghost()),
+                                to::settings
+                            ),
+                        ]
+                    ),
+                ]
+            )
+        ],
+    ));
+    session.reset();
+    session.screen_shake = settings.screen_shake;
+    session.diagnostics = settings.diagnostics;
 }

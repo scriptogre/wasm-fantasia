@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 use crate::combat::Health;
 use crate::models::{Player, Screen};
-use crate::ui::colors::{AMBER, NEUTRAL50, RED};
+use crate::ui::colors::{ALERT, INK};
+use crate::ui::fonts::SEMIBOLD;
 use crate::ui::size::{EDGE, HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH};
 
 // ── Components ──────────────────────────────────────────────────────
@@ -16,6 +17,12 @@ struct HudHealthText;
 /// Below this fraction the bar turns red
 const LOW_HEALTH: f32 = 0.3;
 
+/// Keeps light HUD text legible over bright parts of the scene
+pub const HUD_SHADOW: TextShadow = TextShadow {
+    offset: Vec2::new(0.0, 1.0),
+    color: Color::srgba(0.0, 0.0, 0.0, 0.7),
+};
+
 // ── Plugin ──────────────────────────────────────────────────────────
 
 pub fn plugin(app: &mut App) {
@@ -26,7 +33,6 @@ pub fn plugin(app: &mut App) {
 // ── Spawn ───────────────────────────────────────────────────────────
 
 fn spawn_hud(mut commands: Commands) {
-    let pill = BorderRadius::all(Val::Px(HEALTH_BAR_HEIGHT / 2.0));
     commands.spawn((
         Name::new("Player HUD"),
         Node {
@@ -44,30 +50,30 @@ fn spawn_hud(mut commands: Commands) {
                 Node {
                     width: Val::Px(HEALTH_BAR_WIDTH),
                     height: Val::Px(HEALTH_BAR_HEIGHT),
-                    border_radius: pill,
                     ..default()
                 },
-                BackgroundColor(NEUTRAL50.with_alpha(0.14)),
+                BackgroundColor(INK.with_alpha(0.2)),
                 children![(
                     HudHealthFill,
                     Node {
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
-                        border_radius: pill,
                         ..default()
                     },
-                    BackgroundColor(AMBER),
+                    BackgroundColor(INK),
                 )],
             ),
             (
                 HudHealthText,
                 Text::new("100"),
-                TextFont::from_font_size(16.0),
-                TextColor(NEUTRAL50),
-                TextShadow {
-                    offset: Vec2::new(0.0, 1.0),
-                    color: Color::BLACK.with_alpha(0.6),
+                TextFont {
+                    font: SEMIBOLD,
+                    weight: bevy::text::FontWeight::SEMIBOLD,
+                    font_size: 16.0,
+                    ..default()
                 },
+                TextColor(INK),
+                HUD_SHADOW,
             ),
         ],
     ));
@@ -78,15 +84,17 @@ fn spawn_hud(mut commands: Commands) {
 fn tick_health(
     player: Query<Ref<Health>, With<Player>>,
     mut fill: Single<(&mut Node, &mut BackgroundColor), With<HudHealthFill>>,
-    mut text: Single<&mut Text, With<HudHealthText>>,
+    mut text: Single<(&mut Text, &mut TextColor), With<HudHealthText>>,
 ) {
     let Ok(health) = player.single() else { return };
-    if !health.is_changed() && !text.is_added() {
+    if !health.is_changed() && !text.0.is_added() {
         return;
     }
 
     let fraction = health.fraction();
+    let color = if fraction < LOW_HEALTH { ALERT } else { INK };
     fill.0.width = Val::Percent(fraction * 100.0);
-    fill.1.0 = if fraction < LOW_HEALTH { RED } else { AMBER };
-    text.0 = format!("{:.0}", health.current);
+    fill.1.0 = color;
+    text.0.0 = format!("{:.0}", health.current);
+    text.1.0 = color;
 }

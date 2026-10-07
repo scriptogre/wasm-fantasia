@@ -1,4 +1,4 @@
-//! Multiplayer status HUD — connection state, player count, ping
+//! Multiplayer status line under the health bar: connection, players online, ping
 
 use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, Table};
@@ -6,9 +6,13 @@ use spacetimedb_sdk::{DbContext, Table};
 use crate::models::{Screen, is_multiplayer_mode};
 use crate::networking::generated::player_table::PlayerTableAccess;
 use crate::networking::{PingTracker, STALE_THRESHOLD_SECS, SpacetimeDbConnection};
-use crate::ui::colors::{ACID_GREEN as GREEN, AMBER as YELLOW, NEUTRAL300, RED};
+use crate::ui::colors::{ALERT, AMBER, INK};
+use crate::ui::hud::HUD_SHADOW;
 use crate::ui::size::{CAPTION_SIZE, EDGE};
 
+const OFFLINE: &str = "Offline";
+const NO_PLAYERS: &str = "";
+const NO_PING: &str = "";
 // ── Components ──────────────────────────────────────────────────────
 
 #[derive(Component)]
@@ -39,16 +43,13 @@ pub fn plugin(app: &mut App) {
 
 // ── Spawn ───────────────────────────────────────────────────────────
 
-/// One caption row under the health bar: dot, status, players, ping.
+/// One row under the health bar: square marker, status, players, ping.
 fn spawn_status_hud(mut commands: Commands) {
     let text = || {
         (
             TextFont::from_font_size(CAPTION_SIZE),
-            TextColor(NEUTRAL300),
-            TextShadow {
-                offset: Vec2::new(0.0, 1.0),
-                color: Color::BLACK.with_alpha(0.6),
-            },
+            TextColor(INK),
+            HUD_SHADOW,
         )
     };
 
@@ -59,7 +60,7 @@ fn spawn_status_hud(mut commands: Commands) {
             top: Val::Px(EDGE + 26.0),
             left: Val::Px(EDGE),
             align_items: AlignItems::Center,
-            column_gap: Val::Px(8.0),
+            column_gap: Val::Px(10.0),
             ..default()
         },
         GlobalZIndex(90),
@@ -68,16 +69,15 @@ fn spawn_status_hud(mut commands: Commands) {
             (
                 StatusDot,
                 Node {
-                    width: Val::Px(6.0),
-                    height: Val::Px(6.0),
-                    border_radius: BorderRadius::MAX,
+                    width: Val::Px(8.0),
+                    height: Val::Px(8.0),
                     ..default()
                 },
-                BackgroundColor(RED),
+                BackgroundColor(ALERT),
             ),
-            (StatusText, Text::new("OFFLINE"), text()),
-            (PlayersText, Text::new("-- / --"), text()),
-            (PingText, Text::new("-- ms"), text()),
+            (StatusText, Text::new(OFFLINE), text()),
+            (PlayersText, Text::new(NO_PLAYERS), text()),
+            (PingText, Text::new(NO_PING), text()),
         ],
     ));
 }
@@ -93,20 +93,20 @@ fn connection_status(
     tracker: &Option<Res<PingTracker>>,
 ) -> (&'static str, Color) {
     let Some(conn) = conn.as_ref() else {
-        return ("OFFLINE", RED);
+        return (OFFLINE, ALERT);
     };
     if !conn.conn.is_active() || conn.conn.try_identity().is_none() {
-        return ("OFFLINE", RED);
+        return (OFFLINE, ALERT);
     }
     // Connection looks alive — check if server is actually responding
     if let Some(tracker) = tracker.as_ref() {
         if let Some(last_ack) = tracker.last_ack {
             if last_ack.elapsed().as_secs_f32() > STALE_THRESHOLD_SECS {
-                return ("STALE", YELLOW);
+                return ("Unstable", AMBER);
             }
         }
     }
-    ("ONLINE", GREEN)
+    ("Online", INK)
 }
 
 fn tick_status(
@@ -139,9 +139,9 @@ fn tick_players(
     };
 
     let (label, _) = connection_status(&conn, &tracker);
-    if label == "OFFLINE" {
-        if text.0 != "-- / --" {
-            text.0 = "-- / --".to_string();
+    if label == OFFLINE {
+        if text.0 != NO_PLAYERS {
+            text.0 = NO_PLAYERS.to_string();
         }
         return;
     }
@@ -153,22 +153,13 @@ fn tick_players(
     }
     *timer = 0.0;
 
-    let (online, total) = conn
-        .as_ref()
-        .map(|c| {
-            let mut online = 0usize;
-            let mut total = 0usize;
-            for p in c.conn.db.player().iter() {
-                total += 1;
-                if p.online {
-                    online += 1;
-                }
-            }
-            (online, total)
-        })
-        .unwrap_or((0, 0));
-
-    let new = format!("{online} / {total}");
+    let online = conn.as_ref().map_or(0, |c| {
+        c.conn.db.player().iter().filter(|p| p.online).count()
+    });
+    let new = match online {
+        1 => "1 player".to_string(),
+        n => format!("{n} players"),
+    };
     if text.0 != new {
         text.0 = new;
     }
@@ -185,12 +176,12 @@ fn tick_ping(
     };
 
     let (label, _) = connection_status(&conn, &tracker);
-    if label == "OFFLINE" {
-        if text.0 != "-- ms" {
-            text.0 = "-- ms".to_string();
+    if label == OFFLINE {
+        if text.0 != NO_PING {
+            text.0 = NO_PING.to_string();
         }
         if let Ok(mut tc) = colors.single_mut() {
-            tc.0 = NEUTRAL300;
+            tc.0 = INK;
         }
         return;
     }
@@ -199,20 +190,18 @@ fn tick_ping(
     let new = if ms > 0.0 {
         format!("{ms:.0} ms")
     } else {
-        "-- ms".to_string()
+        NO_PING.to_string()
     };
     if text.0 != new {
         text.0 = new;
     }
 
-    let color = if ms <= 0.0 {
-        NEUTRAL300
-    } else if ms < 80.0 {
-        GREEN
-    } else if ms < 150.0 {
-        YELLOW
+    let color = if ms >= 150.0 {
+        ALERT
+    } else if ms >= 80.0 {
+        AMBER
     } else {
-        RED
+        INK
     };
     if let Ok(mut tc) = colors.single_mut() {
         tc.0 = color;

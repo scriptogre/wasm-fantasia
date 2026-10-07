@@ -92,7 +92,10 @@ fn main() {
     app.add_plugins(bevy_hanabi::HanabiPlugin);
     app.add_plugins(bevy_open_vat::prelude::OpenVatPlugin);
 
-    app.add_systems(Update, reveal_window.run_if(resource_exists::<WindowRevealCountdown>));
+    app.add_systems(
+        Update,
+        reveal_window.run_if(resource_exists::<WindowRevealCountdown>),
+    );
 
     // custom plugins. the order is important
     // be sure you use resources/types AFTER you add plugins that insert them
@@ -109,12 +112,25 @@ fn main() {
 
     app.add_plugins(networking::NetworkingPlugin);
 
-    // override default font
+    // Embedded so text never waits on an asset fetch; Regular replaces the default font
+    let font = |bytes: &[u8], _path: String| Font::try_from_bytes(bytes.to_vec()).unwrap();
     load_internal_binary_asset!(
         app,
         TextFont::default().font,
-        "../assets/fonts/ChakraPetch-SemiBold.ttf",
-        |bytes: &[u8], _path: String| { Font::try_from_bytes(bytes.to_vec()).unwrap() }
+        "../assets/fonts/IBMPlexSans-Regular.ttf",
+        font
+    );
+    load_internal_binary_asset!(
+        app,
+        fonts::LIGHT,
+        "../assets/fonts/IBMPlexSans-Light.ttf",
+        font
+    );
+    load_internal_binary_asset!(
+        app,
+        fonts::SEMIBOLD,
+        "../assets/fonts/IBMPlexSans-SemiBold.ttf",
+        font
     );
     app.run();
 }

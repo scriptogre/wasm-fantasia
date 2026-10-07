@@ -5,6 +5,7 @@ use bevy::diagnostic::{
     DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
 };
 use bevy::input::common_conditions::input_just_pressed;
+use bevy::text::LineHeight;
 use std::time::Duration;
 use web_time::Instant;
 
@@ -83,18 +84,17 @@ fn spawn_stats_overlay(mut commands: Commands) {
         StatsOverlayText,
         Text::new(""),
         TextFont::from_font_size(size::CAPTION_SIZE),
-        TextColor(colors::NEUTRAL400),
-        TextShadow {
-            offset: Vec2::new(0.0, 1.0),
-            color: Color::BLACK.with_alpha(0.6),
-        },
+        LineHeight::RelativeToFont(1.5),
+        TextColor(colors::INK),
+        hud::HUD_SHADOW,
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(size::EDGE),
+            right: Val::Px(size::EDGE),
             top: Val::Px(size::EDGE + 52.0),
             ..default()
         },
-        GlobalZIndex(i32::MAX - 32),
+        GlobalZIndex(90),
         Pickable::IGNORE,
     ));
 }
@@ -142,18 +142,16 @@ fn tick_stats_overlay(
     let ping_ms = ping.as_ref().map(|p| p.smoothed_rtt_ms).unwrap_or(0.0);
 
     // If CPU time is >80% of frame time, we're CPU-bound
-    let bottleneck = if frame_ms > 0.1 {
-        if cpu_ms / frame_ms > 0.80 {
-            "CPU"
-        } else {
-            "GPU"
-        }
+    let bound = if frame_ms <= 0.1 {
+        ""
+    } else if cpu_ms / frame_ms > 0.80 {
+        "  CPU bound"
     } else {
-        "—"
+        "  GPU bound"
     };
 
     let mut line = format!(
-        "{fps:.0} FPS  {frame_ms:.1} ms  cpu {cpu_ms:.1} ms  {bottleneck}\n{entity_count} ent  {enemies} enemies  {players} players"
+        "{fps:.0} fps  {frame_ms:.1} ms frame  {cpu_ms:.1} ms CPU{bound}\n{entity_count} entities  {enemies} enemies  {players} players"
     );
     if ping_ms > 0.0 {
         line.push_str(&format!("  {ping_ms:.0} ms ping"));
@@ -197,12 +195,15 @@ fn toggle_benchmark(
         });
         commands.spawn((
             BenchmarkOverlay,
-            Text::new(format!("BENCHMARK  {}s", BENCHMARK_DURATION.as_secs())),
+            Text::new(format!("Benchmark {} s", BENCHMARK_DURATION.as_secs())),
             TextFont {
-                font_size: 18.0,
+                font: fonts::SEMIBOLD,
+                weight: bevy::text::FontWeight::SEMIBOLD,
+                font_size: size::FONT_SIZE,
                 ..default()
             },
-            TextColor(colors::ACID_GREEN),
+            TextColor(colors::INK),
+            hud::HUD_SHADOW,
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(16.0),
@@ -231,7 +232,7 @@ fn tick_benchmark(
 
     let remaining = BENCHMARK_DURATION.saturating_sub(frames.elapsed);
     for mut text in &mut overlay {
-        text.0 = format!("BENCHMARK  {:.0}s", remaining.as_secs_f32().ceil());
+        text.0 = format!("Benchmark {:.0} s", remaining.as_secs_f32().ceil());
     }
 
     if frames.elapsed >= BENCHMARK_DURATION {

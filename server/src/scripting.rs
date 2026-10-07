@@ -2,31 +2,10 @@ use std::sync::Arc;
 
 use game_core::runtime::{Effect, Intent, ScriptRegistry};
 
+use game_core::runtime::registry::DEFAULT_BEHAVIORS;
+
 thread_local! {
-    static SCRIPTS: Arc<ScriptRegistry> = {
-        let mut reg = ScriptRegistry::new();
-        reg.register(
-            "crit".into(),
-            include_str!("../../core/runes/behaviors/crit.rune"),
-        )
-        .expect("crit script should compile");
-        reg.register(
-            "stacking".into(),
-            include_str!("../../core/runes/behaviors/stacking.rune"),
-        )
-        .expect("stacking script should compile");
-        reg.register(
-            "melee_attack".into(),
-            include_str!("../../core/runes/abilities/melee_attack.rune"),
-        )
-        .expect("melee_attack script should compile");
-        reg.register(
-            "ground_pound".into(),
-            include_str!("../../core/runes/abilities/ground_pound.rune"),
-        )
-        .expect("ground_pound script should compile");
-        Arc::new(reg)
-    };
+    static SCRIPTS: Arc<ScriptRegistry> = Arc::new(ScriptRegistry::build_builtin());
 }
 
 /// Execute a melee attack ability via the Rune scripting engine.
@@ -41,7 +20,7 @@ pub fn run_melee_attack(
             spacetimedb::log::warn!("melee_attack script not registered");
             return (vec![], vec![]);
         };
-        let behaviors = vec!["crit".into(), "stacking".into()];
+        let behaviors = DEFAULT_BEHAVIORS.iter().map(|id| (*id).into()).collect();
         match engine.call_ability_with_behaviors(
             "on_ability_start",
             source,
@@ -71,7 +50,7 @@ pub fn run_ground_pound(
             spacetimedb::log::warn!("ground_pound script not registered");
             return (vec![], vec![]);
         };
-        let behaviors = vec!["crit".into(), "stacking".into()];
+        let behaviors = DEFAULT_BEHAVIORS.iter().map(|id| (*id).into()).collect();
         match engine.call_ability_with_behaviors(
             "on_ability_start",
             source,

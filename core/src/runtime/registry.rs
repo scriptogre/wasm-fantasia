@@ -38,15 +38,86 @@ mod tests {
     use super::*;
 
     #[test]
+    fn starting_loadout_has_executable_hooks() {
+        let registry = ScriptRegistry::build_builtin();
+        for id in DEFAULT_ABILITIES {
+            assert!(registry.get(id).unwrap().has_function("on_ability_start"));
+        }
+        for id in DEFAULT_BEHAVIORS {
+            let engine = registry.get(id).unwrap();
+            assert!(engine.has_function("on_pre_hit") || engine.has_function("on_hit"));
+        }
+    }
+
+    #[test]
     fn register_and_get() {
         let mut registry = ScriptRegistry::new();
         registry
-            .register(
-                "test".to_string(),
-                "pub fn on_hit() { 42 }",
-            )
+            .register("test".to_string(), "pub fn on_hit() { 42 }")
             .expect("should compile");
         assert!(registry.get("test").is_some());
         assert!(registry.get("missing").is_none());
+    }
+}
+
+/// Presentation metadata for the same scripts registered by both game hosts.
+pub struct ScriptDefinition {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub icon: &'static str,
+    pub description: &'static str,
+    pub source: &'static str,
+}
+
+pub const DEFAULT_ABILITIES: &[&str] = &["melee_attack", "ground_pound"];
+pub const DEFAULT_BEHAVIORS: &[&str] = &["crit", "stacking"];
+
+pub const BUILTIN_SCRIPTS: &[ScriptDefinition] = &[
+    ScriptDefinition {
+        id: "melee_attack",
+        title: "Melee",
+        icon: "melee",
+        description: "Strike enemies in front of you. Hold Attack to keep striking.",
+        source: include_str!("../../runes/abilities/melee_attack.rune"),
+    },
+    ScriptDefinition {
+        id: "ground_pound",
+        title: "Slam",
+        icon: "slam",
+        description: "Attack while airborne to slam the ground and hit nearby enemies.",
+        source: include_str!("../../runes/abilities/ground_pound.rune"),
+    },
+    ScriptDefinition {
+        id: "crit",
+        title: "Critical hit",
+        icon: "crit",
+        description: "A chance to multiply a strike's damage and knockback before it lands.",
+        source: include_str!("../../runes/behaviors/crit.rune"),
+    },
+    ScriptDefinition {
+        id: "stacking",
+        title: "Fury",
+        icon: "fury",
+        description: "Landed hits build a short-lived attack speed bonus. Keep hitting to sustain it.",
+        source: include_str!("../../runes/behaviors/stacking.rune"),
+    },
+    ScriptDefinition {
+        id: "feedback",
+        title: "Hit feedback",
+        icon: "impact",
+        description: "Sound and visual feedback for a landed hit.",
+        source: include_str!("../../runes/behaviors/feedback.rune"),
+    },
+];
+
+impl ScriptRegistry {
+    pub fn build_builtin() -> Self {
+        let mut registry = Self::new();
+        for script in BUILTIN_SCRIPTS {
+            registry
+                .register(script.id.into(), script.source)
+                .expect("built-in script compiles");
+        }
+        registry
     }
 }

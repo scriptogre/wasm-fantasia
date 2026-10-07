@@ -1,69 +1,156 @@
 use super::*;
-use bevy::ecs::system::SystemParam;
-use bevy::picking::pointer::PointerId;
-use bevy::window::CursorOptions;
+use bevy::{
+    input::mouse::{MouseScrollUnit, MouseWheel},
+    input_focus::{InputFocus, InputFocusVisible, tab_navigation::TabIndex},
+    picking::hover::Hovered,
+};
 use bevy_seedling::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_observer(|on: On<Pointer<Over>>, mut ui: Restyle| {
-        ui.apply(on.event_target(), |p| &p.hovered, Some(|s| &s.hover));
-    })
-    .add_observer(|on: On<Pointer<Press>>, mut ui: Restyle| {
-        ui.apply(on.event_target(), |p| &p.pressed, Some(|s| &s.press));
-    })
-    .add_observer(|on: On<Pointer<Release>>, mut ui: Restyle| {
-        if matches!(on.pointer_id, PointerId::Touch(_)) {
-            ui.apply(on.event_target(), |p| &p.none, None);
+    app.add_systems(Update, (style_buttons, style_focus, scroll_menus))
+        .add_observer(
+            |on: On<Pointer<Press>>,
+             focusable: Query<(), With<TabIndex>>,
+             mut focus: ResMut<InputFocus>,
+             mut visible: ResMut<InputFocusVisible>| {
+                if focusable.contains(on.entity) {
+                    focus.set(on.entity);
+                    visible.0 = false;
+                }
+            },
+        )
+        .add_observer(
+            |on: On<Activate>,
+             buttons: Query<(), (With<Button>, Without<InteractionDisabled>)>,
+             sources: Option<Res<AudioSources>>,
+             settings: Res<Settings>,
+             mut commands: Commands| {
+                if buttons.contains(on.entity)
+                    && let Some(sources) = sources
+                {
+                    commands.spawn(
+                        SamplePlayer::new(sources.press.clone()).with_volume(settings.sfx()),
+                    );
+                }
+            },
+        )
+        .add_observer(
+            |on: On<Pointer<Drag>>, mut scroll: Query<&mut ScrollPosition, With<MenuScroll>>| {
+                if let Ok(mut scroll) = scroll.get_mut(on.entity) {
+                    scroll.y -= on.delta.y;
+                }
+            },
+        );
+}
+
+fn style_buttons(
+    mut buttons: Query<(
+        Entity,
+        &PaletteSet,
+        &Hovered,
+        Has<Pressed>,
+        Has<InteractionDisabled>,
+        Has<super::runes::InlineTerm>,
+        &Children,
+        &mut BackgroundColor,
+        &mut BorderColor,
+    )>,
+    mut texts: Query<(&mut TextColor, Has<bevy::text::Underline>)>,
+    mut images: Query<&mut ImageNode>,
+    focus: Res<InputFocus>,
+    visible: Res<InputFocusVisible>,
+    mut commands: Commands,
+) {
+    for (
+        entity,
+        palette,
+        hovered,
+        pressed,
+        disabled,
+        inline,
+        children,
+        mut background,
+        mut border,
+    ) in &mut buttons
+    {
+        let focused = focus.get() == Some(entity) && visible.0;
+        let state = if disabled {
+            &palette.disabled
+        } else if pressed {
+            &palette.pressed
+        } else if hovered.get() || focused {
+            &palette.hovered
         } else {
-            ui.apply(on.event_target(), |p| &p.hovered, None);
-        }
-    })
-    .add_observer(|on: On<Pointer<Out>>, mut ui: Restyle| {
-        ui.apply(on.event_target(), |p| &p.none, None);
-    });
-}
-
-type Sound = fn(&AudioSources) -> &Handle<AudioSample>;
-
-/// Swaps a button's colors to one [`PaletteSet`] state and plays its sound.
-#[derive(SystemParam)]
-struct Restyle<'w, 's> {
-    buttons: Query<
-        'w,
-        's,
-        (
-            &'static PaletteSet,
-            &'static mut BorderColor,
-            &'static mut BackgroundColor,
-            &'static Children,
-        ),
-    >,
-    texts: Query<'w, 's, &'static mut TextColor>,
-    cursor: Query<'w, 's, &'static CursorOptions>,
-    settings: Res<'w, Settings>,
-    sources: Option<Res<'w, AudioSources>>,
-    commands: Commands<'w, 's>,
-}
-
-impl Restyle<'_, '_> {
-    fn apply(&mut self, entity: Entity, state: fn(&PaletteSet) -> &Palette, sound: Option<Sound>) {
-        let Ok((palette, mut border, mut bg, children)) = self.buttons.get_mut(entity) else {
-            return;
+            &palette.none
         };
-        let state = state(palette);
-        (bg.0, *border) = (state.bg, state.border);
-        for c in children {
-            if let Ok(mut t) = self.texts.get_mut(*c) {
-                t.0 = state.text;
+        let color = if inline { Color::NONE } else { state.bg };
+        if background.0 != color {
+            background.0 = color;
+        }
+        if *border != state.border {
+            *border = state.border;
+        }
+        for child in children {
+            if let Ok((mut color, underlined)) = texts.get_mut(*child) {
+                let desired = if inline { colors::INK } else { state.text };
+                if color.0 != desired {
+                    color.0 = desired;
+                }
+                if inline && (hovered.get() || focused) && !underlined {
+                    commands.entity(*child).insert(bevy::text::Underline);
+                } else if inline && !(hovered.get() || focused) && underlined {
+                    commands.entity(*child).remove::<bevy::text::Underline>();
+                }
+            }
+            if let Ok(mut image) = images.get_mut(*child) {
+                let desired = if inline { colors::INK } else { state.text };
+                if image.color != desired {
+                    image.color = desired;
+                }
             }
         }
+    }
+}
 
-        let (Some(sound), Some(sources)) = (sound, &self.sources) else {
-            return;
-        };
-        if self.cursor.single().is_ok_and(|c| c.visible) {
-            self.commands
-                .spawn(SamplePlayer::new(sound(sources).clone()).with_volume(self.settings.sfx()));
+fn scroll_menus(
+    mut wheel: MessageReader<MouseWheel>,
+    mut menus: Query<&mut ScrollPosition, With<MenuScroll>>,
+) {
+    let delta: f32 = wheel
+        .read()
+        .map(|event| {
+            event.y
+                * if event.unit == MouseScrollUnit::Line {
+                    32.0
+                } else {
+                    1.0
+                }
+        })
+        .sum();
+    if delta != 0.0 {
+        for mut scroll in &mut menus {
+            scroll.y -= delta;
+        }
+    }
+}
+
+fn style_focus(
+    focus: Res<InputFocus>,
+    visible: Res<InputFocusVisible>,
+    mut outlines: Query<(Entity, &mut Outline), With<TabIndex>>,
+) {
+    for (entity, mut outline) in &mut outlines {
+        let width = Px(if focus.get() == Some(entity) && visible.0 {
+            1.0
+        } else {
+            0.0
+        });
+        if outline.width != width {
+            *outline = Outline {
+                width,
+                offset: Px(3.0),
+                color: colors::INK_SOFT,
+            };
         }
     }
 }

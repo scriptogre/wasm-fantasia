@@ -15,34 +15,8 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(tracking::plugin)
         .add_plugins(RonAssetPlugin::<Config>::default())
         .load_resource_from_path::<Config>("config.ron")
-        .load_resource::<Fonts>()
         .load_resource::<Models>()
         .load_resource::<AudioSources>();
-}
-
-#[derive(Asset, Clone, Reflect, Resource)]
-#[reflect(Resource)]
-pub struct Fonts {
-    #[dependency]
-    pub regular: Handle<Font>,
-    #[dependency]
-    pub medium: Handle<Font>,
-    #[dependency]
-    pub semibold: Handle<Font>,
-    #[dependency]
-    pub bold: Handle<Font>,
-}
-
-impl FromWorld for Fonts {
-    fn from_world(world: &mut World) -> Self {
-        let a = world.resource::<AssetServer>();
-        Self {
-            regular: a.load(fonts::REGULAR),
-            medium: a.load(fonts::MEDIUM),
-            semibold: a.load(fonts::SEMIBOLD),
-            bold: a.load(fonts::BOLD),
-        }
-    }
 }
 
 #[derive(Asset, Clone, Reflect, Resource)]

@@ -3,21 +3,13 @@ use bevy_seedling::prelude::Volume;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
-use crate::{InputSettings, Screen, SoundPreset};
+use crate::{InputSettings, SoundPreset};
 
 pub const SETTINGS_PATH: &str = "client/assets/settings.ron";
 
 pub fn plugin(app: &mut App) {
     let settings = Settings::load();
-    app.insert_resource(settings)
-        .init_resource::<ActiveTab>()
-        .add_systems(OnExit(Screen::Settings), auto_save_settings);
-}
-
-fn auto_save_settings(settings: Res<Settings>) {
-    if let Err(e) = settings.save() {
-        error!("Failed to auto-save settings: {e}");
-    }
+    app.insert_resource(settings).init_resource::<ActiveTab>();
 }
 
 #[derive(Resource, Reflect, Deserialize, Serialize, Debug, Clone)]
@@ -27,6 +19,12 @@ pub struct Settings {
     pub sound: SoundPreset,
     // video
     pub fov: f32,
+    #[serde(default = "default_enabled")]
+    pub screen_shake: bool,
+    #[serde(default)]
+    pub diagnostics: bool,
+    #[serde(default = "default_enabled")]
+    pub vsync: bool,
     // keybindings
     pub input_map: InputSettings,
 }
@@ -129,6 +127,9 @@ impl Default for Settings {
         Self {
             sound: SoundPreset::default(),
             fov: 75.0,
+            screen_shake: true,
+            diagnostics: false,
+            vsync: true,
             input_map: InputSettings::default(),
         }
     }
@@ -144,3 +145,7 @@ pub enum UiTab {
 
 #[derive(Resource, Default)]
 pub struct ActiveTab(pub UiTab);
+
+fn default_enabled() -> bool {
+    true
+}

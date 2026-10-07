@@ -193,8 +193,13 @@ pub fn spawn_player(
                 .with(Stat::CritChance, defaults::CRIT_CHANCE)
                 .with(Stat::CritMultiplier, defaults::CRIT_MULTIPLIER),
             // Rune scripting: behavior hooks + active ability
-            EntityBehaviors(vec!["crit".into(), "stacking".into()]),
-            ActiveAbility("melee_attack".into()),
+            EntityBehaviors(
+                game_core::runtime::registry::DEFAULT_BEHAVIORS
+                    .iter()
+                    .map(|id| (*id).into())
+                    .collect(),
+            ),
+            ActiveAbility(game_core::runtime::registry::DEFAULT_ABILITIES[0].into()),
         ))
         // spawn character mesh as child to adjust mesh position relative to the player origin
         .with_children(|parent| {

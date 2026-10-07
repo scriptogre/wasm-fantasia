@@ -11,7 +11,6 @@ fn setup_death_screen(
     mut commands: Commands,
     mut next_pause: ResMut<NextState<PauseState>>,
     mut cam: Query<&mut ThirdPersonCamera>,
-    fonts: Res<crate::asset_loading::Fonts>,
 ) {
     next_pause.set(PauseState::Paused);
 
@@ -20,43 +19,53 @@ fn setup_death_screen(
         cam.cursor_lock_active = false;
     }
 
+    // A paper band across the dimmed scene
     commands.spawn((
         DespawnOnExit(Screen::GameOver),
         // Above the HUD, below modals
         GlobalZIndex(150),
         ui_root("Death Screen"),
-        BackgroundColor(colors::VOID.with_alpha(0.75)),
-        children![
-            (
-                Text::new("YOU DIED"),
-                TextFont {
-                    font: fonts.bold.clone(),
-                    font_size: size::DISPLAY_SIZE,
-                    ..default()
-                },
-                TextColor(colors::RED),
-            ),
-            (
-                Node {
-                    width: Percent(90.0),
-                    max_width: Px(320.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Px(12.0),
-                    ..default()
-                },
-                children![
-                    btn(
-                        Props::new("Try Again").palette_set(PaletteSet::primary()),
-                        try_again
-                    ),
-                    btn("Main Menu", click_to_menu),
-                ],
-            ),
-        ],
+        bevy::input_focus::tab_navigation::TabGroup::default(),
+        BackgroundColor(colors::VOID.with_alpha(0.6)),
+        children![(
+            Node {
+                width: Percent(90.0),
+                max_width: Px(800.0),
+                border_radius: BorderRadius::all(Px(3.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Px(12.0),
+                padding: UiRect::axes(Vw(5.0), Px(24.0)),
+                ..default()
+            },
+            BackgroundColor(colors::PAPER),
+            children![
+                header(
+                    Props::new("You died").color(colors::ALERT),
+                    size::DISPLAY_SIZE
+                ),
+                rule(),
+                (
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Px(8.0),
+                        max_width: Px(360.0),
+                        margin: UiRect::top(Px(4.0)),
+                        ..default()
+                    },
+                    children![
+                        btn(
+                            Props::new("Try again").palette_set(PaletteSet::selected()),
+                            try_again
+                        ),
+                        btn("Main menu", click_to_menu),
+                    ],
+                ),
+            ],
+        )],
     ));
 }
 
-fn try_again(_: On<Pointer<Click>>, mut commands: Commands) {
+fn try_again(_: On<Activate>, mut commands: Commands) {
     commands.trigger(RestartRun);
 }
 

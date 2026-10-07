@@ -64,6 +64,8 @@ fn type_element_count(accessor_type: &str) -> usize {
 }
 
 fn main() {
+    println!("cargo:rerun-if-changed=assets/ui/icons.svg");
+    build_icons();
     // Cargo re-runs this script only when these specific files change.
     println!("cargo:rerun-if-changed={SOURCE_GLB}");
     println!("cargo:rerun-if-changed={ANIMATION_RS}");
@@ -562,4 +564,46 @@ fn parse_clip_names() -> Vec<String> {
         "parsed zero clip names from animation.rs"
     );
     names
+}
+
+fn build_icons() {
+    let source = fs::read_to_string("assets/ui/icons.svg").unwrap();
+    let names: Vec<_> = source
+        .split("id=\"i-")
+        .skip(1)
+        .map(|part| part.split('"').next().unwrap())
+        .collect();
+    let symbols: String = names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            format!(
+                r##"<use href="#i-{name}" x="{}" width="48" height="48"/>"##,
+                i * 48
+            )
+        })
+        .collect();
+    let atlas = source
+        .replace(
+            "<svg xmlns=",
+            &format!(
+                "<svg width=\"{}\" height=\"48\" color=\"white\" xmlns=",
+                names.len() * 48
+            ),
+        )
+        .replace("</svg>", &format!("{symbols}</svg>"));
+    let tree = resvg::usvg::Tree::from_str(&atlas, &resvg::usvg::Options::default()).unwrap();
+    let mut pixels = resvg::tiny_skia::Pixmap::new(names.len() as u32 * 48, 48).unwrap();
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::identity(),
+        &mut pixels.as_mut(),
+    );
+    let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    pixels.save_png(output.join("icons.png")).unwrap();
+    fs::write(
+        output.join("icons.rs"),
+        format!("const ICON_NAMES: &[&str] = &{names:?};"),
+    )
+    .unwrap();
 }

@@ -11,16 +11,32 @@ pub(super) fn plugin(app: &mut App) {
         );
 }
 
+/// Same layout as the web page loader and the title screen, so the handoff is seamless
 fn spawn_loading_screen(mut commands: Commands) {
     commands.spawn((
         DespawnOnExit(Screen::Loading),
-        ui_root("loading screen"),
-        BackgroundColor(colors::VOID),
-        children![label(
-            Props::new("Loading")
-                .font_size(size::CAPTION_SIZE)
-                .color(colors::NEUTRAL500)
-        )],
+        ui_root("Loading"),
+        BackgroundColor(colors::PAPER),
+        children![
+            menu_background(),
+            (
+                Node {
+                    width: Percent(88.0),
+                    max_width: Px(560.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Px(32.0),
+                    ..default()
+                },
+                children![
+                    header(title::GAME_TITLE, size::DISPLAY_SIZE),
+                    label(
+                        Props::new("Preparing the arena…")
+                            .font_size(15.0)
+                            .color(colors::INK_SOFT)
+                    )
+                ]
+            )
+        ],
     ));
 }
 

@@ -24,54 +24,11 @@ pub struct EntityBehaviors(pub Vec<String>);
 #[derive(Component, Clone, Debug)]
 pub struct ActiveAbility(pub String);
 
-fn build_registry() -> ScriptRegistry {
-    let mut registry = ScriptRegistry::new();
-
-    // Behavior scripts
-    registry
-        .register(
-            "crit".to_string(),
-            include_str!("../../core/runes/behaviors/crit.rune"),
-        )
-        .expect("crit.rune should compile");
-
-    registry
-        .register(
-            "stacking".to_string(),
-            include_str!("../../core/runes/behaviors/stacking.rune"),
-        )
-        .expect("stacking.rune should compile");
-
-    registry
-        .register(
-            "feedback".to_string(),
-            include_str!("../../core/runes/behaviors/feedback.rune"),
-        )
-        .expect("feedback.rune should compile");
-
-    // Ability scripts
-    registry
-        .register(
-            "melee_attack".to_string(),
-            include_str!("../../core/runes/abilities/melee_attack.rune"),
-        )
-        .expect("melee_attack.rune should compile");
-
-    registry
-        .register(
-            "ground_pound".to_string(),
-            include_str!("../../core/runes/abilities/ground_pound.rune"),
-        )
-        .expect("ground_pound.rune should compile");
-
-    registry
-}
-
 #[cfg(feature = "dev")]
 mod hot_reload {
     use super::*;
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::SystemTime;
 
     /// Tracks script file modification times and polls for changes.
@@ -95,7 +52,7 @@ mod hot_reload {
     /// Walk `script_dir` for all `.rune` files, compile each, and return a
     /// fresh [`ScriptRegistry`]. The registry key is the file stem (e.g.
     /// `"crit"` for `behaviors/crit.rune`).
-    pub fn build_registry_from_files(script_dir: &PathBuf) -> Result<ScriptRegistry, String> {
+    pub fn build_registry_from_files(script_dir: &Path) -> Result<ScriptRegistry, String> {
         let mut registry = ScriptRegistry::new();
 
         for subdir in &["behaviors", "abilities", "enemies"] {
@@ -127,7 +84,7 @@ mod hot_reload {
     }
 
     /// Snapshot the current modification times for all `.rune` files.
-    fn snapshot_times(script_dir: &PathBuf) -> HashMap<PathBuf, SystemTime> {
+    fn snapshot_times(script_dir: &Path) -> HashMap<PathBuf, SystemTime> {
         let mut map = HashMap::new();
         for subdir in &["behaviors", "abilities", "enemies"] {
             let dir = script_dir.join(subdir);
@@ -170,12 +127,10 @@ mod hot_reload {
         }
 
         let current = snapshot_times(&watcher.script_dir);
-        let any_changed = current.iter().any(|(path, mtime)| {
-            watcher
-                .last_modified
-                .get(path)
-                .map_or(true, |prev| prev != mtime)
-        }) || current.len() != watcher.last_modified.len();
+        let any_changed = current
+            .iter()
+            .any(|(path, mtime)| watcher.last_modified.get(path) != Some(mtime))
+            || current.len() != watcher.last_modified.len();
 
         if any_changed {
             match build_registry_from_files(&watcher.script_dir) {
@@ -202,7 +157,7 @@ pub fn plugin(app: &mut App) {
             }
             Err(e) => {
                 warn!("Failed to load scripts from filesystem, falling back to embedded: {e}");
-                app.insert_resource(ScriptRegistryRes(Arc::new(build_registry())));
+                app.insert_resource(ScriptRegistryRes(Arc::new(ScriptRegistry::build_builtin())));
             }
         }
         hot_reload::setup(app);
@@ -210,6 +165,6 @@ pub fn plugin(app: &mut App) {
 
     #[cfg(not(feature = "dev"))]
     {
-        app.insert_resource(ScriptRegistryRes(Arc::new(build_registry())));
+        app.insert_resource(ScriptRegistryRes(Arc::new(ScriptRegistry::build_builtin())));
     }
 }

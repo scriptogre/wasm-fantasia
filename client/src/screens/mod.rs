@@ -64,21 +64,21 @@ pub mod to {
     use super::*;
     use spacetimedb_sdk::DbContext;
 
-    pub fn title(_: On<Pointer<Click>>, mut commands: Commands, mut modals: ResMut<Modals>) {
+    pub fn title(_: On<Activate>, mut commands: Commands, mut modals: ResMut<Modals>) {
         // Don't reset session here — keep game paused during transition.
         // setup_menu resets on OnEnter(Title).
         modals.clear();
         commands.remove_resource::<ServerTarget>();
         commands.trigger(GoTo(Screen::Title));
     }
-    pub fn settings(_: On<Pointer<Click>>, mut commands: Commands) {
+    pub fn settings(_: On<Activate>, mut commands: Commands) {
         commands.trigger(GoTo(Screen::Settings));
     }
 
     /// Native singleplayer: start a local SpacetimeDB subprocess, then connect.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn singleplayer(
-        _: On<Pointer<Click>>,
+        _: On<Activate>,
         mut mode: ResMut<GameMode>,
         mut commands: Commands,
         resource_handles: Res<ResourceHandles>,
@@ -109,7 +109,7 @@ pub mod to {
     /// Native singleplayer: kill the existing server and start a fresh one.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new_singleplayer(
-        _: On<Pointer<Click>>,
+        _: On<Activate>,
         mut mode: ResMut<GameMode>,
         mut commands: Commands,
         resource_handles: Res<ResourceHandles>,
@@ -145,7 +145,7 @@ pub mod to {
     /// Web solo: private session on the remote server.
     #[cfg(target_arch = "wasm32")]
     pub fn solo(
-        _: On<Pointer<Click>>,
+        _: On<Activate>,
         mut mode: ResMut<GameMode>,
         mut commands: Commands,
         config: Res<crate::networking::SpacetimeDbConfig>,
@@ -165,7 +165,7 @@ pub mod to {
     }
 
     pub fn multiplayer(
-        _: On<Pointer<Click>>,
+        _: On<Activate>,
         mut mode: ResMut<GameMode>,
         mut commands: Commands,
         config: Res<crate::networking::SpacetimeDbConfig>,

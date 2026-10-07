@@ -1,9 +1,10 @@
 use super::*;
 use std::borrow::Cow;
 
-#[derive(Debug, Clone, Bundle)]
+#[derive(Debug, Clone)]
 pub struct Props {
     pub content: WidgetContent,
+    pub icon: Option<&'static str>,
     pub palette_set: PaletteSet,
     pub node: Node,
 }
@@ -13,20 +14,25 @@ impl Props {
     pub fn new(c: impl Into<WidgetContent>) -> Self {
         Self {
             content: c.into(),
+            icon: None,
             palette_set: PaletteSet::default(),
             node: Node {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 align_content: AlignContent::Center,
-                justify_items: JustifyItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(Px(1.0)),
-                padding: UiRect::axes(Px(24.0), Px(10.0)),
+                justify_content: JustifyContent::Start,
+                border_radius: BorderRadius::all(Px(3.0)),
+                column_gap: Px(10.0),
+                padding: UiRect::axes(Px(16.0), Px(10.0)),
                 min_height: size::BUTTON_HEIGHT,
-                border_radius: BorderRadius::all(size::BORDER_RADIUS),
                 ..Default::default()
             },
         }
+    }
+
+    pub fn icon(mut self, name: &'static str) -> Self {
+        self.icon = Some(name);
+        self
     }
 
     pub fn font(mut self, font: TextFont) -> Self {
@@ -47,12 +53,10 @@ impl Props {
         }
         self
     }
-    pub fn border_radius(mut self, r: Val) -> Self {
-        self.node.border_radius = BorderRadius::all(r);
-        self
-    }
-    pub fn border_radius_custom(mut self, r: BorderRadius) -> Self {
-        self.node.border_radius = r;
+    pub fn justify(mut self, j: Justify) -> Self {
+        if let WidgetContent::Text(ref mut t) = self.content {
+            t.layout.justify = j;
+        }
         self
     }
     pub fn node(mut self, new: Node) -> Self {
@@ -157,8 +161,8 @@ impl Default for TextContent {
     fn default() -> Self {
         Self {
             text: "".into(),
-            color: colors::NEUTRAL200.into(),
-            layout: TextLayout::new_with_justify(Justify::Center),
+            color: colors::INK.into(),
+            layout: TextLayout::new(Justify::Left, LineBreak::WordOrCharacter),
             font: TextFont::from_font_size(size::FONT_SIZE),
         }
     }

@@ -3,21 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#030303">
+  <meta name="theme-color" content="#141312">
   <title>WASM Fantasia</title>
   <link rel="icon" href="data:,">
   <style>
+    @font-face { font-family: Plex; font-weight: 300; font-display: swap; src: url(assets/fonts/IBMPlexSans-Light.ttf); }
+    @font-face { font-family: Plex; font-weight: 400; font-display: swap; src: url(assets/fonts/IBMPlexSans-Regular.ttf); }
     * { box-sizing: border-box; }
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #030303; color: #a3a3a3; font: 600 13px/1.5 system-ui, sans-serif; letter-spacing: 0.04em; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #141312; color: #e6e0d0; font: 17px/1.5 Plex, system-ui, sans-serif; color-scheme: dark; }
+    body { height: 100dvh; }
     canvas { display: block; width: 100% !important; height: 100% !important; outline: none; touch-action: none; }
-    #loading { position: fixed; inset: 0; z-index: 1; display: grid; place-content: center; padding: 24px; max-width: 420px; margin: auto; text-align: center; pointer-events: none; }
+    #loading { position: fixed; inset: 0; z-index: 1; display: grid; place-content: center; padding: 6vw; background: radial-gradient(ellipse at 40% 35%, #1e1c19, #141312 75%); }
+    .intro { width: min(560px, 88vw); }
+    h1 { margin: 0 0 32px; font-size: clamp(40px, 7vw, 56px); font-weight: 300; line-height: 1.15; }
+    #status { margin: 16px 0; max-width: 44ch; color: #a59f92; font-size: 15px; }
+    .progress { width: min(360px, 100%); height: 2px; overflow: hidden; background: #302e2b; }
+    .progress::after { content: ""; display: block; width: 35%; height: 100%; background: #e6e0d0; animation: load 1.8s ease-in-out infinite alternate; }
+    button { border: 0; border-radius: 3px; padding: 12px 20px; background: #e9e4d6; color: #171614; font: inherit; cursor: pointer; }
+    button:focus-visible { outline: 1px solid #e6e0d0; outline-offset: 4px; }
+    @keyframes load { from { transform: translateX(0); } to { transform: translateX(185%); } }
+    @media (prefers-reduced-motion: reduce) { .progress::after { animation: none; width: 100%; opacity: .5; } }
   </style>
 </head>
 <body>
-  <div id="loading">Loading</div>
+  <div id="loading"><div class="intro"><h1>WASM Fantasia</h1><div class="progress" aria-hidden="true"></div><p id="status" role="status" aria-live="polite">Preparing the arena…</p><button id="retry" hidden>Try again</button></div></div>
   <noscript>This game needs JavaScript.</noscript>
   <script type="module">
     const loading = document.getElementById("loading");
+    const status = document.getElementById("status");
+    document.getElementById("retry").addEventListener("click", () => location.reload());
     const observer = new MutationObserver(() => {
       const canvas = document.querySelector("canvas");
       if (canvas && getComputedStyle(canvas).display !== "none") {
@@ -32,7 +46,9 @@
       if (message.startsWith("Using exceptions for control flow")) return;
       observer.disconnect();
       document.body.append(loading);
-      loading.textContent = `Could not start the game. ${message}`;
+      status.textContent = `Could not start the game. ${message}`;
+      document.querySelector(".progress").hidden = true;
+      document.getElementById("retry").hidden = false;
       console.error(error);
     }
     window.addEventListener("error", event => showError(event.error || event.message));

@@ -98,11 +98,7 @@ fn setup_glyph_cache(mut commands: Commands) {
 ///
 /// Client-predicted effects (sound, flash, hit stop) remain on
 /// [`HitLanded`](crate::combat::HitLanded) for responsiveness.
-fn on_server_damage_number(
-    on: On<CombatEvent>,
-    fonts: Option<Res<crate::asset_loading::Fonts>>,
-    mut commands: Commands,
-) {
+fn on_server_damage_number(on: On<CombatEvent>, mut commands: Commands) {
     let event = on.event();
     let world_pos = Vec3::new(event.x, event.y, event.z);
     let damage = event.damage as i32;
@@ -116,8 +112,8 @@ fn on_server_damage_number(
 
     // Regular hits use the default font so the glyph cache prewarm applies
     let mut text_font = TextFont::from_font_size(if is_crit { 28.0 } else { 20.0 });
-    if is_crit && let Some(fonts) = fonts {
-        text_font.font = fonts.bold.clone();
+    if is_crit {
+        text_font.font = crate::ui::fonts::SEMIBOLD;
     }
 
     commands.spawn((

@@ -2,12 +2,11 @@ use bevy::prelude::*;
 use std::collections::VecDeque;
 use std::fmt::Write;
 
-use crate::asset_loading::Fonts;
 use crate::combat::{DamageDealt, Died, Enemy, Health, PlayerCombatant};
 use crate::models::combat::{Stat, Stats};
 use crate::models::{PauseState, Player as LocalPlayer, Screen, Session};
 use crate::networking::ServerDiagnostics;
-use crate::ui::{colors, size};
+use crate::ui::{colors, fonts, size};
 
 const MAX_ENTRIES: usize = 10;
 
@@ -119,10 +118,11 @@ fn spawn_panel(mut commands: Commands) {
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(12.0),
             overflow: Overflow::clip_y(),
-            border_radius: BorderRadius::all(size::BORDER_RADIUS),
+            border: UiRect::left(Val::Px(size::MARKER)),
             ..default()
         },
-        BackgroundColor(colors::NEUTRAL920.with_alpha(0.92)),
+        BackgroundColor(colors::PAPER.with_alpha(0.94)),
+        BorderColor::all(colors::INK),
         Visibility::Hidden,
     ));
 }
@@ -187,7 +187,7 @@ fn flush_pending_hits(mut log: ResMut<DebugLog>) {
     if log.pending_hits.is_empty() {
         return;
     }
-    let hits: Vec<PendingHit> = log.pending_hits.drain(..).collect();
+    let hits: Vec<PendingHit> = std::mem::take(&mut log.pending_hits);
 
     for is_local in [true, false] {
         let batch: Vec<&PendingHit> = hits.iter().filter(|h| h.is_local == is_local).collect();
@@ -234,17 +234,18 @@ fn detect_enemy_changes(mut log: ResMut<DebugLog>, enemies: Query<(), With<Enemy
 
 // ── Render helpers ──────────────────────────────────────────────────
 
-fn spawn_title(commands: &mut Commands, panel: Entity, fonts: &Fonts, text: impl Into<String>) {
+fn spawn_title(commands: &mut Commands, panel: Entity, text: impl Into<String>) {
     commands.spawn((
         DebugText,
         ChildOf(panel),
         Text::new(text),
         TextFont {
-            font: fonts.semibold.clone(),
-            font_size: 14.0,
+            font: fonts::SEMIBOLD,
+            weight: bevy::text::FontWeight::SEMIBOLD,
+            font_size: size::CAPTION_SIZE,
             ..default()
         },
-        TextColor(colors::NEUTRAL300),
+        TextColor(colors::INK),
     ));
 }
 
@@ -254,10 +255,10 @@ fn spawn_body(commands: &mut Commands, panel: Entity, text: impl Into<String>) {
         ChildOf(panel),
         Text::new(text),
         TextFont {
-            font_size: 12.0,
+            font_size: 14.0,
             ..default()
         },
-        TextColor(colors::NEUTRAL500),
+        TextColor(colors::INK_SOFT),
     ));
 }
 
@@ -266,7 +267,6 @@ fn spawn_body(commands: &mut Commands, panel: Entity, text: impl Into<String>) {
 fn update_overlay(
     session: Res<Session>,
     mut log: ResMut<DebugLog>,
-    fonts: Option<Res<Fonts>>,
     panel: Query<Entity, With<DebugPanel>>,
     existing: Query<Entity, With<DebugText>>,
     mut commands: Commands,
@@ -274,10 +274,6 @@ fn update_overlay(
     player_query: Query<(&Health, Option<&Stats>), With<PlayerCombatant>>,
 ) {
     log.frame = log.frame.wrapping_add(1);
-
-    let Some(fonts) = fonts else {
-        return;
-    };
 
     if !session.diagnostics {
         return;
@@ -308,7 +304,6 @@ fn update_overlay(
         spawn_title(
             &mut commands,
             panel_entity,
-            &fonts,
             format!(
                 "HP {:.0}/{:.0}   Stacks {}   Spd {atk_spd:.2}",
                 health.current, health.max, stacks,
@@ -323,7 +318,6 @@ fn update_overlay(
         spawn_title(
             &mut commands,
             panel_entity,
-            &fonts,
             format!("Players  {online}/{}", server_diag.players.len()),
         );
 
@@ -353,14 +347,13 @@ fn update_overlay(
             spawn_title(
                 &mut commands,
                 panel_entity,
-                &fonts,
                 format!(
                     "Enemies  {} alive / {} dead",
                     server_diag.enemy_alive, server_diag.enemy_dead
                 ),
             );
         } else {
-            spawn_title(&mut commands, panel_entity, &fonts, "Enemies  none");
+            spawn_title(&mut commands, panel_entity, "Enemies  none");
         }
 
         // Desync warning
@@ -368,7 +361,6 @@ fn update_overlay(
             spawn_title(
                 &mut commands,
                 panel_entity,
-                &fonts,
                 format!("DESYNC  local {local:.0} / server {server:.0}"),
             );
         }
@@ -376,7 +368,7 @@ fn update_overlay(
 
     // ── Event log ───────────────────────────────────────────
     if !log.entries.is_empty() {
-        spawn_title(&mut commands, panel_entity, &fonts, "Combat Log");
+        spawn_title(&mut commands, panel_entity, "Combat Log");
         let mut body = String::new();
         for entry in &log.entries {
             let _ = writeln!(body, "[{}] {}", entry.tag.label(), entry.msg);

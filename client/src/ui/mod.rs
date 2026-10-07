@@ -1,4 +1,6 @@
 use crate::*;
+use bevy::ui::{Checked, InteractionDisabled, Pressed};
+pub use bevy::ui_widgets::{Activate, Button, observe};
 use bevy::{
     ecs::{
         spawn::SpawnRelated,
@@ -9,7 +11,6 @@ use bevy::{
         AlignItems, BorderRadius, Display, FlexDirection, JustifyContent, Node, PositionType,
         UiRect, Val::*,
     },
-    ui_widgets::Button,
     window::Window,
 };
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,7 @@ mod modal;
 mod performance;
 mod prefabs;
 mod props;
+mod runes;
 mod server_status;
 mod widget;
 
@@ -33,6 +35,13 @@ pub use widget::*;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((
+        bevy::ui_widgets::UiWidgetsPlugins,
+        bevy::input_focus::InputDispatchPlugin,
+        bevy::input_focus::tab_navigation::TabNavigationPlugin,
+    ));
+    app.add_plugins((
+        widget::plugin,
+        runes::plugin,
         prefabs::plugin,
         interaction::plugin,
         modal::plugin,
