@@ -29,3 +29,7 @@ just check   # lint + web compile check
 ```
 
 Run `just --list` for the rest.
+
+[Fury's laws](core/verification/README.md) are checked with Verus. Run `just verify` with Verus on `PATH`, or set `VERUS` to its executable.
+
+[Gameplay plugins](plugins/README.md) contains the Component Model prototype, typed interface and Rune comparison.

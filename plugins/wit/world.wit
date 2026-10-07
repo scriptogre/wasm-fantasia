@@ -1,0 +1,16 @@
+package fantasia:mechanics@0.1.0;
+
+interface fury {
+    record state {
+        stacks: s64,
+        remaining-micros: u64,
+    }
+    on-hit: func(stacks: s64, is-crit: bool) -> state;
+    on-hits: func(stacks: s64, remaining-micros: u64, hits: list<bool>) -> state;
+    elapse: func(current: state, micros: u64) -> state;
+    bonus-percent: func(stacks: s64) -> u16;
+}
+
+world mechanic {
+    export fury;
+}

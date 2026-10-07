@@ -1,0 +1,15 @@
+component:
+    CARGO_ENCODED_RUSTFLAGS='' cargo +stable build -p fury-plugin --locked --release --target wasm32-wasip2
+
+browser: component
+    bun install --frozen-lockfile
+    bun run transpile
+    CARGO_ENCODED_RUSTFLAGS='' cargo +stable build -p plugin-probe --locked --release --lib --target wasm32-unknown-unknown --features browser
+    cp target/wasm32-unknown-unknown/release/plugin_probe.wasm target/browser/host.wasm
+
+benchmark: browser
+    bun run benchmark.mjs
+
+server: component
+    CARGO_ENCODED_RUSTFLAGS='' cargo +stable build -p plugin-probe --locked --release --lib --target wasm32-unknown-unknown --features server
+    cp target/wasm32-unknown-unknown/release/plugin_probe.wasm target/server-probe.wasm

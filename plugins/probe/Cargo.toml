@@ -1,0 +1,17 @@
+[package]
+name = "plugin-probe"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+browser = []
+server = ["dep:spacetimedb"]
+
+[dependencies]
+wasm_component_layer = "=0.1.18"
+wasmi_runtime_layer = "=0.31.0"
+game-core = { path = "../../core" }
+spacetimedb = { version = "=2.2.0", optional = true }
