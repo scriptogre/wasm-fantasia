@@ -100,6 +100,7 @@ pub fn clear_enemies(ctx: &spacetimedb::ReducerContext) {
 /// across multiple WASM module instances, each with independent memory.
 #[spacetimedb::reducer]
 pub fn game_tick(ctx: &spacetimedb::ReducerContext, _args: TickSchedule) {
+    crate::combat::expire_fury(ctx);
     let dt = TICK_INTERVAL_MICROS as f32 / 1_000_000.0;
     let now = ctx.timestamp.to_micros_since_unix_epoch();
 

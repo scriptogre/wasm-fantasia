@@ -19,12 +19,22 @@ pub fn plugin(app: &mut App) {
         .add_observer(handle_airborne_attack)
         .add_observer(on_attack_hit)
         .add_observer(on_ground_pound_hit)
+        .add_systems(Update, tick_fury.before(tick_attack_state))
         .add_systems(
             Update,
             (tick_attack_state, process_buffered_attack)
                 .chain()
                 .run_if(in_state(Screen::Gameplay)),
         );
+}
+
+fn tick_fury(time: Res<Time<Real>>, mut stats: Query<&mut Stats>) {
+    let micros = time.delta().as_micros().min(u64::MAX as u128) as u64;
+    for mut stats in &mut stats {
+        if stats.fury.remaining_micros > 0 || stats.fury.stacks != 0 {
+            stats.fury = game_core::fury::elapse(stats.fury, micros);
+        }
+    }
 }
 
 /// Grounded melee attack — fires continuously while held (`Fire`).
@@ -216,6 +226,11 @@ fn process_script_results(
 
     for intent in intents {
         match intent {
+            Intent::FuryHit { entity_id, is_crit } if *entity_id == attacker_entity.to_bits() => {
+                if let Some(s) = stats {
+                    s.fury = game_core::fury::on_hit(s.fury.stacks, *is_crit);
+                }
+            }
             Intent::DamageDealt { target_id, amount } => {
                 let entry = target_hits.entry(*target_id).or_insert((0.0, 0.0));
                 entry.0 += amount;
@@ -228,10 +243,6 @@ fn process_script_results(
                 if let Some(s) = stats {
                     s.set(stat_from_name(stat), *value);
                 }
-            }
-            Intent::BuffAdded { .. } => {
-                // Stacking script already emits StatSet alongside BuffAdded;
-                // buff duration tracking will come in a later task.
             }
             // Other intents (Healed, Killed, etc.) are handled elsewhere.
             _ => {}
@@ -379,12 +390,12 @@ fn on_attack_hit(
 /// Observer: ground pound landed — runs the ground_pound Rune script for AOE damage.
 fn on_ground_pound_hit(
     trigger: On<GroundPoundImpact>,
-    attackers: Query<
+    mut attackers: Query<
         (
             Entity,
             &Transform,
             &Health,
-            Option<&Stats>,
+            Option<&mut Stats>,
             Option<&EntityBehaviors>,
         ),
         With<PlayerCombatant>,
@@ -393,7 +404,8 @@ fn on_ground_pound_hit(
     registry: Option<Res<ScriptRegistryRes>>,
     mut commands: Commands,
 ) {
-    let Ok((attacker_entity, transform, health, stats, behaviors)) = attackers.single() else {
+    let Ok((attacker_entity, transform, health, mut stats, behaviors)) = attackers.single_mut()
+    else {
         return;
     };
 
@@ -410,7 +422,7 @@ fn on_ground_pound_hit(
     let forward = transform.forward().as_vec3();
 
     // Build source combatant at the impact position
-    let mut source = build_combatant(attacker_entity, transform, health, stats);
+    let mut source = build_combatant(attacker_entity, transform, health, stats.as_deref());
     source.pos_x = impact_pos.x;
     source.pos_y = impact_pos.y;
     source.pos_z = impact_pos.z;
@@ -460,6 +472,11 @@ fn on_ground_pound_hit(
 
     for intent in &intents {
         match intent {
+            Intent::FuryHit { entity_id, is_crit } if *entity_id == attacker_entity.to_bits() => {
+                if let Some(s) = &mut stats {
+                    s.fury = game_core::fury::on_hit(s.fury.stacks, *is_crit);
+                }
+            }
             Intent::DamageDealt { target_id, amount } => {
                 let entry = target_hits.entry(*target_id).or_insert((0.0, 0.0));
                 entry.0 += amount;
@@ -505,5 +522,74 @@ fn on_ground_pound_hit(
             is_crit,
             feedback: HitFeedback::standard(is_crit),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{sync::Arc, time::Duration};
+
+    #[test]
+    fn fury_reaches_attack_speed_refreshes_and_expires() {
+        let mut registry = game_core::runtime::ScriptRegistry::new();
+        registry
+            .register(
+                "stacking".into(),
+                include_str!("../../../core/runes/behaviors/stacking.rune"),
+            )
+            .unwrap();
+        registry
+            .register(
+                "melee_attack".into(),
+                include_str!("../../../core/runes/abilities/melee_attack.rune"),
+            )
+            .unwrap();
+        let mut app = App::new();
+        app.insert_resource(ScriptRegistryRes(Arc::new(registry)))
+            .insert_resource(Time::<Real>::default())
+            .add_observer(on_attack_hit)
+            .add_systems(Update, tick_fury);
+        let attacker = app
+            .world_mut()
+            .spawn((
+                PlayerCombatant,
+                AttackState::default(),
+                Transform::default(),
+                Health::new(100.0),
+                Stats::new().with(Stat::AttackSpeed, 1.5),
+                EntityBehaviors(vec!["stacking".into()]),
+            ))
+            .id();
+        app.world_mut().spawn((
+            Enemy,
+            Transform::from_xyz(0.0, 0.0, -1.0),
+            Health::new(500.0),
+        ));
+        app.world_mut().trigger(AttackIntent { attacker });
+        let stats = app.world().get::<Stats>(attacker).unwrap();
+        assert_eq!(stats.get(&Stat::Stacks), 1.0);
+        assert!((stats.get(&Stat::AttackSpeed) - 1.62).abs() < 0.00001);
+
+        app.world_mut()
+            .resource_mut::<Time<Real>>()
+            .advance_by(Duration::from_secs(2));
+        app.update();
+        app.world_mut().trigger(AttackIntent { attacker });
+        app.world_mut()
+            .resource_mut::<Time<Real>>()
+            .advance_by(Duration::from_secs(2));
+        app.update();
+        let stats = app.world().get::<Stats>(attacker).unwrap();
+        assert_eq!(stats.get(&Stat::Stacks), 2.0);
+        assert!((stats.get(&Stat::AttackSpeed) - 1.74).abs() < 0.00001);
+
+        app.world_mut()
+            .resource_mut::<Time<Real>>()
+            .advance_by(Duration::from_millis(500));
+        app.update();
+        let stats = app.world().get::<Stats>(attacker).unwrap();
+        assert_eq!(stats.get(&Stat::Stacks), 0.0);
+        assert_eq!(stats.get(&Stat::AttackSpeed), 1.5);
     }
 }

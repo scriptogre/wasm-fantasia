@@ -327,10 +327,14 @@ pub enum Stat {
     Custom(String),
 }
 
-/// Bevy Component for entity stats — a simple `HashMap<Stat, f32>`.
+/// Base stats and the active Fury state. Attack speed includes its bonus.
 #[derive(Component, Default, Clone, Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Stats(pub HashMap<Stat, f32>);
+pub struct Stats {
+    #[serde(flatten)]
+    pub values: HashMap<Stat, f32>,
+    #[serde(skip)]
+    pub fury: game_core::fury::Fury,
+}
 
 impl Stats {
     pub fn new() -> Self {
@@ -338,15 +342,26 @@ impl Stats {
     }
 
     pub fn with(mut self, stat: Stat, value: f32) -> Self {
-        self.0.insert(stat, value);
+        self.set(stat, value);
         self
     }
 
     pub fn get(&self, stat: &Stat) -> f32 {
-        self.0.get(stat).copied().unwrap_or(0.0)
+        match stat {
+            Stat::Stacks => self.fury.stacks as f32,
+            Stat::AttackSpeed => {
+                self.values.get(stat).copied().unwrap_or(1.0)
+                    + game_core::fury::bonus_percent(self.fury.stacks) as f32 / 100.0
+            }
+            _ => self.values.get(stat).copied().unwrap_or(0.0),
+        }
     }
 
     pub fn set(&mut self, stat: Stat, value: f32) {
-        self.0.insert(stat, value);
+        if stat == Stat::Stacks {
+            self.fury.stacks = game_core::fury::bounded(value as i64);
+        } else {
+            self.values.insert(stat, value);
+        }
     }
 }

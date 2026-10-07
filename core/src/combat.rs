@@ -13,7 +13,6 @@ pub mod defaults {
     /// Knockback velocity in m/s applied as an impulse. Crits multiply this by CritMultiplier.
     pub const KNOCKBACK: f32 = 6.0;
     pub const ATTACK_SPEED: f32 = 1.0;
-    pub const STACK_DECAY: f32 = 2.5;
     pub const ATTACK_COOLDOWN_SECS: f32 = 0.42;
     pub const ENEMY_HEALTH: f32 = 500.0;
     pub const ENEMY_DETECTION_RANGE: f32 = 15.0;
@@ -323,15 +322,6 @@ pub fn cone_hit_check(
     }
 
     true
-}
-
-/// Decay stacks to 0 if enough time has passed since last hit.
-pub fn decay_stacks(stacks: f32, elapsed_secs: f64, decay_threshold: f32) -> f32 {
-    if elapsed_secs > decay_threshold as f64 && stacks > 0.0 {
-        0.0
-    } else {
-        stacks
-    }
 }
 
 /// Check if enough time has passed since last attack (respecting attack speed).

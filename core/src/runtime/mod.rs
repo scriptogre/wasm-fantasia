@@ -395,21 +395,7 @@ mod tests {
 
     // --- Crit behavior tests ---
 
-    const CRIT_SCRIPT: &str = r#"
-        use gameplay::*;
-
-        pub fn on_pre_hit(source, target, hit) {
-            if chance(source.crit_chance) {
-                Hit {
-                    damage: hit.damage * source.crit_multiplier,
-                    knockback: hit.knockback * source.crit_multiplier,
-                    is_crit: true,
-                }
-            } else {
-                hit
-            }
-        }
-    "#;
+    const CRIT_SCRIPT: &str = include_str!("../../runes/behaviors/crit.rune");
 
     #[test]
     fn crit_script_crits_on_low_roll() {
@@ -463,90 +449,84 @@ mod tests {
 
     // --- Stacking behavior tests ---
 
-    const STACKING_SCRIPT: &str = r#"
-        use gameplay::*;
-
-        pub fn on_hit(source, target, hit) {
-            let add = if hit.is_crit { 3 } else { 1 };
-            let stacks_i = source.fury_stacks + add;
-            let stacks = min(stacks_i as f64, 12.0);
-            set_stat(source, "fury_stacks", stacks);
-            set_stat(source, "attack_speed_bonus", stacks * 0.12);
-            add_buff(source, "fury", 2.5);
-            hit
-        }
-    "#;
+    const STACKING_SCRIPT: &str = include_str!("../../runes/behaviors/stacking.rune");
 
     #[test]
-    fn stacking_adds_one_on_normal_hit() {
-        let engine = ScriptEngine::new(STACKING_SCRIPT).expect("stacking script should compile");
-        let source = test_combatant(1); // fury_stacks=0
-        let target = test_combatant(2);
-        let hit = base_hit(); // is_crit=false
-
-        let (_result, intents, _effects) = engine
-            .call_hit_hook("on_hit", source, target, hit, 0.5)
-            .expect("hook should succeed");
-
-        // Expect: StatSet(fury_stacks, 1.0), StatSet(attack_speed_bonus, 0.12), BuffAdded(fury, 2.5)
-        assert_eq!(intents.len(), 3, "expected 3 intents, got {intents:?}");
-        assert!(
-            matches!(&intents[0], Intent::StatSet { entity_id: 1, stat, value }
-                if stat == "fury_stacks" && (*value - 1.0).abs() < f32::EPSILON),
-            "first intent should set fury_stacks to 1, got {:?}",
-            intents[0]
-        );
-        assert!(
-            matches!(&intents[1], Intent::StatSet { entity_id: 1, stat, value }
-                if stat == "attack_speed_bonus" && (*value - 0.12).abs() < 0.001),
-            "second intent should set attack_speed_bonus to 0.12, got {:?}",
-            intents[1]
-        );
-        assert!(
-            matches!(&intents[2], Intent::BuffAdded { target_id: 1, name, duration }
-                if name == "fury" && (*duration - 2.5).abs() < f32::EPSILON),
-            "third intent should be BuffAdded fury 2.5, got {:?}",
-            intents[2]
-        );
+    fn stacking_emits_typed_hits_for_the_owner() {
+        let engine = ScriptEngine::new(STACKING_SCRIPT).unwrap();
+        for is_crit in [false, true] {
+            let hit = Hit {
+                is_crit,
+                ..base_hit()
+            };
+            let (result, intents, effects) = engine
+                .call_hit_hook(
+                    "on_hit",
+                    test_combatant(1),
+                    test_combatant(2),
+                    hit.clone(),
+                    0.5,
+                )
+                .unwrap();
+            assert!(matches!(intents.as_slice(),
+                [Intent::FuryHit { entity_id: 1, is_crit: critical }] if *critical == is_crit));
+            assert_eq!(result.damage, hit.damage);
+            assert_eq!(result.knockback, hit.knockback);
+            assert_eq!(result.is_crit, hit.is_crit);
+            assert!(effects.is_empty());
+        }
     }
 
     #[test]
-    fn stacking_adds_three_on_crit() {
-        let engine = ScriptEngine::new(STACKING_SCRIPT).expect("stacking script should compile");
-        let source = test_combatant(1); // fury_stacks=0
-        let target = test_combatant(2);
-        let hit = Hit {
-            damage: 20.0,
-            knockback: 4.0,
-            is_crit: true,
-        };
-
-        let (_result, intents, _effects) = engine
-            .call_hit_hook("on_hit", source, target, hit, 0.5)
-            .expect("hook should succeed");
-
-        assert!(
-            matches!(&intents[0], Intent::StatSet { entity_id: 1, stat, value }
-                if stat == "fury_stacks" && (*value - 3.0).abs() < f32::EPSILON),
-            "fury_stacks should be 3 on crit, got {:?}",
-            intents[0]
-        );
+    fn production_abilities_grant_fury_per_target_and_ignore_misses() {
+        use crate::fury::{self, Fury};
+        let mut registry = ScriptRegistry::new();
+        registry
+            .register("stacking".into(), STACKING_SCRIPT)
+            .unwrap();
+        let registry = Arc::new(registry);
+        for source in [MELEE_ATTACK_WITH_HOOKS, GROUND_POUND_WITH_HOOKS] {
+            let engine = ScriptEngine::new(source).unwrap();
+            for count in [0, 2, 20] {
+                let targets = (0..count)
+                    .map(|i| Combatant {
+                        id: 10 + i,
+                        pos_x: 1.0,
+                        pos_z: 0.0,
+                        ..test_combatant(10 + i)
+                    })
+                    .collect();
+                let (intents, _) = engine
+                    .call_ability_with_behaviors(
+                        "on_ability_start",
+                        test_combatant(1),
+                        targets,
+                        1.0,
+                        registry.clone(),
+                        vec!["stacking".into()],
+                    )
+                    .unwrap();
+                let mut state = Fury::default();
+                let mut hits = 0;
+                for intent in intents {
+                    if let Intent::FuryHit { entity_id, is_crit } = intent {
+                        assert_eq!(entity_id, 1);
+                        state = fury::on_hit(state.stacks, is_crit);
+                        hits += 1;
+                    }
+                }
+                assert_eq!(hits, count);
+                assert_eq!(state.stacks, count.min(12) as i64);
+                let before_expiry = fury::elapse(state, 2_499_999);
+                assert_eq!(before_expiry.stacks, state.stacks);
+                assert_eq!(fury::elapse(before_expiry, 1), Fury::default());
+            }
+        }
     }
 
     // --- Feedback behavior tests ---
 
-    const FEEDBACK_SCRIPT: &str = r#"
-        use gameplay::*;
-
-        pub fn on_hit(source, target, hit) {
-            let intensity = if hit.is_crit { 1.0 } else { 0.5 };
-            vfx("hit_flash", target);
-            sound("impact", target);
-            screen_shake(intensity);
-            hit_stop(if hit.is_crit { 0.08 } else { 0.04 });
-            hit
-        }
-    "#;
+    const FEEDBACK_SCRIPT: &str = include_str!("../../runes/behaviors/feedback.rune");
 
     #[test]
     fn feedback_emits_correct_effects() {
@@ -681,7 +661,6 @@ mod tests {
         assert!(matches!(&effects[0], Effect::Animate { entity_id: 1, animation } if animation == "attack"));
         assert!(matches!(&effects[1], Effect::Sound { name, target_id: 1 } if name == "swoosh"));
 
-        // Expected intents: DamageDealt(target 2), KnockbackApplied(target 2)
         assert_eq!(intents.len(), 2, "expected 2 intents, got {intents:?}");
         assert!(matches!(intents[0], Intent::DamageDealt { target_id: 2, amount } if (amount - 10.0).abs() < f32::EPSILON));
         assert!(matches!(intents[1], Intent::KnockbackApplied { target_id: 2, force } if (force - 5.0).abs() < f32::EPSILON));
@@ -770,57 +749,9 @@ mod tests {
 
     // --- fire_hook tests ---
 
-    const MELEE_ATTACK_WITH_HOOKS: &str = r#"
-        use gameplay::*;
+    const MELEE_ATTACK_WITH_HOOKS: &str = include_str!("../../runes/abilities/melee_attack.rune");
 
-        pub fn on_ability_start(source) {
-            animate(source, "attack");
-            sound("swoosh", source);
-
-            let targets = targets_in_cone(source, source.attack_range, source.attack_arc);
-
-            for target in targets {
-                let hit = Hit { damage: source.attack_damage, knockback: source.knockback_force, is_crit: false };
-
-                hit = fire_hook("on_pre_hit", source, target, hit);
-
-                apply_damage(target, hit.damage);
-                apply_knockback(target, hit.knockback);
-
-                hit = fire_hook("on_hit", source, target, hit);
-
-                if hit.is_crit {
-                    vfx("crit_particles", target);
-                }
-            }
-        }
-    "#;
-
-    const GROUND_POUND_WITH_HOOKS: &str = r#"
-        use gameplay::*;
-
-        pub fn on_ability_start(source) {
-            animate(source, "ground_pound");
-            sound("ground_pound", source);
-            vfx("ground_pound_shockwave", source);
-
-            let targets = targets_in_radius(source.pos_x, source.pos_z, 6.0);
-            let base_damage = source.attack_damage * 4.0;
-
-            for target in targets {
-                let hit = Hit { damage: base_damage, knockback: 20.0, is_crit: false };
-
-                hit = fire_hook("on_pre_hit", source, target, hit);
-
-                apply_damage(target, hit.damage);
-                apply_knockback(target, hit.knockback);
-
-                hit = fire_hook("on_hit", source, target, hit);
-            }
-
-            screen_shake(1.5);
-        }
-    "#;
+    const GROUND_POUND_WITH_HOOKS: &str = include_str!("../../runes/abilities/ground_pound.rune");
 
     #[test]
     fn fire_hook_chains_behaviors() {
@@ -862,19 +793,7 @@ mod tests {
             )
             .expect("ability should succeed");
 
-        // Expected sequence of intents:
-        // 1. DamageDealt(2, 20.0) -- crit doubled: 10*2=20
-        // 2. KnockbackApplied(2, 10.0) -- crit doubled: 5*2=10
-        // 3. StatSet(1, "fury_stacks", 3.0) -- stacking on_hit (crit → 3 stacks)
-        // 4. StatSet(1, "attack_speed_bonus", 0.36)
-        // 5. BuffAdded(1, "fury", 2.5)
-
-        // Expected sequence of effects:
-        // 1. Animate(1, "attack")
-        // 2. Sound("swoosh", 1)
-        // 3. Vfx("crit_particles", 2) -- is_crit=true
-
-        assert_eq!(intents.len(), 5, "expected 5 intents, got {intents:?}");
+        assert_eq!(intents.len(), 3, "expected 3 intents, got {intents:?}");
         assert_eq!(effects.len(), 3, "expected 3 effects, got {effects:?}");
 
         // Effects
@@ -907,25 +826,13 @@ mod tests {
             "intents[1] should be KnockbackApplied 10.0, got {:?}",
             intents[1]
         );
-        // Stacking on_hit intents (crit → 3 stacks)
-        assert!(
-            matches!(&intents[2], Intent::StatSet { entity_id: 1, stat, value }
-                if stat == "fury_stacks" && (*value - 3.0).abs() < f32::EPSILON),
-            "intents[2] should be StatSet fury_stacks 3, got {:?}",
-            intents[2]
-        );
-        assert!(
-            matches!(&intents[3], Intent::StatSet { entity_id: 1, stat, value }
-                if stat == "attack_speed_bonus" && (*value - 0.36).abs() < 0.001),
-            "intents[3] should be StatSet attack_speed_bonus 0.36, got {:?}",
-            intents[3]
-        );
-        assert!(
-            matches!(&intents[4], Intent::BuffAdded { target_id: 1, name, duration }
-                if name == "fury" && (*duration - 2.5).abs() < f32::EPSILON),
-            "intents[4] should be BuffAdded fury 2.5, got {:?}",
-            intents[4]
-        );
+        assert!(matches!(
+            intents[2],
+            Intent::FuryHit {
+                entity_id: 1,
+                is_crit: true
+            }
+        ));
     }
 
     #[test]
@@ -963,24 +870,7 @@ mod tests {
             )
             .expect("ability should succeed");
 
-        // fire_hook("on_pre_hit") — stacking has no on_pre_hit → hit unchanged
-        // damage = source.attack_damage = 10.0 (no crit modification)
-        // knockback = source.knockback_force = 5.0
-        // fire_hook("on_hit") — stacking.on_hit runs: is_crit=false → add=1
-
-        // Expected intents:
-        // 1. DamageDealt(2, 10.0) — unmodified
-        // 2. KnockbackApplied(2, 5.0) — unmodified
-        // 3. StatSet(1, fury_stacks, 1.0)
-        // 4. StatSet(1, attack_speed_bonus, 0.12)
-        // 5. BuffAdded(1, fury, 2.5)
-
-        // Expected effects:
-        // 1. Animate(1, "attack")
-        // 2. Sound("swoosh", 1)
-        // (no crit_particles since is_crit=false)
-
-        assert_eq!(intents.len(), 5, "expected 5 intents, got {intents:?}");
+        assert_eq!(intents.len(), 3, "expected 3 intents, got {intents:?}");
         assert_eq!(effects.len(), 2, "expected 2 effects, got {effects:?}");
 
         assert!(
@@ -993,12 +883,13 @@ mod tests {
             "knockback should be unmodified at 5.0, got {:?}",
             intents[1]
         );
-        assert!(
-            matches!(&intents[2], Intent::StatSet { entity_id: 1, stat, value }
-                if stat == "fury_stacks" && (*value - 1.0).abs() < f32::EPSILON),
-            "fury_stacks should be 1 (normal hit), got {:?}",
-            intents[2]
-        );
+        assert!(matches!(
+            intents[2],
+            Intent::FuryHit {
+                entity_id: 1,
+                is_crit: false
+            }
+        ));
     }
 
     #[test]

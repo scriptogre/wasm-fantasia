@@ -67,11 +67,15 @@ profile: spacetimedb
     cargo run -p game-client --features profile
 
 # Pre-commit checks: lint + web compilation
-check:
+check: verify
     cargo clippy --workspace -- -D warnings
     cargo fmt --all -- --check
     cargo machete
     cargo check -p game-client --profile ci --no-default-features --features web --target wasm32-unknown-unknown
+
+# Verify the gameplay laws and rejection cases
+verify:
+    uv run --no-project python core/verification/check.py --verus "${VERUS:-verus}"
 
 # Analyze web build sizes
 web-size *args:

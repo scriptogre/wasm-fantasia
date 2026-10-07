@@ -10,15 +10,49 @@ use super::types::{Combatant, Hit};
 /// An intent records a state-changing action during script execution.
 #[derive(Debug, Clone)]
 pub enum Intent {
-    DamageDealt { target_id: u64, amount: f32 },
-    Healed { target_id: u64, amount: f32 },
-    KnockbackApplied { target_id: u64, force: f32 },
-    BuffAdded { target_id: u64, name: String, duration: f32 },
-    BuffRemoved { target_id: u64, name: String },
-    StatSet { entity_id: u64, stat: String, value: f32 },
-    Killed { target_id: u64 },
-    BehaviorSet { entity_id: u64, behavior: String },
-    MovedToward { entity_id: u64, target_x: f32, target_z: f32, speed: f32 },
+    FuryHit {
+        entity_id: u64,
+        is_crit: bool,
+    },
+    DamageDealt {
+        target_id: u64,
+        amount: f32,
+    },
+    Healed {
+        target_id: u64,
+        amount: f32,
+    },
+    KnockbackApplied {
+        target_id: u64,
+        force: f32,
+    },
+    BuffAdded {
+        target_id: u64,
+        name: String,
+        duration: f32,
+    },
+    BuffRemoved {
+        target_id: u64,
+        name: String,
+    },
+    StatSet {
+        entity_id: u64,
+        stat: String,
+        value: f32,
+    },
+    Killed {
+        target_id: u64,
+    },
+    BehaviorSet {
+        entity_id: u64,
+        behavior: String,
+    },
+    MovedToward {
+        entity_id: u64,
+        target_x: f32,
+        target_z: f32,
+        speed: f32,
+    },
 }
 
 /// A presentation effect. Client processes these; server ignores.
@@ -107,6 +141,7 @@ pub fn build_gameplay_module() -> Result<Module, ContextError> {
     m.function("add_buff", add_buff).build()?;
     m.function("remove_buff", remove_buff).build()?;
     m.function("set_stat", set_stat).build()?;
+    m.function("grant_fury", grant_fury).build()?;
     m.function("kill", kill).build()?;
     m.function("set_behavior", set_behavior).build()?;
     m.function("move_toward", move_toward).build()?;
@@ -194,6 +229,13 @@ fn set_stat(entity: &Combatant, stat: &str, value: f32) {
         entity_id: entity.id,
         stat: stat.to_string(),
         value,
+    });
+}
+
+fn grant_fury(entity: &Combatant, hit: &Hit) {
+    push_intent(Intent::FuryHit {
+        entity_id: entity.id,
+        is_crit: hit.is_crit,
     });
 }
 

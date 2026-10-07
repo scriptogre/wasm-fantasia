@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use spacetimedb_sdk::{DbContext, EventTable, Table, TableWithPrimaryKey};
 use web_time::Instant;
 
+use super::generated::active_effect_table::ActiveEffectTableAccess;
 use super::generated::combat_event_table::CombatEventTableAccess;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::join_game_reducer::join_game;
@@ -68,6 +69,42 @@ macro_rules! connection_builder {
                 *token_store.lock().unwrap() = Some(token.to_string());
 
                 // Register table callbacks before subscribing
+                {
+                    let q = queue.clone();
+                    conn.db.active_effect().on_insert(move |_ctx, row| {
+                        if row.effect_type == game_core::combat::effect_types::STACKING_DAMAGE {
+                            q.lock().unwrap().push(DbEvent::FuryUpdate {
+                                owner: row.owner,
+                                stacks: row.magnitude as i64,
+                                duration: row.duration,
+                            });
+                        }
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.active_effect().on_update(move |_ctx, _old, row| {
+                        if row.effect_type == game_core::combat::effect_types::STACKING_DAMAGE {
+                            q.lock().unwrap().push(DbEvent::FuryUpdate {
+                                owner: row.owner,
+                                stacks: row.magnitude as i64,
+                                duration: row.duration,
+                            });
+                        }
+                    });
+                }
+                {
+                    let q = queue.clone();
+                    conn.db.active_effect().on_delete(move |_ctx, row| {
+                        if row.effect_type == game_core::combat::effect_types::STACKING_DAMAGE {
+                            q.lock().unwrap().push(DbEvent::FuryUpdate {
+                                owner: row.owner,
+                                stacks: 0,
+                                duration: 0.0,
+                            });
+                        }
+                    });
+                }
                 {
                     let q = queue.clone();
                     conn.db.enemy().on_insert(move |_ctx, row| {

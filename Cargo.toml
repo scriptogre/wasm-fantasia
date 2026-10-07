@@ -12,6 +12,9 @@ type_complexity = "allow"
 collapsible_if = "allow"
 nonstandard_macro_braces = "warn"
 
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(verus_keep_ghost)'] }
+
 [patch.crates-io]
 firewheel-web-audio = { path = "crates/firewheel-web-audio" }
 tokio-tungstenite-wasm = { path = "crates/tokio-tungstenite-wasm" }

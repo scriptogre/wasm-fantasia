@@ -1,4 +1,5 @@
 use game_core::combat::{self, defaults, effect_types, landing_aoe};
+use game_core::fury::{self, Fury};
 use game_core::runtime::{Combatant, Effect, Intent};
 use spacetimedb::Table;
 
@@ -27,32 +28,11 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         return;
     }
 
-    // Cooldown check
-    if !combat::can_attack(attacker.last_attack_time, now, attacker.attack_speed) {
+    let mut fury = read_fury(ctx, &attacker, now);
+    let speed = defaults::ATTACK_SPEED + fury::bonus_percent(fury.stacks) as f32 / 100.0;
+    if !combat::can_attack(attacker.last_attack_time, now, speed) {
         return;
     }
-
-    // Read stacking buff from active_effect table (btree index on owner)
-    let stacking_effect = ctx
-        .db
-        .active_effect()
-        .owner()
-        .filter(&ctx.sender())
-        .find(|e| e.effect_type == effect_types::STACKING_DAMAGE);
-
-    let (stacks, last_hit_time) = if let Some(ref effect) = stacking_effect {
-        let decay_elapsed = (now - effect.timestamp) as f64 / 1_000_000.0;
-        let decayed = combat::decay_stacks(effect.magnitude, decay_elapsed, defaults::STACK_DECAY);
-        (decayed, effect.timestamp)
-    } else {
-        (0.0, 0_i64)
-    };
-
-    let effective_speed = if stacks > 0.0 {
-        attacker.attack_speed
-    } else {
-        1.0
-    };
 
     let fwd = glam::Vec2::new(-attacker.rotation_y.sin(), -attacker.rotation_y.cos());
 
@@ -72,8 +52,8 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         knockback_force: attacker.knockback_force,
         attack_range: attacker.attack_range,
         attack_arc: attacker.attack_arc,
-        attack_speed: effective_speed,
-        fury_stacks: stacks as i64,
+        attack_speed: speed,
+        fury_stacks: fury.stacks,
         attack_speed_bonus: 0.0,
         cooldown_ready: true,
         speed: 0.0,
@@ -123,11 +103,7 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
     let (intents, effects) = scripting::run_melee_attack(source, targets, rng_roll);
 
     let world_id = attacker.world_id;
-    let mut hit_any = false;
-    let mut new_stacks = stacks;
-    let mut new_speed_bonus = 0.0_f32;
-    let mut buff_applied = false;
-
+    let previous_fury = fury;
     process_combat_intents(
         ctx,
         &intents,
@@ -137,47 +113,16 @@ pub fn attack_hit(ctx: &spacetimedb::ReducerContext) {
         &enemy_pos_index,
         &fwd,
         now,
-        &mut hit_any,
-        &mut new_stacks,
-        &mut new_speed_bonus,
-        &mut buff_applied,
+        &mut fury,
     );
 
-    // Persist stacking buff to active_effect
-    if new_stacks != stacks || buff_applied || stacking_effect.is_some() {
-        if let Some(effect) = stacking_effect {
-            if new_stacks > 0.0 {
-                ctx.db.active_effect().id().update(ActiveEffect {
-                    magnitude: new_stacks,
-                    timestamp: if hit_any { now } else { last_hit_time },
-                    ..effect
-                });
-            } else {
-                ctx.db.active_effect().delete(effect);
-            }
-        } else if new_stacks > 0.0 {
-            ctx.db.active_effect().insert(ActiveEffect {
-                id: 0,
-                owner: ctx.sender(),
-                effect_type: effect_types::STACKING_DAMAGE,
-                magnitude: new_stacks,
-                duration: -1.0,
-                timestamp: now,
-            });
-        }
+    if fury != previous_fury {
+        save_fury(ctx, &attacker, fury, now);
     }
-
-    let new_attack_speed = if new_speed_bonus > 0.0 {
-        1.0 + new_speed_bonus
-    } else if stacks <= 0.0 {
-        1.0
-    } else {
-        attacker.attack_speed
-    };
 
     ctx.db.player().identity().update(Player {
         last_attack_time: now,
-        attack_speed: new_attack_speed,
+        attack_speed: defaults::ATTACK_SPEED + fury::bonus_percent(fury.stacks) as f32 / 100.0,
         last_update: now,
         ..attacker
     });
@@ -254,6 +199,7 @@ fn aoe_hit(
     damage_multiplier: f32,
 ) {
     let now = ctx.timestamp.to_micros_since_unix_epoch();
+    let mut fury = read_fury(ctx, attacker, now);
 
     let base_damage = if attacker.attack_damage > 0.0 {
         attacker.attack_damage
@@ -301,7 +247,7 @@ fn aoe_hit(
         attack_range: radius,
         attack_arc: 360.0,
         attack_speed: attacker.attack_speed,
-        fury_stacks: 0,
+        fury_stacks: fury.stacks,
         attack_speed_bonus: 0.0,
         cooldown_ready: true,
         speed: 0.0,
@@ -342,11 +288,7 @@ fn aoe_hit(
 
     let world_id = attacker.world_id;
     let fwd = glam::Vec2::new(1.0, 0.0); // direction irrelevant for 360deg AOE
-    let mut hit_any = false;
-    let mut new_stacks = 0.0_f32;
-    let mut new_speed_bonus = 0.0_f32;
-    let mut buff_applied = false;
-
+    let previous_fury = fury;
     process_combat_intents(
         ctx,
         &intents,
@@ -356,11 +298,18 @@ fn aoe_hit(
         &enemy_pos_index,
         &fwd,
         now,
-        &mut hit_any,
-        &mut new_stacks,
-        &mut new_speed_bonus,
-        &mut buff_applied,
+        &mut fury,
     );
+    if fury != previous_fury {
+        save_fury(ctx, attacker, fury, now);
+    }
+    let Some(player) = ctx.db.player().identity().find(attacker.identity) else {
+        return;
+    };
+    ctx.db.player().identity().update(Player {
+        attack_speed: defaults::ATTACK_SPEED + fury::bonus_percent(fury.stacks) as f32 / 100.0,
+        ..player
+    });
 }
 
 // ── Intent/Effect processing ─────────────────────────────────────
@@ -376,10 +325,7 @@ fn process_combat_intents(
     enemy_pos_index: &std::collections::HashMap<u64, (f32, f32, f32)>,
     fwd: &glam::Vec2,
     now: i64,
-    hit_any: &mut bool,
-    new_stacks: &mut f32,
-    new_speed_bonus: &mut f32,
-    buff_applied: &mut bool,
+    fury: &mut Fury,
 ) {
     // Accumulate damage per target so we can batch health updates
     let mut damage_by_target: std::collections::HashMap<u64, f32> =
@@ -391,20 +337,12 @@ fn process_combat_intents(
         match intent {
             Intent::DamageDealt { target_id, amount } => {
                 *damage_by_target.entry(*target_id).or_insert(0.0) += amount;
-                *hit_any = true;
             }
             Intent::KnockbackApplied { target_id, force } => {
                 *knockback_by_target.entry(*target_id).or_insert(0.0) += force;
             }
-            Intent::StatSet { stat, value, .. } => {
-                if stat == "fury_stacks" {
-                    *new_stacks = *value;
-                } else if stat == "attack_speed_bonus" {
-                    *new_speed_bonus = *value;
-                }
-            }
-            Intent::BuffAdded { .. } => {
-                *buff_applied = true;
+            Intent::FuryHit { entity_id: 0, is_crit } => {
+                *fury = fury::on_hit(fury.stacks, *is_crit);
             }
             _ => {}
         }
@@ -470,6 +408,73 @@ fn process_combat_intents(
                     ..enemy
                 });
             }
+        }
+    }
+}
+
+fn read_fury(ctx: &spacetimedb::ReducerContext, player: &Player, now: i64) -> Fury {
+    ctx.db
+        .active_effect()
+        .owner()
+        .filter(player.identity)
+        .find(|e| e.effect_type == effect_types::STACKING_DAMAGE)
+        .map(|e| {
+            fury::elapse(
+                Fury {
+                    stacks: e.magnitude as i64,
+                    remaining_micros: (e.duration as f64 * 1_000_000.0) as u64,
+                },
+                now.saturating_sub(e.timestamp).max(0) as u64,
+            )
+        })
+        .unwrap_or_default()
+}
+
+fn save_fury(ctx: &spacetimedb::ReducerContext, player: &Player, fury: Fury, now: i64) {
+    let existing = ctx
+        .db
+        .active_effect()
+        .owner()
+        .filter(player.identity)
+        .find(|e| e.effect_type == effect_types::STACKING_DAMAGE);
+    if fury.stacks == 0 {
+        if let Some(effect) = existing {
+            ctx.db.active_effect().delete(effect);
+        }
+        return;
+    }
+    let effect = ActiveEffect {
+        id: existing.as_ref().map_or(0, |e| e.id),
+        owner: player.identity,
+        effect_type: effect_types::STACKING_DAMAGE,
+        magnitude: fury.stacks as f32,
+        duration: fury.remaining_micros as f32 / 1_000_000.0,
+        timestamp: now,
+    };
+    if existing.is_some() {
+        ctx.db.active_effect().id().update(effect);
+    } else {
+        ctx.db.active_effect().insert(effect);
+    }
+}
+
+pub fn expire_fury(ctx: &spacetimedb::ReducerContext) {
+    let now = ctx.timestamp.to_micros_since_unix_epoch();
+    for effect in ctx
+        .db
+        .active_effect()
+        .iter()
+        .filter(|e| e.effect_type == effect_types::STACKING_DAMAGE)
+    {
+        let Some(player) = ctx.db.player().identity().find(effect.owner) else {
+            continue;
+        };
+        if read_fury(ctx, &player, now).stacks == 0 {
+            ctx.db.active_effect().delete(effect);
+            ctx.db.player().identity().update(Player {
+                attack_speed: defaults::ATTACK_SPEED,
+                ..player
+            });
         }
     }
 }

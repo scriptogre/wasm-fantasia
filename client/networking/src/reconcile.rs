@@ -8,6 +8,7 @@ use game_core::combat::EnemyBehaviorKind;
 use spacetimedb_sdk::{DbContext, Identity, Table};
 
 use super::SpacetimeDbConnection;
+use super::generated::active_effect_table::ActiveEffectTableAccess;
 use super::generated::enemy_table::EnemyTableAccess;
 use super::generated::enemy_type::Enemy as ServerEnemy;
 use super::generated::player_table::PlayerTableAccess;
@@ -169,6 +170,11 @@ impl From<&ServerPlayer> for PlayerSnapshot {
 // =============================================================================
 
 pub(super) enum DbEvent {
+    FuryUpdate {
+        owner: Identity,
+        stacks: i64,
+        duration: f32,
+    },
     EnemyInsert {
         enemy: EnemySnapshot,
     },
@@ -239,6 +245,11 @@ pub(super) fn drain_db_events(
     // after a keep-alive disconnect (entities despawned but connection alive).
     if events.is_empty() && !entity_map.synced && conn.conn.try_identity().is_some() {
         entity_map.synced = true;
+        for effect in conn.conn.db.active_effect().iter() {
+            if effect.effect_type == game_core::combat::effect_types::STACKING_DAMAGE {
+                events.push(DbEvent::FuryUpdate { owner: effect.owner, stacks: effect.magnitude as i64, duration: effect.duration });
+            }
+        }
         for enemy in conn.conn.db.enemy().iter() {
             events.push(DbEvent::EnemyInsert {
                 enemy: (&enemy).into(),
@@ -351,6 +362,16 @@ pub(super) fn drain_db_events(
             DbEvent::EnemyDelete { id } => {
                 if let Some(entity) = entity_map.enemies.remove(&id) {
                     commands.entity(entity).despawn();
+                }
+            }
+            DbEvent::FuryUpdate { owner, stacks, duration } => {
+                if my_id == Some(owner) {
+                    if let Ok((_, mut stats)) = local_health.single_mut() {
+                        stats.fury = game_core::fury::elapse(game_core::fury::Fury {
+                            stacks,
+                            remaining_micros: (duration as f64 * 1_000_000.0) as u64,
+                        }, 0);
+                    }
                 }
             }
             DbEvent::PlayerInsert { player } => {

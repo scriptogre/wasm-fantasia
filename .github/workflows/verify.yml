@@ -1,0 +1,30 @@
+name: Gameplay laws
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install Rust and Verus
+        env:
+          VERUS_RELEASE: 0.2026.10.04.426d8b0
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal --component rustc-dev --component llvm-tools-preview --target wasm32-unknown-unknown
+          mkdir -p .tools
+          curl -fL --retry 3 "https://github.com/verus-lang/verus/releases/download/release/$VERUS_RELEASE/verus-$VERUS_RELEASE-x86-linux.zip" -o .tools/verus.zip
+          echo '624018662868563a7bec0dd07be5e4dd0c3d61124b4b55105765884bf2d4d1a0  .tools/verus.zip' | sha256sum --check
+          unzip -q .tools/verus.zip -d .tools
+      - name: Verify laws and rejection cases
+        run: python3 core/verification/check.py --verus .tools/verus-x86-linux/verus
+      - name: Test runtime hooks
+        run: cargo +1.98.1 test -p game-core --locked
+      - name: Check WASM
+        run: CARGO_ENCODED_RUSTFLAGS='' cargo +1.98.1 check -p game-core --locked --target wasm32-unknown-unknown
